@@ -42,7 +42,7 @@ public fun AboutScreen() {
     ) {
         Spacer(Modifier.height(32.dp))
         Image(
-            painter = painterResource(R.mipmap.ic_launcher),
+            painter = painterResource(R.drawable.ic_launcher_foreground),
             contentDescription = null,
             modifier = Modifier.size(120.dp),
         )
