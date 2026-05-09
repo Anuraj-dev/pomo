@@ -116,6 +116,43 @@ public class UtilPreferenceManagerTest {
     }
 
     @Test
+    public fun intProps_rejectInvalidBounds() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit()
+            .putString("pomodoro_duration", "0")
+            .putString("short_break_duration", "0")
+            .putString("long_break_duration", "-1")
+            .putString("long_break_after", "0")
+            .putString("daily_goal", "-1")
+            .putString("day_start_hour", "24")
+            .apply()
+
+        assertEquals(25, prefs.pomodoroDuration)
+        assertEquals(5, prefs.shortBreakDuration)
+        assertEquals(15, prefs.longBreakDuration)
+        assertEquals(4, prefs.longBreakAfter)
+        assertEquals(8, prefs.dailyGoal)
+        assertEquals(3, prefs.dayStartHour)
+    }
+
+    @Test
+    public fun intProps_settersSanitizeInvalidBounds() {
+        prefs.pomodoroDuration = 0
+        prefs.shortBreakDuration = 0
+        prefs.longBreakDuration = -1
+        prefs.longBreakAfter = 0
+        prefs.dailyGoal = -1
+        prefs.dayStartHour = 24
+
+        assertEquals(25, prefs.pomodoroDuration)
+        assertEquals(5, prefs.shortBreakDuration)
+        assertEquals(15, prefs.longBreakDuration)
+        assertEquals(4, prefs.longBreakAfter)
+        assertEquals(8, prefs.dailyGoal)
+        assertEquals(3, prefs.dayStartHour)
+    }
+
+    @Test
     public fun timerState_savesAndLoads() {
         val state = TimerState().apply {
             status = TimerState.STATUS_RUNNING

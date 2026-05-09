@@ -35,6 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.pomo.util.UtilPreferenceManager
 
 public sealed interface SettingsItem {
     public data class Section(val title: String) : SettingsItem
@@ -142,7 +143,8 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
             confirmButton = {
                 TextButton(onClick = {
                     val parsed = draft.toIntOrNull() ?: item.default
-                    prefs.edit().putString(item.key, parsed.toString()).apply()
+                    val sanitized = UtilPreferenceManager.sanitizeIntPreference(item.key, parsed, item.default)
+                    prefs.edit().putString(item.key, sanitized.toString()).apply()
                     editing = false
                 }) { Text("OK") }
             },

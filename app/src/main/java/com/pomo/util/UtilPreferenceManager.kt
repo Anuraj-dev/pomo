@@ -55,54 +55,72 @@ public class UtilPreferenceManager(context: Context) {
     public var pomodoroDuration: Int
         get() {
             val str = prefs.getString("pomodoro_duration", "25")
-            return try { str?.toInt() ?: 25 } catch (e: NumberFormatException) { 25 }
+            return sanitizeIntPreference("pomodoro_duration", str?.toIntOrNull(), 25)
         }
         set(value) {
-            prefs.edit().putString("pomodoro_duration", value.toString()).apply()
+            prefs.edit().putString("pomodoro_duration", sanitizeIntPreference("pomodoro_duration", value, 25).toString()).apply()
         }
 
     public var shortBreakDuration: Int
         get() {
             val str = prefs.getString("short_break_duration", "5")
-            return try { str?.toInt() ?: 5 } catch (e: NumberFormatException) { 5 }
+            return sanitizeIntPreference("short_break_duration", str?.toIntOrNull(), 5)
         }
         set(value) {
-            prefs.edit().putString("short_break_duration", value.toString()).apply()
+            prefs.edit().putString("short_break_duration", sanitizeIntPreference("short_break_duration", value, 5).toString()).apply()
         }
 
     public var longBreakDuration: Int
         get() {
             val str = prefs.getString("long_break_duration", "15")
-            return try { str?.toInt() ?: 15 } catch (e: NumberFormatException) { 15 }
+            return sanitizeIntPreference("long_break_duration", str?.toIntOrNull(), 15)
         }
         set(value) {
-            prefs.edit().putString("long_break_duration", value.toString()).apply()
+            prefs.edit().putString("long_break_duration", sanitizeIntPreference("long_break_duration", value, 15).toString()).apply()
         }
 
     public var longBreakAfter: Int
         get() {
             val str = prefs.getString("long_break_after", "4")
-            return try { str?.toInt() ?: 4 } catch (e: NumberFormatException) { 4 }
+            return sanitizeIntPreference("long_break_after", str?.toIntOrNull(), 4)
         }
         set(value) {
-            prefs.edit().putString("long_break_after", value.toString()).apply()
+            prefs.edit().putString("long_break_after", sanitizeIntPreference("long_break_after", value, 4).toString()).apply()
         }
 
     public var dailyGoal: Int
         get() {
             val str = prefs.getString("daily_goal", "8")
-            return try { str?.toInt() ?: 8 } catch (e: NumberFormatException) { 8 }
+            return sanitizeIntPreference("daily_goal", str?.toIntOrNull(), 8)
         }
         set(value) {
-            prefs.edit().putString("daily_goal", value.toString()).apply()
+            prefs.edit().putString("daily_goal", sanitizeIntPreference("daily_goal", value, 8).toString()).apply()
         }
 
     public var dayStartHour: Int
         get() {
             val str = prefs.getString("day_start_hour", "3")
-            return try { str?.toInt() ?: 3 } catch (e: NumberFormatException) { 3 }
+            return sanitizeIntPreference("day_start_hour", str?.toIntOrNull(), 3)
         }
         set(value) {
-            prefs.edit().putString("day_start_hour", value.toString()).apply()
+            prefs.edit().putString("day_start_hour", sanitizeIntPreference("day_start_hour", value, 3).toString()).apply()
         }
+
+    public companion object {
+        public fun sanitizeIntPreference(key: String, value: Int?, default: Int): Int {
+            val parsed = value ?: return default
+            return when (key) {
+                "pomodoro_duration", "short_break_duration", "long_break_duration", "long_break_after" ->
+                    parsed.takeIf { it > 0 } ?: default
+                "daily_goal" ->
+                    parsed.takeIf { it >= 0 } ?: default
+                "day_start_hour" ->
+                    parsed.takeIf { it in 0..23 } ?: default
+                "phone_server_port" ->
+                    parsed.takeIf { it in 1..65535 } ?: default
+                else ->
+                    parsed
+            }
+        }
+    }
 }
