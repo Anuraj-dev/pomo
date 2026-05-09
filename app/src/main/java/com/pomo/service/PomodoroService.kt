@@ -69,6 +69,7 @@ public class PomodoroService : Service(), TimerObserver {
         phoneServer = PhoneServer(this, activePhoneServerPort)
 
         val savedState = prefs.loadTimerState()
+        var shouldCompleteRestoredTimer = false
         if (savedState != null) {
             Log.d(TAG, "Restoring saved state: ${savedState.status} - ${savedState.remaining}s")
             if (savedState.status == TimerState.STATUS_RUNNING) {
@@ -78,15 +79,17 @@ public class PomodoroService : Service(), TimerObserver {
 
                 if (newRemaining <= 0) {
                     savedState.remaining = 0.0
-                    savedState.status = TimerState.STATUS_STOPPED
+                    shouldCompleteRestoredTimer = true
                 } else {
                     savedState.remaining = newRemaining
                 }
             }
             sanitizeState(savedState)
             currentState = savedState
-            serviceScope.launch {
-                reconcileStateWithHistory()
+            if (!shouldCompleteRestoredTimer) {
+                serviceScope.launch {
+                    reconcileStateWithHistory()
+                }
             }
         } else {
             currentState.date = historyCacheRepository.getEffectiveDateString(prefs.dayStartHour)
@@ -110,6 +113,10 @@ public class PomodoroService : Service(), TimerObserver {
         )
 
         phoneServer.start()
+
+        if (shouldCompleteRestoredTimer) {
+            offlineTimer.completeExpiredTimer()
+        }
     }
 
     private fun saveCurrentState() {

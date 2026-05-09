@@ -5,6 +5,7 @@ import com.pomo.db.HistoryCacheRepository
 import com.pomo.models.Session
 import com.pomo.util.UtilPreferenceManager
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 public class OfflineTimer(
@@ -49,15 +50,25 @@ public class OfflineTimer(
         timer = null
     }
 
-    private fun handleTimerComplete() {
+    public fun completeExpiredTimer(): Job {
+        stopLocalTimer()
+        return handleTimerComplete()
+    }
+
+    private fun handleTimerComplete(): Job {
+        val now = System.currentTimeMillis() / 1000
+        val sessionStart = state.start_time
+            .takeIf { it > 0 }
+            ?.toLong()
+            ?: now - state.duration.toLong()
         val session = Session(
             type = state.phase,
-            start = System.currentTimeMillis() / 1000 - state.duration.toLong(),
+            start = sessionStart,
             duration = state.duration.toInt(),
             completed = true,
         )
 
-        scope.launch {
+        return scope.launch {
             historyRepository.saveLocalSession(session, prefs.dayStartHour)
 
             state.remaining = 0.0

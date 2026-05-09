@@ -7,6 +7,7 @@ import com.pomo.util.UtilPreferenceManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -204,5 +205,26 @@ public class OfflineTimerTest {
         // next_phase is set on phase changes (skip/reset/complete) — toggle alone
         // does not modify next_phase. But updates should still flow.
         assertTrue(observer.updates.isNotEmpty())
+    }
+
+    @Test
+    public fun completeExpiredTimer_recordsWorkSessionAndAdvancesPhase(): Unit = runBlocking {
+        val startTime = System.currentTimeMillis() / 1000 - 1500
+        val initial = TimerState().apply {
+            phase = TimerState.PHASE_WORK
+            duration = 1500.0
+            remaining = 0.0
+            status = TimerState.STATUS_RUNNING
+            start_time = startTime.toDouble()
+        }
+        timer.updateState(initial)
+
+        timer.completeExpiredTimer().join()
+
+        assertEquals(1, repo.getTodayCompletedCount(prefs.dayStartHour))
+        assertEquals(TimerState.PHASE_SHORT, timer.state.phase)
+        assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
+        assertEquals(300.0, timer.state.remaining, 0.001)
+        assertEquals(1, observer.completions.size)
     }
 }
