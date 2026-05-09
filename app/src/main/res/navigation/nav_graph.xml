@@ -6,27 +6,27 @@
 
     <fragment
         android:id="@+id/navigation_timer"
-        android:name="com.pomoremote.ui.TimerFragment"
+        android:name="com.pomo.ui.TimerFragment"
         android:label="Timer" />
 
     <fragment
         android:id="@+id/navigation_stats"
-        android:name="com.pomoremote.ui.StatsFragment"
+        android:name="com.pomo.ui.StatsFragment"
         android:label="Stats" />
 
     <fragment
         android:id="@+id/navigation_settings"
-        android:name="com.pomoremote.ui.SettingsFragment"
+        android:name="com.pomo.ui.SettingsFragment"
         android:label="Settings" />
 
     <fragment
         android:id="@+id/navigation_history"
-        android:name="com.pomoremote.ui.HistoryFragment"
+        android:name="com.pomo.ui.HistoryFragment"
         android:label="History" />
 
     <fragment
         android:id="@+id/navigation_about"
-        android:name="com.pomoremote.ui.AboutFragment"
+        android:name="com.pomo.ui.AboutFragment"
         android:label="About" />
 
 </navigation>

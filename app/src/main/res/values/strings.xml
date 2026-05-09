@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Pomo Remote</string>
+    <string name="app_name">Pomo</string>
     <string name="status_connected">Connected</string>
     <string name="status_disconnected">Disconnected</string>
     <string name="status_connecting">Connecting...</string>
@@ -37,13 +37,13 @@
     <string name="pairing_copy">Copy</string>
     <string name="pairing_share">Share</string>
     <string name="pairing_copied">Pairing payload copied</string>
-    <string name="pairing_share_title">Share PomoRemote pairing</string>
+    <string name="pairing_share_title">Share Pomo pairing</string>
     <string name="scan_pairing_qr_title">Scan pairing QR</string>
-    <string name="scan_pairing_qr_summary">Read a PomoRemote pairing QR from another screen</string>
+    <string name="scan_pairing_qr_summary">Read a Pomo pairing QR from another screen</string>
     <string name="scan_pairing_qr_missing">No QR scanner app is installed.</string>
-    <string name="scan_pairing_qr_invalid">That QR code is not a PomoRemote pairing payload.</string>
+    <string name="scan_pairing_qr_invalid">That QR code is not a Pomo pairing payload.</string>
     <string name="scan_pairing_qr_match">This QR matches the current phone pairing token.</string>
-    <string name="scan_pairing_qr_other">This QR is for a different PomoRemote phone.</string>
+    <string name="scan_pairing_qr_other">This QR is for a different Pomo phone.</string>
     <string name="scan_pairing_qr_service_unavailable">Start the timer service before comparing pairing tokens.</string>
     
     <string name="vibrate_title">Vibrate</string>
