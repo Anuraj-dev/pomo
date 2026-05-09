@@ -4,7 +4,7 @@ import { homedir, platform } from "node:os";
 import type { CacheState, ClientConfig, TimerState } from "./types.js";
 import { parseClientConfig, parseTimerState } from "./validate.js";
 
-const appName = "pomo-remote";
+const appName = "pomo";
 
 export function configDir(): string {
   if (platform() === "darwin") {

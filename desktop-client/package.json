@@ -1,8 +1,8 @@
 {
-  "name": "@pomoremote/desktop-client",
+  "name": "@pomo/desktop-client",
   "version": "0.1.0",
   "private": true,
-  "description": "Thin desktop CLI and service client for the PomoRemote Android app.",
+  "description": "Thin desktop CLI and service client for the Pomo Android app.",
   "type": "module",
   "bin": {
     "pomo": "./dist/cli.js"

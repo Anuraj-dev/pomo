@@ -8,8 +8,8 @@ import { fileURLToPath } from "node:url";
 const currentFile = fileURLToPath(import.meta.url);
 const projectRoot = resolve(dirname(currentFile), "..");
 const execFileAsync = promisify(execFile);
-const launchdLabel = "dev.pomoremote.desktop-client";
-const systemdUnit = "pomo-remote-desktop-client.service";
+const launchdLabel = "dev.pomo.desktop-client";
+const systemdUnit = "pomo-desktop-client.service";
 
 type ServicePlatform = "darwin" | "linux";
 
@@ -45,7 +45,7 @@ function xmlEscape(value: string): string {
 function servicePath(): string {
   const home = homeDirectory();
   if (supportedPlatform() === "darwin") {
-    return join(home, "Library", "LaunchAgents", "dev.pomoremote.desktop-client.plist");
+    return join(home, "Library", "LaunchAgents", "dev.pomo.desktop-client.plist");
   }
 
   return join(process.env.XDG_CONFIG_HOME ?? join(home, ".config"), "systemd", "user", systemdUnit);
@@ -125,7 +125,7 @@ export function serviceTemplate(): string {
   }
 
   return `[Unit]
-Description=PomoRemote desktop client
+Description=Pomo desktop client
 After=network-online.target
 
 [Service]
@@ -171,11 +171,11 @@ export async function startService(): Promise<string> {
   if (supportedPlatform() === "darwin") {
     await run("launchctl", ["enable", launchdServiceTarget()]);
     await run("launchctl", ["kickstart", "-k", launchdServiceTarget()]);
-    return "Started PomoRemote desktop client.";
+    return "Started Pomo desktop client.";
   }
 
   await run("systemctl", ["--user", "start", systemdUnit]);
-  return "Started PomoRemote desktop client.";
+  return "Started Pomo desktop client.";
 }
 
 export async function stopService(): Promise<string> {
@@ -185,11 +185,11 @@ export async function stopService(): Promise<string> {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`launchctl kill failed for ${launchdServiceTarget()}: ${message}`);
     });
-    return "Stopped PomoRemote desktop client.";
+    return "Stopped Pomo desktop client.";
   }
 
   await run("systemctl", ["--user", "stop", systemdUnit]);
-  return "Stopped PomoRemote desktop client.";
+  return "Stopped Pomo desktop client.";
 }
 
 export async function serviceStatus(): Promise<string> {
