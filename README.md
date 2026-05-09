@@ -1,6 +1,6 @@
-# PomoRemote
+# Pomo
 
-PomoRemote is a mobile-first Pomodoro timer for Android. The phone is the
+Pomo is a mobile-first Pomodoro timer for Android. The phone is the
 canonical app: it owns the timer, settings, session history, notifications, and
 widgets. Desktop integrations can pair with the phone and act as thin remote
 clients.
@@ -46,7 +46,7 @@ app/build/outputs/apk/debug/app-debug.apk
 
 ```bash
 adb install -r -g app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.pomoremote/.MainActivity
+adb shell am start -n com.pomo/.MainActivity
 ```
 
 Useful logs:
@@ -73,7 +73,7 @@ The phone must be reachable on the same network. The default API port is
 `9876`, configurable in Settings.
 
 Android Settings can copy/share the pairing payload, show it as a QR code, and
-scan another PomoRemote pairing QR when an external ZXing-compatible scanner app
+scan another Pomo pairing QR when an external ZXing-compatible scanner app
 is installed.
 
 ## Desktop Client
@@ -105,7 +105,7 @@ Waybar output, QR commands, and failure behavior.
 ## Architecture
 
 ```text
-app/src/main/java/com/pomoremote/
+app/src/main/java/com/pomo/
 ├── MainActivity.kt
 ├── service/
 │   ├── PomodoroService.kt        # Canonical timer owner

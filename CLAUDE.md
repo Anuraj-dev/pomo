@@ -4,7 +4,7 @@ Lean repo guidance for agents working here.
 
 ## Project
 
-- Android app: `com.pomoremote`
+- Android app: `com.pomo`
 - Language: Kotlin
 - Min SDK: 26
 - Target SDK: 34
@@ -33,7 +33,7 @@ This repo currently has no `./gradlew`.
 
 ```bash
 adb install -r -g app/build/outputs/apk/debug/app-debug.apk
-adb shell am start -n com.pomoremote/.MainActivity
+adb shell am start -n com.pomo/.MainActivity
 adb logcat -s PomodoroService PhoneServer
 ```
 

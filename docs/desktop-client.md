@@ -67,13 +67,13 @@ are rejected. The config file is written with owner-only permissions.
 macOS path:
 
 ```text
-~/Library/Application Support/pomo-remote/desktop-client.json
+~/Library/Application Support/pomo/desktop-client.json
 ```
 
 Linux path:
 
 ```text
-${XDG_CONFIG_HOME:-~/.config}/pomo-remote/desktop-client.json
+${XDG_CONFIG_HOME:-~/.config}/pomo/desktop-client.json
 ```
 
 ## Cache
@@ -90,13 +90,13 @@ prevents local disk issues from making successful remote commands look failed.
 Linux cache path:
 
 ```text
-${XDG_STATE_HOME:-~/.local/state}/pomo-remote/last-state.json
+${XDG_STATE_HOME:-~/.local/state}/pomo/last-state.json
 ```
 
 macOS cache path:
 
 ```text
-~/Library/Application Support/pomo-remote/last-state.json
+~/Library/Application Support/pomo/last-state.json
 ```
 
 ## Service
@@ -114,13 +114,13 @@ node desktop-client/dist/cli.js service stop
 On macOS this writes:
 
 ```text
-~/Library/LaunchAgents/dev.pomoremote.desktop-client.plist
+~/Library/LaunchAgents/dev.pomo.desktop-client.plist
 ```
 
 On Linux this writes:
 
 ```text
-${XDG_CONFIG_HOME:-~/.config}/systemd/user/pomo-remote-desktop-client.service
+${XDG_CONFIG_HOME:-~/.config}/systemd/user/pomo-desktop-client.service
 ```
 
 The service runs `watch`, which periodically refreshes the stale cache.

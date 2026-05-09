@@ -1,6 +1,6 @@
 # Architecture
 
-PomoRemote is mobile-primary: the Android app is the canonical Pomodoro system,
+Pomo is mobile-primary: the Android app is the canonical Pomodoro system,
 and every control surface talks to the phone-owned service state.
 
 ## Source Of Truth
@@ -90,7 +90,7 @@ When the timer changes, `PomodoroService`:
 1. Updates `currentState`.
 2. Persists meaningful state changes through `UtilPreferenceManager`.
 3. Updates the foreground notification.
-4. Broadcasts `com.pomoremote.STATE_UPDATE`.
+4. Broadcasts `com.pomo.STATE_UPDATE`.
 5. Updates all widgets.
 6. Broadcasts state to connected WebSocket clients.
 

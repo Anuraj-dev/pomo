@@ -10,7 +10,7 @@ GRADLE_URL="https://services.gradle.org/distributions/gradle-9.2.1-bin.zip"
 GREEN='\033[0;32m'
 NC='\033[0m'
 
-echo -e "${GREEN}=== Pomo Remote Lightweight Builder ===${NC}"
+echo -e "${GREEN}=== Pomo Lightweight Builder ===${NC}"
 
 export JAVA_HOME="/usr/lib/jvm/jdk-17.0.12-oracle-x64"
 

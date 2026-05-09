@@ -1,4 +1,4 @@
-# PomoRemote Phone Protocol
+# Pomo Phone Protocol
 
 The Android app hosts a local API from `PomodoroService` using Ktor CIO. Desktop
 clients are remote controls and displays; the phone remains the source of truth.
