@@ -394,12 +394,12 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     public suspend fun applyConfigPayload(body: String): TimerState = withContext(Dispatchers.Main) {
-        val config = parseConfigPayload(body)
-        config.durations?.work?.takeIf { it > 0 }?.let { prefs.pomodoroDuration = it }
-        config.durations?.short_break?.takeIf { it > 0 }?.let { prefs.shortBreakDuration = it }
-        config.durations?.long_break?.takeIf { it > 0 }?.let { prefs.longBreakDuration = it }
-        config.long_break_after?.takeIf { it > 0 }?.let { prefs.longBreakAfter = it }
-        config.daily_goal?.takeIf { it >= 0 }?.let { prefs.dailyGoal = it }
+        val config = TimerConfigPayloads.parseAndMerge(body, currentConfigValues())
+        prefs.pomodoroDuration = config.work
+        prefs.shortBreakDuration = config.shortBreak
+        prefs.longBreakDuration = config.longBreak
+        prefs.longBreakAfter = config.longBreakAfter
+        prefs.dailyGoal = config.dailyGoal
 
         currentState.goal = prefs.dailyGoal
         if (currentState.status != TimerState.STATUS_RUNNING) {
@@ -414,9 +414,14 @@ public class PomodoroService : Service(), TimerObserver {
         currentState.copy()
     }
 
-    private fun parseConfigPayload(body: String): PartialConfigPayload {
-        return gson.fromJson(body, PartialConfigPayload::class.java)
-            ?: throw IllegalArgumentException("config body must be a JSON object")
+    private fun currentConfigValues(): TimerConfigPayloads.Values {
+        return TimerConfigPayloads.Values(
+            work = prefs.pomodoroDuration,
+            shortBreak = prefs.shortBreakDuration,
+            longBreak = prefs.longBreakDuration,
+            longBreakAfter = prefs.longBreakAfter,
+            dailyGoal = prefs.dailyGoal,
+        )
     }
 
     public suspend fun getHistoryPayload(): Map<String, HistoryCacheRepository.ServerDayEntry> {
@@ -540,15 +545,4 @@ public class PomodoroService : Service(), TimerObserver {
         val long_break: Int,
     )
 
-    public data class PartialConfigPayload(
-        val durations: PartialDurations?,
-        val long_break_after: Int?,
-        val daily_goal: Int?,
-    )
-
-    public data class PartialDurations(
-        val work: Int?,
-        val short_break: Int?,
-        val long_break: Int?,
-    )
 }
