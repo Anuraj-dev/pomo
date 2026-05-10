@@ -12,7 +12,8 @@ NC='\033[0m'
 
 echo -e "${GREEN}=== Pomo Lightweight Builder ===${NC}"
 
-export JAVA_HOME="/usr/lib/jvm/jdk-17.0.12-oracle-x64"
+source "$PROJECT_DIR/scripts/java_env.sh"
+require_java_17
 
 mkdir -p "$SDK_DIR/cmdline-tools"
 mkdir -p "$GRADLE_DIR"
