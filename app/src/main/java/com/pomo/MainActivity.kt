@@ -13,6 +13,7 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.pomo.service.PomodoroService
+import com.pomo.service.PomodoroServiceStarter
 import com.pomo.ui.TimerFragment
 import com.pomo.util.UtilPreferenceManager
 
@@ -107,12 +108,9 @@ public class MainActivity : AppCompatActivity() {
 
     private fun startService() {
         val intent = Intent(this, PomodoroService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        if (PomodoroServiceStarter.start(this, intent)) {
+            bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onResume() {
