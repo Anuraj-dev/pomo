@@ -73,7 +73,7 @@ public class OfflineTimer(
         )
 
         val job = scope.launch {
-            historyRepository.saveLocalSession(session, prefs.dayStartHour)
+            historyRepository.saveLocalSession(session)
 
             if (!isStillCompleting(completionState)) {
                 return@launch
@@ -83,8 +83,8 @@ public class OfflineTimer(
             state.status = TimerState.STATUS_STOPPED
 
             if (TimerState.PHASE_WORK == completionState.phase) {
-                state.completed = historyRepository.getTodayCompletedCount(prefs.dayStartHour)
-                state.date = historyRepository.getEffectiveDateString(prefs.dayStartHour)
+                state.completed = historyRepository.getTodayCompletedCount()
+                state.date = historyRepository.getEffectiveDateString()
                 val longBreakAfter = prefs.longBreakAfter
 
                 if (state.completed > 0 && state.completed % longBreakAfter == 0) {

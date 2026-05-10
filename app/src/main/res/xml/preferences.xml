@@ -67,13 +67,6 @@
             app:summary="@string/daily_goal_summary"
             app:defaultValue="8"
             android:inputType="number" />
-
-        <EditTextPreference
-            app:key="day_start_hour"
-            app:title="@string/day_start_hour_title"
-            app:summary="@string/day_start_hour_summary"
-            app:defaultValue="3"
-            android:inputType="number" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/category_notifications">

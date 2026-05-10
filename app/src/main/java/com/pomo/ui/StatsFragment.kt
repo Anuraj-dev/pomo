@@ -50,7 +50,7 @@ public class StatsFragment : Fragment() {
                 )
             }
         }
-        val today = DateLogic.effectiveDate(System.currentTimeMillis(), mainActivity?.prefs?.dayStartHour ?: 3)
+        val today = DateLogic.effectiveDate(System.currentTimeMillis())
         val sessionsFlow: Flow<List<SessionEntity>> = repo.observeSessionsForDate(today)
 
         return ComposeView(ctx).apply {
@@ -61,13 +61,11 @@ public class StatsFragment : Fragment() {
                     val sessions by sessionsFlow.collectAsState(initial = emptyList())
                     val act = mainActivity
                     val goal = act?.prefs?.dailyGoal ?: 8
-                    val dayStart = act?.prefs?.dayStartHour ?: 3
                     val sessionMins = act?.prefs?.pomodoroDuration ?: 25
                     StatsScreen(
                         history = history,
                         todaySessions = sessions,
                         dailyGoal = goal,
-                        dayStartHour = dayStart,
                         sessionMinutes = sessionMins,
                         onExport = { exportStats(history) },
                     )

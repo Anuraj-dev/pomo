@@ -14,53 +14,38 @@ public class DateLogicTest {
     private fun ms(iso: String): Long = isoDateTime.parse(iso)!!.time
 
     @Test
-    public fun effectiveDate_afterDayStart_returnsToday() {
-        // 2026-05-07 10:00 UTC, dayStart=3 → "2026-05-07"
-        assertEquals("2026-05-07", DateLogic.effectiveDate(ms("2026-05-07T10:00:00"), 3, utc))
+    public fun effectiveDate_returnsLocalCalendarDate() {
+        assertEquals("2026-05-07", DateLogic.effectiveDate(ms("2026-05-07T10:00:00"), utc))
     }
 
     @Test
-    public fun effectiveDate_beforeDayStart_returnsYesterday() {
-        // 2026-05-07 02:00 UTC, dayStart=3 → "2026-05-06"
-        assertEquals("2026-05-06", DateLogic.effectiveDate(ms("2026-05-07T02:00:00"), 3, utc))
-    }
-
-    @Test
-    public fun effectiveDate_zeroDayStart_alwaysToday() {
-        assertEquals("2026-05-07", DateLogic.effectiveDate(ms("2026-05-07T00:30:00"), 0, utc))
+    public fun effectiveDate_afterMidnight_returnsNewDay() {
+        assertEquals("2026-05-07", DateLogic.effectiveDate(ms("2026-05-07T00:30:00"), utc))
     }
 
     @Test
     public fun currentStreak_emptyHistory_isZero() {
-        assertEquals(0, DateLogic.currentStreak(emptySet(), ms("2026-05-07T10:00:00"), 3, utc))
+        assertEquals(0, DateLogic.currentStreak(emptySet(), ms("2026-05-07T10:00:00"), utc))
     }
 
     @Test
     public fun currentStreak_todayActive_extendsToToday() {
         val active = setOf("2026-05-07", "2026-05-06", "2026-05-05")
-        assertEquals(3, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), 3, utc))
+        assertEquals(3, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), utc))
     }
 
     @Test
     public fun currentStreak_todayInactive_fallsBackToYesterday() {
         // Today (2026-05-07) inactive, but yesterday and prior are active → 2
         val active = setOf("2026-05-06", "2026-05-05")
-        assertEquals(2, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), 3, utc))
+        assertEquals(2, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), utc))
     }
 
     @Test
     public fun currentStreak_gap_breaksStreak() {
         // Yesterday active, day before missing → only 1
         val active = setOf("2026-05-06", "2026-05-04")
-        assertEquals(1, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), 3, utc))
-    }
-
-    @Test
-    public fun currentStreak_dayStartRollover_treatsLateNightAsYesterday() {
-        // 2026-05-07 02:00, dayStart=3 → "today" is 2026-05-06.
-        // Active set covers 5/6 + 5/5 + 5/4 → streak 3.
-        val active = setOf("2026-05-06", "2026-05-05", "2026-05-04")
-        assertEquals(3, DateLogic.currentStreak(active, ms("2026-05-07T02:00:00"), 3, utc))
+        assertEquals(1, DateLogic.currentStreak(active, ms("2026-05-07T10:00:00"), utc))
     }
 
     @Test

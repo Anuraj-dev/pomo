@@ -43,7 +43,6 @@ public class UtilPreferenceManagerTest {
         assertEquals(15, prefs.longBreakDuration)
         assertEquals(4, prefs.longBreakAfter)
         assertEquals(8, prefs.dailyGoal)
-        assertEquals(3, prefs.dayStartHour)
         assertEquals(9876, prefs.phoneServerPort)
         assertTrue(prefs.isPhoneServerEnabled)
         assertTrue(prefs.isPhoneServerWifiOnly)
@@ -58,14 +57,12 @@ public class UtilPreferenceManagerTest {
         prefs.longBreakDuration = 20
         prefs.longBreakAfter = 5
         prefs.dailyGoal = 12
-        prefs.dayStartHour = 5
 
         assertEquals(30, prefs.pomodoroDuration)
         assertEquals(7, prefs.shortBreakDuration)
         assertEquals(20, prefs.longBreakDuration)
         assertEquals(5, prefs.longBreakAfter)
         assertEquals(12, prefs.dailyGoal)
-        assertEquals(5, prefs.dayStartHour)
     }
 
     @Test
@@ -156,7 +153,6 @@ public class UtilPreferenceManagerTest {
             .putString("long_break_duration", "-1")
             .putString("long_break_after", "0")
             .putString("daily_goal", "-1")
-            .putString("day_start_hour", "24")
             .apply()
 
         assertEquals(25, prefs.pomodoroDuration)
@@ -164,7 +160,6 @@ public class UtilPreferenceManagerTest {
         assertEquals(15, prefs.longBreakDuration)
         assertEquals(4, prefs.longBreakAfter)
         assertEquals(8, prefs.dailyGoal)
-        assertEquals(3, prefs.dayStartHour)
     }
 
     @Test
@@ -174,14 +169,12 @@ public class UtilPreferenceManagerTest {
         prefs.longBreakDuration = -1
         prefs.longBreakAfter = 0
         prefs.dailyGoal = -1
-        prefs.dayStartHour = 24
 
         assertEquals(25, prefs.pomodoroDuration)
         assertEquals(5, prefs.shortBreakDuration)
         assertEquals(15, prefs.longBreakDuration)
         assertEquals(4, prefs.longBreakAfter)
         assertEquals(8, prefs.dailyGoal)
-        assertEquals(3, prefs.dayStartHour)
     }
 
     @Test

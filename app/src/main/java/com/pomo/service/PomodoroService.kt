@@ -97,10 +97,10 @@ public class PomodoroService : Service(), TimerObserver {
                 }
             }
         } else {
-            currentState.date = historyCacheRepository.getEffectiveDateString(prefs.dayStartHour)
+            currentState.date = historyCacheRepository.getEffectiveDateString()
             sanitizeState(currentState)
             serviceScope.launch {
-                currentState.completed = historyCacheRepository.getTodayCompletedCount(prefs.dayStartHour)
+                currentState.completed = historyCacheRepository.getTodayCompletedCount()
                 offlineTimer.updateState(currentState)
                 saveCurrentState()
                 updateNotification()
@@ -206,8 +206,8 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private suspend fun reconcileStateWithHistory() {
-        val today = historyCacheRepository.getEffectiveDateString(prefs.dayStartHour)
-        val completed = historyCacheRepository.getTodayCompletedCount(prefs.dayStartHour)
+        val today = historyCacheRepository.getEffectiveDateString()
+        val completed = historyCacheRepository.getTodayCompletedCount()
         var changed = false
 
         if (currentState.date != today) {
@@ -308,10 +308,10 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private suspend fun reconcileDayTransitionIfNeeded(notify: Boolean) {
-        val today = historyCacheRepository.getEffectiveDateString(prefs.dayStartHour)
+        val today = historyCacheRepository.getEffectiveDateString()
         if (currentState.date == today) return
 
-        val completed = historyCacheRepository.getTodayCompletedCount(prefs.dayStartHour)
+        val completed = historyCacheRepository.getTodayCompletedCount()
 
         Log.d(TAG, "Day transition detected: ${currentState.date} -> $today. Resetting state.")
         currentState.status = TimerState.STATUS_STOPPED
@@ -390,7 +390,6 @@ public class PomodoroService : Service(), TimerObserver {
             ),
             long_break_after = prefs.longBreakAfter,
             daily_goal = prefs.dailyGoal,
-            day_start_hour = prefs.dayStartHour,
         )
     }
 
@@ -401,7 +400,6 @@ public class PomodoroService : Service(), TimerObserver {
         config.durations?.long_break?.takeIf { it > 0 }?.let { prefs.longBreakDuration = it }
         config.long_break_after?.takeIf { it > 0 }?.let { prefs.longBreakAfter = it }
         config.daily_goal?.takeIf { it >= 0 }?.let { prefs.dailyGoal = it }
-        config.day_start_hour?.takeIf { it in 0..23 }?.let { prefs.dayStartHour = it }
 
         currentState.goal = prefs.dailyGoal
         if (currentState.status != TimerState.STATUS_RUNNING) {
@@ -534,7 +532,6 @@ public class PomodoroService : Service(), TimerObserver {
         val durations: Durations,
         val long_break_after: Int,
         val daily_goal: Int,
-        val day_start_hour: Int,
     )
 
     public data class Durations(
@@ -547,7 +544,6 @@ public class PomodoroService : Service(), TimerObserver {
         val durations: PartialDurations?,
         val long_break_after: Int?,
         val daily_goal: Int?,
-        val day_start_hour: Int?,
     )
 
     public data class PartialDurations(

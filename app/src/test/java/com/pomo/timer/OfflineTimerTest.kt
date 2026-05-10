@@ -221,7 +221,7 @@ public class OfflineTimerTest {
 
         timer.completeExpiredTimer().join()
 
-        assertEquals(1, repo.getTodayCompletedCount(prefs.dayStartHour))
+        assertEquals(1, repo.getTodayCompletedCount())
         assertEquals(TimerState.PHASE_SHORT, timer.state.phase)
         assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
         assertEquals(300.0, timer.state.remaining, 0.001)

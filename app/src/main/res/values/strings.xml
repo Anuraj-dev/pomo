@@ -74,8 +74,6 @@
     <string name="category_goals">Goals</string>
     <string name="daily_goal_title">Daily Goal</string>
     <string name="daily_goal_summary">Number of focus sessions per day</string>
-    <string name="day_start_hour_title">Day Start Hour</string>
-    <string name="day_start_hour_summary">The hour (0-23) when a new day begins (e.g., 3 for 3 AM)</string>
     <string name="about_title">About</string>
     <string name="about_summary">Version info &amp; credits</string>
     <string name="about_subtitle">A mobile-first Pomodoro timer with optional desktop control.</string>

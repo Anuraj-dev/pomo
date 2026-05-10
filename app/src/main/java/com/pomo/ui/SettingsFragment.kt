@@ -139,12 +139,6 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             summary = getString(R.string.daily_goal_summary),
             default = 8,
         ),
-        SettingsItem.IntPref(
-            key = "day_start_hour",
-            title = getString(R.string.day_start_hour_title),
-            summary = getString(R.string.day_start_hour_summary),
-            default = 3,
-        ),
 
         SettingsItem.Section(getString(R.string.category_notifications)),
         SettingsItem.BoolPref(
@@ -186,7 +180,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         val activity = activity as? MainActivity ?: return
         when (key) {
-            "daily_goal", "day_start_hour" -> {
+            "daily_goal" -> {
                 activity.service?.updateDailyGoal()
                 activity.service?.syncConfig()
             }

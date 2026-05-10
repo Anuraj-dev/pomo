@@ -86,14 +86,13 @@ public class TimerFragment : Fragment() {
                         break_minutes = e.breakMinutes,
                     )
                 }
-                val dayStartHour = mainActivity?.prefs?.dayStartHour ?: 3
-                val today = DateLogic.effectiveDate(System.currentTimeMillis(), dayStartHour)
+                val today = DateLogic.effectiveDate(System.currentTimeMillis())
                 val todayEntry = map[today]
                 val activeDates = map.entries.filter { it.value.completed > 0 }.map { it.key }.toSet()
                 timerStats.value = TimerStats(
                     todayMinutes = todayEntry?.work_minutes ?: 0,
                     todaySessions = todayEntry?.completed ?: 0,
-                    streak = DateLogic.currentStreak(activeDates, System.currentTimeMillis(), dayStartHour),
+                    streak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
                 )
             }
         }

@@ -117,15 +117,6 @@ public class UtilPreferenceManager(context: Context) {
             prefs.edit().putString("daily_goal", sanitizeIntPreference("daily_goal", value, 8).toString()).apply()
         }
 
-    public var dayStartHour: Int
-        get() {
-            val str = prefs.getString("day_start_hour", "3")
-            return sanitizeIntPreference("day_start_hour", str?.toIntOrNull(), 3)
-        }
-        set(value) {
-            prefs.edit().putString("day_start_hour", sanitizeIntPreference("day_start_hour", value, 3).toString()).apply()
-        }
-
     public companion object {
         private const val PAIRING_PREFS_NAME: String = "pairing_prefs"
         private const val PAIRING_TOKEN_KEY: String = "pairing_token"
@@ -143,8 +134,6 @@ public class UtilPreferenceManager(context: Context) {
                     parsed.takeIf { it > 0 } ?: default
                 "daily_goal" ->
                     parsed.takeIf { it >= 0 } ?: default
-                "day_start_hour" ->
-                    parsed.takeIf { it in 0..23 } ?: default
                 "phone_server_port" ->
                     parsed.takeIf { it in 1..65535 } ?: default
                 else ->
