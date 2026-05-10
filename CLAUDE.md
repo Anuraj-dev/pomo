@@ -21,10 +21,17 @@ Requires JDK 17+.
 ./build_apk.sh
 ```
 
-If local Gradle and Android SDK are configured:
+Fast local dev build and tests use the unminified `devDebug` variant:
 
 ```bash
 ./gradlew assembleDevDebug
+./run_tests.sh
+```
+
+Production release builds use the `prodRelease` variant with R8 minification and
+resource shrinking:
+
+```bash
 ./gradlew assembleProdRelease
 ```
 
@@ -59,5 +66,7 @@ PomodoroService -> OfflineTimer/Room -> UI, notification, widget, PhoneServer
 - Read relevant files before editing.
 - Do not restore old laptop sync paths.
 - Treat Room as canonical history.
+- History uses the phone's local calendar day. Sessions that cross midnight are
+  split across dates; seconds are rounded up to minutes per date segment.
 - Update `versionCode` and `versionName` for significant app changes.
 - Run the narrowest relevant build/check before finishing.

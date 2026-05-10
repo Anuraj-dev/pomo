@@ -13,6 +13,7 @@ of truth. Existing laptop history is not imported or merged.
 - Runs a Pomodoro timer locally in an Android foreground service.
 - Persists timer state across app restarts.
 - Stores completed sessions and daily stats in Room.
+- Splits sessions that cross midnight across local calendar days.
 - Updates the Timer, Stats, History, notification, and home-screen widget from
   phone-owned state.
 - Hosts a local HTTP/WebSocket API for desktop clients.
@@ -47,6 +48,12 @@ Production release APKs run R8 minification and resource shrinking:
 
 ```bash
 ./gradlew assembleProdRelease
+```
+
+Production APK:
+
+```text
+app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk
 ```
 
 ## Run On A Device
@@ -184,6 +191,8 @@ Manual checks worth doing on device:
 - Start, pause, resume, skip, reset, and extend all mutate phone state.
 - Completed focus sessions appear in Today, Stats, History, notification, and
   widget.
+- A focus session that crosses midnight is split across the two local calendar
+  days, with seconds rounded up to minutes per day.
 - Restarting the app restores stopped/paused/running timer state sensibly.
 - `GET /api/status` rejects missing tokens and returns state with a valid token.
 - `/ws` accepts a valid hello token and streams state updates.
@@ -212,7 +221,8 @@ publishes a GitHub Release with generated release notes.
 
 ## Notes
 
-- Cleartext local-network traffic is allowed by
+- The embedded phone API is local-network HTTP protected by the pairing token;
+  Android app-initiated cleartext traffic remains disabled in
   `network_security_config.xml`.
-- The pairing token is generated and stored in shared preferences.
+- The pairing token is stored in dedicated non-backed-up shared preferences.
 - Legacy laptop/server sync classes were removed from the Android app.

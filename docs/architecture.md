@@ -100,10 +100,16 @@ Completed sessions are written through `HistoryCacheRepository` into Room. Daily
 stats are derived locally from those session writes. The app intentionally does
 not import or reconcile legacy laptop history.
 
+History dates use the phone's local calendar day. When a session crosses
+midnight, the repository splits it into per-date segments, rounds each segment's
+seconds up to minutes, and counts a completed work session only on the final
+segment.
+
 ## Pairing And Remote Clients
 
-The phone generates a pairing token in shared preferences. REST clients send it
-with `X-Pomo-Token`; WebSocket clients send it in their first `hello` message.
+The phone generates a pairing token in dedicated non-backed-up shared
+preferences. REST clients send it with `X-Pomo-Token`; WebSocket clients send it
+in their first `hello` message.
 
 Remote clients are thin:
 
