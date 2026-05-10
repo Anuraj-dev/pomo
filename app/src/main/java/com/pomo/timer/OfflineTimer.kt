@@ -15,6 +15,7 @@ public class OfflineTimer(
     private val scope: CoroutineScope,
 ) {
     private var timer: CountDownTimer? = null
+    private var completionJob: Job? = null
     public var state: TimerState = TimerState()
         private set
 
@@ -56,25 +57,32 @@ public class OfflineTimer(
     }
 
     private fun handleTimerComplete(): Job {
+        completionJob?.takeIf { it.isActive }?.let { return it }
+
+        val completionState = state.copy()
         val now = System.currentTimeMillis() / 1000
-        val sessionStart = state.start_time
+        val sessionStart = completionState.start_time
             .takeIf { it > 0 }
             ?.toLong()
-            ?: now - state.duration.toLong()
+            ?: now - completionState.duration.toLong()
         val session = Session(
-            type = state.phase,
+            type = completionState.phase,
             start = sessionStart,
-            duration = state.duration.toInt(),
+            duration = completionState.duration.toInt(),
             completed = true,
         )
 
-        return scope.launch {
+        val job = scope.launch {
             historyRepository.saveLocalSession(session, prefs.dayStartHour)
+
+            if (!isStillCompleting(completionState)) {
+                return@launch
+            }
 
             state.remaining = 0.0
             state.status = TimerState.STATUS_STOPPED
 
-            if (TimerState.PHASE_WORK == state.phase) {
+            if (TimerState.PHASE_WORK == completionState.phase) {
                 state.completed = historyRepository.getTodayCompletedCount(prefs.dayStartHour)
                 state.date = historyRepository.getEffectiveDateString(prefs.dayStartHour)
                 val longBreakAfter = prefs.longBreakAfter
@@ -96,9 +104,24 @@ public class OfflineTimer(
             state.remaining = state.duration
             observer.onTimerComplete(state)
         }
+        completionJob = job
+        job.invokeOnCompletion {
+            if (completionJob === job) {
+                completionJob = null
+            }
+        }
+        return job
+    }
+
+    private fun isStillCompleting(completionState: TimerState): Boolean {
+        return state.status == TimerState.STATUS_RUNNING &&
+            state.phase == completionState.phase &&
+            state.start_time == completionState.start_time &&
+            state.duration == completionState.duration
     }
 
     public fun toggle() {
+        if (completionJob?.isActive == true) return
         if (TimerState.STATUS_RUNNING == state.status) {
             state.status = TimerState.STATUS_PAUSED
             state.last_action_time = System.currentTimeMillis() / 1000
@@ -118,6 +141,7 @@ public class OfflineTimer(
     }
 
     public fun skip() {
+        if (completionJob?.isActive == true) return
         state.status = TimerState.STATUS_STOPPED
         state.last_action_time = System.currentTimeMillis() / 1000
         stopLocalTimer()
@@ -137,6 +161,7 @@ public class OfflineTimer(
     }
 
     public fun reset() {
+        if (completionJob?.isActive == true) return
         state.status = TimerState.STATUS_STOPPED
         state.duration = getDurationForPhase(state.phase)
         state.remaining = state.duration
@@ -149,6 +174,7 @@ public class OfflineTimer(
     }
 
     public fun extend(minutes: Int) {
+        if (completionJob?.isActive == true) return
         val seconds = (minutes.coerceAtLeast(1) * 60).toDouble()
         state.duration += seconds
         state.remaining += seconds
