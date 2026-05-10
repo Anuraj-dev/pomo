@@ -15,7 +15,12 @@ the embedded desktop-client API. Do not reintroduce laptop/server authority.
 
 ## Build
 
-Requires JDK 17+.
+Requires JDK 17+ and Android SDK.
+
+**Environment Setup:**
+- Android SDK should be at `~/Android/Sdk` (standard location)
+- Set `ANDROID_HOME="$HOME/Android/Sdk"` in `~/.zshrc`
+- Build scripts prefer system SDK over local download
 
 ```bash
 ./build_apk.sh
@@ -70,3 +75,13 @@ PomodoroService -> OfflineTimer/Room -> UI, notification, widget, PhoneServer
   split across dates; seconds are rounded up to minutes per date segment.
 - Update `versionCode` and `versionName` for significant app changes.
 - Run the narrowest relevant build/check before finishing.
+
+## State Management Constraints
+
+- `PomodoroService.stateSnapshot()` must be read-only. It returns a copy of
+  current state without triggering any mutations, reconciliations, or side effects.
+- Day transitions are handled in `executeCommand()` before state-modifying
+  operations, not in read paths.
+- Never call `reconcileDayTransitionIfNeeded()` from read-only operations like
+  status queries, UI refreshes, or API polls—this would reset active timers
+  crossing midnight.
