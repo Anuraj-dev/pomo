@@ -2,10 +2,16 @@
 <data-extraction-rules>
     <cloud-backup>
         <include domain="sharedpref" path="."/>
+        <include domain="database" path="pomo.db"/>
+        <include domain="database" path="pomo.db-shm"/>
+        <include domain="database" path="pomo.db-wal"/>
         <exclude domain="sharedpref" path="pairing_prefs.xml"/>
     </cloud-backup>
     <device-transfer>
         <include domain="sharedpref" path="."/>
+        <include domain="database" path="pomo.db"/>
+        <include domain="database" path="pomo.db-shm"/>
+        <include domain="database" path="pomo.db-wal"/>
         <exclude domain="sharedpref" path="pairing_prefs.xml"/>
     </device-transfer>
 </data-extraction-rules>
