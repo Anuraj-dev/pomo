@@ -57,9 +57,7 @@ public class HistoryCacheRepository(context: Context) {
             completed = session.completed,
             synced = true,
         )
-        // day_stats parent row must exist before sessions FK insert
-        updateLocalDayStats(date, entity)
-        dao.insertSession(entity)
+        dao.insertSessionWithDayStats(date, entity)
     }
 
     public suspend fun getTodayCompletedCount(dayStartHour: Int): Int {
@@ -94,25 +92,4 @@ public class HistoryCacheRepository(context: Context) {
         val completed: Boolean = false,
     )
 
-    private suspend fun updateLocalDayStats(date: String, session: SessionEntity) {
-        val currentStats = dao.getDayStats(date) ?: DayStatsEntity(
-            date = date,
-            completed = 0,
-            workMinutes = 0,
-            breakMinutes = 0,
-            lastUpdated = System.currentTimeMillis(),
-        )
-
-        val isWork = session.type == "work"
-        val isBreak = session.type == "short" || session.type == "long"
-
-        val newStats = currentStats.copy(
-            completed = if (isWork && session.completed) currentStats.completed + 1 else currentStats.completed,
-            workMinutes = if (isWork && session.completed) currentStats.workMinutes + (session.duration / 60) else currentStats.workMinutes,
-            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + (session.duration / 60) else currentStats.breakMinutes,
-            lastUpdated = System.currentTimeMillis(),
-        )
-
-        dao.insertDayStats(newStats)
-    }
 }

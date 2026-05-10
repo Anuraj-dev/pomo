@@ -42,6 +42,30 @@ public interface HistoryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertSession(session: SessionEntity)
 
+    @Transaction
+    public suspend fun insertSessionWithDayStats(date: String, session: SessionEntity) {
+        val currentStats = getDayStats(date) ?: DayStatsEntity(
+            date = date,
+            completed = 0,
+            workMinutes = 0,
+            breakMinutes = 0,
+            lastUpdated = System.currentTimeMillis(),
+        )
+
+        val isWork = session.type == "work"
+        val isBreak = session.type == "short" || session.type == "long"
+
+        val newStats = currentStats.copy(
+            completed = if (isWork && session.completed) currentStats.completed + 1 else currentStats.completed,
+            workMinutes = if (isWork && session.completed) currentStats.workMinutes + (session.duration / 60) else currentStats.workMinutes,
+            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + (session.duration / 60) else currentStats.breakMinutes,
+            lastUpdated = System.currentTimeMillis(),
+        )
+
+        insertDayStats(newStats)
+        insertSession(session)
+    }
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertAllSessions(sessions: List<SessionEntity>)
 
