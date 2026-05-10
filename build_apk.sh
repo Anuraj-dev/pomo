@@ -3,9 +3,7 @@ set -e
 
 PROJECT_DIR="$(pwd)"
 SDK_DIR="$PROJECT_DIR/android-sdk"
-GRADLE_DIR="$PROJECT_DIR/gradle-dist"
 CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip"
-GRADLE_URL="https://services.gradle.org/distributions/gradle-9.2.1-bin.zip"
 
 GREEN='\033[0;32m'
 NC='\033[0m'
@@ -16,7 +14,6 @@ source "$PROJECT_DIR/scripts/java_env.sh"
 require_java_17
 
 mkdir -p "$SDK_DIR/cmdline-tools"
-mkdir -p "$GRADLE_DIR"
 
 if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
     echo "Downloading Android Command Line Tools..."
@@ -35,17 +32,8 @@ if [ ! -d "$SDK_DIR/platforms/android-34" ]; then
     sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 fi
 
-if [ ! -f "$GRADLE_DIR/gradle-9.2.1/bin/gradle" ]; then
-    echo "Downloading Gradle..."
-    wget -q --show-progress -O gradle.zip "$GRADLE_URL"
-    unzip -q gradle.zip -d "$GRADLE_DIR"
-    rm -f gradle.zip
-fi
-
-export PATH="$GRADLE_DIR/gradle-9.2.1/bin:$PATH"
-
 echo -e "${GREEN}Building APK...${NC}"
-gradle assembleDebug
+"$PROJECT_DIR/gradlew" assembleDebug
 
 APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 if [ -f "$APK_PATH" ]; then

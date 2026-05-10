@@ -23,17 +23,17 @@ of truth. Existing laptop history is not imported or merged.
 
 Requires JDK 17+.
 
-The repository does not currently include a Gradle wrapper. Use the lightweight
-builder, which uses the local SDK/Gradle setup in this checkout:
+Use the Gradle wrapper when the Android SDK is already configured:
+
+```bash
+./gradlew assembleDebug
+```
+
+Or use the lightweight builder, which bootstraps the local Android SDK in this
+checkout before calling the wrapper:
 
 ```bash
 ./build_apk.sh
-```
-
-Or, if Gradle and the Android SDK are already on your path:
-
-```bash
-gradle assembleDebug
 ```
 
 Debug APK:

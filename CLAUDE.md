@@ -24,10 +24,8 @@ Requires JDK 17+.
 If local Gradle and Android SDK are configured:
 
 ```bash
-gradle assembleDebug
+./gradlew assembleDebug
 ```
-
-This repo currently has no `./gradlew`.
 
 ## Useful ADB
 
