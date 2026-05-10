@@ -21,6 +21,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.net.Inet4Address
 import java.net.NetworkInterface
@@ -42,6 +44,7 @@ public class PomodoroService : Service(), TimerObserver {
     private var lastSavedState: TimerState? = null
 
     private val serviceScope = MainScope()
+    private val commandMutex = Mutex()
 
     public val pairingToken: String
         get() = prefs.pairingToken
@@ -266,70 +269,67 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     public fun toggleTimer() {
-        checkDayTransition()
-        offlineTimer.toggle()
+        serviceScope.launch { toggleTimerBlocking() }
     }
 
     public fun skipTimer() {
-        checkDayTransition()
-        offlineTimer.skip()
+        serviceScope.launch { skipTimerBlocking() }
     }
 
     public fun resetTimer() {
-        checkDayTransition()
-        offlineTimer.reset()
+        serviceScope.launch { resetTimerBlocking() }
     }
 
     public fun extendTimer(minutes: Int) {
-        checkDayTransition()
+        serviceScope.launch { extendTimerBlocking(minutes) }
+    }
+
+    public suspend fun toggleTimerBlocking(): TimerState = runTimerCommand {
+        offlineTimer.toggle()
+    }
+
+    public suspend fun skipTimerBlocking(): TimerState = runTimerCommand {
+        offlineTimer.skip()
+    }
+
+    public suspend fun resetTimerBlocking(): TimerState = runTimerCommand {
+        offlineTimer.reset()
+    }
+
+    public suspend fun extendTimerBlocking(minutes: Int): TimerState = runTimerCommand {
         offlineTimer.extend(minutes)
     }
 
-    public suspend fun toggleTimerBlocking(): TimerState = withContext(Dispatchers.Main) {
-        toggleTimer()
-        currentState.copy()
+    private suspend fun runTimerCommand(action: () -> Unit): TimerState = commandMutex.withLock {
+        withContext(Dispatchers.Main) {
+            reconcileDayTransitionIfNeeded(notify = false)
+            action()
+            currentState.copy()
+        }
     }
 
-    public suspend fun skipTimerBlocking(): TimerState = withContext(Dispatchers.Main) {
-        skipTimer()
-        currentState.copy()
-    }
-
-    public suspend fun resetTimerBlocking(): TimerState = withContext(Dispatchers.Main) {
-        resetTimer()
-        currentState.copy()
-    }
-
-    public suspend fun extendTimerBlocking(minutes: Int): TimerState = withContext(Dispatchers.Main) {
-        extendTimer(minutes)
-        currentState.copy()
-    }
-
-    private fun checkDayTransition() {
+    private suspend fun reconcileDayTransitionIfNeeded(notify: Boolean) {
         val today = historyCacheRepository.getEffectiveDateString(prefs.dayStartHour)
-        if (currentState.date != today) {
-            Log.d(TAG, "Day transition detected: ${currentState.date} -> $today. Resetting state.")
-            currentState.status = TimerState.STATUS_STOPPED
-            currentState.phase = TimerState.PHASE_WORK
-            currentState.next_phase = TimerState.PHASE_WORK
-            currentState.start_time = 0.0
-            currentState.duration = 0.0
-            currentState.remaining = 0.0
-            currentState.date = today
-            currentState.last_action_time = System.currentTimeMillis() / 1000
+        if (currentState.date == today) return
 
-            currentState.completed = 0
+        val completed = historyCacheRepository.getTodayCompletedCount(prefs.dayStartHour)
 
-            serviceScope.launch {
-                currentState.completed = historyCacheRepository.getTodayCompletedCount(prefs.dayStartHour)
-                offlineTimer.updateState(currentState)
-                saveCurrentState()
-                updateNotification()
-                broadcastStateUpdate()
-            }
+        Log.d(TAG, "Day transition detected: ${currentState.date} -> $today. Resetting state.")
+        currentState.status = TimerState.STATUS_STOPPED
+        currentState.phase = TimerState.PHASE_WORK
+        currentState.next_phase = null
+        currentState.start_time = 0.0
+        currentState.duration = 0.0
+        currentState.remaining = 0.0
+        currentState.date = today
+        currentState.last_action_time = System.currentTimeMillis() / 1000
+        currentState.completed = completed
 
-            offlineTimer.updateState(currentState)
-            saveCurrentState()
+        sanitizeState(currentState)
+        offlineTimer.updateState(currentState)
+        saveCurrentState()
+
+        if (notify) {
             updateNotification()
             broadcastStateUpdate()
         }
@@ -375,8 +375,11 @@ public class PomodoroService : Service(), TimerObserver {
         return token
     }
 
-    public suspend fun stateSnapshot(): TimerState = withContext(Dispatchers.Main) {
-        currentState.copy()
+    public suspend fun stateSnapshot(): TimerState = commandMutex.withLock {
+        withContext(Dispatchers.Main) {
+            reconcileDayTransitionIfNeeded(notify = true)
+            currentState.copy()
+        }
     }
 
     public fun getConfigPayload(): ConfigPayload {
