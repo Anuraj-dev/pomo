@@ -409,7 +409,6 @@ public class PomodoroService : Service(), TimerObserver {
 
     public suspend fun stateSnapshot(): TimerState = commandMutex.withLock {
         withContext(Dispatchers.Main) {
-            reconcileDayTransitionIfNeeded(notify = true)
             currentState.copy()
         }
     }
