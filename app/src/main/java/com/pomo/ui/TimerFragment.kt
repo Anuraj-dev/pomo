@@ -64,7 +64,9 @@ public class TimerFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        mainActivity?.service?.currentState?.let { updateUI(it) }
+        viewLifecycleOwner.lifecycleScope.launch {
+            mainActivity?.service?.stateSnapshot()?.let { updateUI(it) }
+        }
         observeStats()
     }
 

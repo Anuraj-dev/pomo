@@ -34,8 +34,7 @@ public class PomodoroService : Service(), TimerObserver {
     private lateinit var offlineTimer: OfflineTimer
     private lateinit var historyCacheRepository: HistoryCacheRepository
     private lateinit var prefs: UtilPreferenceManager
-    public var currentState: TimerState = TimerState()
-        private set
+    private var currentState: TimerState = TimerState()
     private lateinit var phoneServer: PhoneServer
     private var activePhoneServerPort: Int = PhoneServer.DEFAULT_PORT
     private var currentRingtone: Ringtone? = null

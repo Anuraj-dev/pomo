@@ -60,8 +60,7 @@ public class StatsFragment : Fragment() {
                     val history by historyFlow.collectAsState(initial = emptyMap())
                     val sessions by sessionsFlow.collectAsState(initial = emptyList())
                     val act = mainActivity
-                    val goal = act?.service?.currentState?.goal?.takeIf { it > 0 }
-                        ?: act?.prefs?.dailyGoal ?: 8
+                    val goal = act?.prefs?.dailyGoal ?: 8
                     val dayStart = act?.prefs?.dayStartHour ?: 3
                     val sessionMins = act?.prefs?.pomodoroDuration ?: 25
                     StatsScreen(
