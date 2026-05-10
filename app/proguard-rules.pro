@@ -3,6 +3,8 @@
 -keep class com.pomo.timer.TimerState { *; }
 -keep class com.pomo.service.PomodoroService$ConfigPayload { *; }
 -keep class com.pomo.service.PomodoroService$Durations { *; }
+-keep class com.pomo.service.PomodoroService$PartialConfigPayload { *; }
+-keep class com.pomo.service.PomodoroService$PartialDurations { *; }
 -keep class com.pomo.db.HistoryCacheRepository$ServerDayEntry { *; }
 -keep class com.pomo.db.HistoryCacheRepository$ServerSession { *; }
 

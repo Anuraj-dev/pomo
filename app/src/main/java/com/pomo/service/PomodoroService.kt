@@ -396,13 +396,13 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     public suspend fun applyConfigPayload(body: String): TimerState = withContext(Dispatchers.Main) {
-        val config = gson.fromJson(body, ConfigPayload::class.java)
-        prefs.pomodoroDuration = config.durations.work.takeIf { it > 0 } ?: prefs.pomodoroDuration
-        prefs.shortBreakDuration = config.durations.short_break.takeIf { it > 0 } ?: prefs.shortBreakDuration
-        prefs.longBreakDuration = config.durations.long_break.takeIf { it > 0 } ?: prefs.longBreakDuration
-        prefs.longBreakAfter = config.long_break_after.takeIf { it > 0 } ?: prefs.longBreakAfter
-        prefs.dailyGoal = config.daily_goal.takeIf { it >= 0 } ?: prefs.dailyGoal
-        prefs.dayStartHour = config.day_start_hour.takeIf { it in 0..23 } ?: prefs.dayStartHour
+        val config = parseConfigPayload(body)
+        config.durations?.work?.takeIf { it > 0 }?.let { prefs.pomodoroDuration = it }
+        config.durations?.short_break?.takeIf { it > 0 }?.let { prefs.shortBreakDuration = it }
+        config.durations?.long_break?.takeIf { it > 0 }?.let { prefs.longBreakDuration = it }
+        config.long_break_after?.takeIf { it > 0 }?.let { prefs.longBreakAfter = it }
+        config.daily_goal?.takeIf { it >= 0 }?.let { prefs.dailyGoal = it }
+        config.day_start_hour?.takeIf { it in 0..23 }?.let { prefs.dayStartHour = it }
 
         currentState.goal = prefs.dailyGoal
         if (currentState.status != TimerState.STATUS_RUNNING) {
@@ -415,6 +415,11 @@ public class PomodoroService : Service(), TimerObserver {
         updateNotification()
         broadcastStateUpdate()
         currentState.copy()
+    }
+
+    private fun parseConfigPayload(body: String): PartialConfigPayload {
+        return gson.fromJson(body, PartialConfigPayload::class.java)
+            ?: throw IllegalArgumentException("config body must be a JSON object")
     }
 
     public suspend fun getHistoryPayload(): Map<String, HistoryCacheRepository.ServerDayEntry> {
@@ -537,5 +542,18 @@ public class PomodoroService : Service(), TimerObserver {
         val work: Int,
         val short_break: Int,
         val long_break: Int,
+    )
+
+    public data class PartialConfigPayload(
+        val durations: PartialDurations?,
+        val long_break_after: Int?,
+        val daily_goal: Int?,
+        val day_start_hour: Int?,
+    )
+
+    public data class PartialDurations(
+        val work: Int?,
+        val short_break: Int?,
+        val long_break: Int?,
     )
 }
