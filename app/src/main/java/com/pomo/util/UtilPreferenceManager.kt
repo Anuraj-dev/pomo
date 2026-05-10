@@ -9,6 +9,8 @@ import java.security.SecureRandom
 
 public class UtilPreferenceManager(context: Context) {
     private val prefs: SharedPreferences = PreferenceManager.getDefaultSharedPreferences(context)
+    private val pairingPrefs: SharedPreferences =
+        context.getSharedPreferences(PAIRING_PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
 
     public fun saveTimerState(state: TimerState) {
@@ -36,17 +38,25 @@ public class UtilPreferenceManager(context: Context) {
 
     public val pairingToken: String
         get() {
-            val existing = prefs.getString("pairing_token", null)
+            val existing = pairingPrefs.getString(PAIRING_TOKEN_KEY, null)
             if (!existing.isNullOrBlank()) return existing
 
+            val legacy = prefs.getString(PAIRING_TOKEN_KEY, null)
+            if (!legacy.isNullOrBlank()) {
+                pairingPrefs.edit().putString(PAIRING_TOKEN_KEY, legacy).apply()
+                prefs.edit().remove(PAIRING_TOKEN_KEY).apply()
+                return legacy
+            }
+
             val token = generateToken()
-            prefs.edit().putString("pairing_token", token).apply()
+            pairingPrefs.edit().putString(PAIRING_TOKEN_KEY, token).apply()
             return token
         }
 
     public fun rotatePairingToken(): String {
         val token = generateToken()
-        prefs.edit().putString("pairing_token", token).apply()
+        pairingPrefs.edit().putString(PAIRING_TOKEN_KEY, token).apply()
+        prefs.edit().remove(PAIRING_TOKEN_KEY).apply()
         return token
     }
 
@@ -117,6 +127,9 @@ public class UtilPreferenceManager(context: Context) {
         }
 
     public companion object {
+        private const val PAIRING_PREFS_NAME: String = "pairing_prefs"
+        private const val PAIRING_TOKEN_KEY: String = "pairing_token"
+
         private fun generateToken(): String {
             val bytes = ByteArray(24)
             SecureRandom().nextBytes(bytes)

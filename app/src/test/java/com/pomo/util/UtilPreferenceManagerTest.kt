@@ -25,6 +25,7 @@ public class UtilPreferenceManagerTest {
     public fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         prefs = UtilPreferenceManager(ctx)
     }
 
@@ -32,6 +33,7 @@ public class UtilPreferenceManagerTest {
     public fun tearDown() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
     }
 
     @Test
@@ -81,6 +83,7 @@ public class UtilPreferenceManagerTest {
         // Clear and create again — fresh token expected
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         val newPrefs = UtilPreferenceManager(ctx)
         val b = newPrefs.pairingToken
         assertNotEquals(a, b)
@@ -93,6 +96,24 @@ public class UtilPreferenceManagerTest {
 
         assertNotEquals(first, rotated)
         assertEquals(rotated, prefs.pairingToken)
+    }
+
+    @Test
+    public fun pairingToken_migratesLegacyDefaultPrefAndRemovesIt() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit()
+            .putString("pairing_token", "legacy-token")
+            .apply()
+
+        val token = prefs.pairingToken
+
+        assertEquals("legacy-token", token)
+        assertNull(PreferenceManager.getDefaultSharedPreferences(ctx).getString("pairing_token", null))
+        assertEquals(
+            "legacy-token",
+            ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE)
+                .getString("pairing_token", null),
+        )
     }
 
     @Test
