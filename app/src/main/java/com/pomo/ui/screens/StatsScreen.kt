@@ -69,6 +69,7 @@ public enum class PeriodType { Week, Month }
 @Composable
 public fun StatsScreen(
     history: Map<String, DayEntry>,
+    today: String,
     todaySessions: List<SessionEntity>,
     dailyGoal: Int,
     sessionMinutes: Int = 25,
@@ -91,7 +92,6 @@ public fun StatsScreen(
     }
     val (totalMinutes, totalSessions) = totals
 
-    val today = remember { DateLogic.effectiveDate(System.currentTimeMillis()) }
     val todayEntry = history[today]
     val todaySessionsCount = todayEntry?.completed ?: 0
     val daysWithActivity = history.values.count { it.completed > 0 }
@@ -100,12 +100,12 @@ public fun StatsScreen(
         history.entries.filter { it.value.completed > 0 }.map { it.key }.toSet()
     }
     val bestStreak = remember(activeDates) { DateLogic.bestStreak(activeDates) }
-    val currentStreak = remember(activeDates) {
+    val currentStreak = remember(activeDates, today) {
         DateLogic.currentStreak(activeDates, System.currentTimeMillis())
     }
 
-    val periodData = remember(history, periodType) {
-        buildPeriodData(history, periodType)
+    val periodData = remember(history, periodType, today) {
+        buildPeriodData(history, periodType, today)
     }
 
     Column(
@@ -191,7 +191,7 @@ public fun StatsScreen(
         )
         Spacer(Modifier.height(12.dp))
         Box(Modifier.horizontalScroll(rememberScrollState())) {
-            Heatmap(history = history)
+            Heatmap(history = history, today = today)
         }
         Spacer(Modifier.height(24.dp))
 
@@ -202,7 +202,7 @@ public fun StatsScreen(
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(12.dp))
-        WeekGridCard(history = history, dailyGoal = dailyGoal)
+        WeekGridCard(history = history, today = today, dailyGoal = dailyGoal)
         Spacer(Modifier.height(24.dp))
 
         // Graph header + toggles
@@ -328,7 +328,7 @@ private fun SummaryCard(
 }
 
 @Composable
-private fun WeekGridCard(history: Map<String, DayEntry>, dailyGoal: Int) {
+private fun WeekGridCard(history: Map<String, DayEntry>, today: String, dailyGoal: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -340,7 +340,7 @@ private fun WeekGridCard(history: Map<String, DayEntry>, dailyGoal: Int) {
                 .padding(16.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            val days = remember(history) { last7Days(history) }
+            val days = remember(history, today) { last7Days(history, today) }
             val primary = MaterialTheme.colorScheme.primary
             val onSurface = MaterialTheme.colorScheme.onSurface
             val variant = MaterialTheme.colorScheme.surfaceVariant
@@ -506,7 +506,7 @@ private fun LineGraph(data: List<Pair<String, Int>>, dailyGoal: Int, sessionMinu
 }
 
 @Composable
-private fun Heatmap(history: Map<String, DayEntry>) {
+private fun Heatmap(history: Map<String, DayEntry>, today: String) {
     val primary = MaterialTheme.colorScheme.primary
     val variant = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
     val weeks = 20
@@ -521,17 +521,19 @@ private fun Heatmap(history: Map<String, DayEntry>) {
     ) {
         val cellPx = cell.toPx()
         val sp = spacing.toPx()
-        val now = Calendar.getInstance()
+        val df = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val now = Calendar.getInstance().apply {
+            timeInMillis = df.parse(today)!!.time
+        }
         val startCal = (now.clone() as Calendar).apply {
             add(Calendar.WEEK_OF_YEAR, -(weeks - 1))
             set(Calendar.DAY_OF_WEEK, Calendar.SUNDAY)
         }
-        val df = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val today = Date()
+        val todayDate = df.parse(today)!!
         val cal = startCal.clone() as Calendar
         for (w in 0 until weeks) {
             for (d in 0 until 7) {
-                if (cal.time.after(today)) return@Canvas
+                if (cal.time.after(todayDate)) return@Canvas
                 val key = df.format(cal.time)
                 val entry = history[key]
                 val sessions = entry?.completed ?: 0
@@ -603,12 +605,11 @@ private fun formatHM(minutes: Int): String {
     return if (h > 0) "${h}h ${m}m" else "${m}m"
 }
 
-private fun last7Days(history: Map<String, DayEntry>): List<Pair<String, DayEntry?>> {
+private fun last7Days(history: Map<String, DayEntry>, today: String): List<Pair<String, DayEntry?>> {
     val df = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     val dayFmt = SimpleDateFormat("EEE", Locale.US)
-    val todayKey = DateLogic.effectiveDate(System.currentTimeMillis())
     val cal = Calendar.getInstance().apply {
-        timeInMillis = df.parse(todayKey)!!.time
+        timeInMillis = df.parse(today)!!.time
         add(Calendar.DAY_OF_YEAR, -6)
     }
     val out = mutableListOf<Pair<String, DayEntry?>>()
@@ -623,14 +624,14 @@ private fun last7Days(history: Map<String, DayEntry>): List<Pair<String, DayEntr
 private fun buildPeriodData(
     history: Map<String, DayEntry>,
     period: PeriodType,
+    today: String,
 ): List<Pair<String, Int>> {
     val df = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     val dayFmt = SimpleDateFormat("EEE", Locale.US)
     val domFmt = SimpleDateFormat("d", Locale.US)
-    val todayKey = DateLogic.effectiveDate(System.currentTimeMillis())
     val days = if (period == PeriodType.Month) 30 else 7
     val cal = Calendar.getInstance().apply {
-        timeInMillis = df.parse(todayKey)!!.time
+        timeInMillis = df.parse(today)!!.time
         add(Calendar.DAY_OF_YEAR, -(days - 1))
     }
     val out = mutableListOf<Pair<String, Int>>()
@@ -645,4 +646,3 @@ private fun buildPeriodData(
     }
     return out
 }
-
