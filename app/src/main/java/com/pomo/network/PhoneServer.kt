@@ -24,8 +24,6 @@ import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 public class PhoneServer(
@@ -34,7 +32,7 @@ public class PhoneServer(
 ) {
     private val gson = Gson()
     private val sessions = mutableSetOf<DefaultWebSocketServerSession>()
-    private val sessionsMutex = Mutex()
+    private val sessionsLock = Any()
     private val unauthorizedAttempts = mutableListOf<Long>()
     private var engine: ApplicationEngine? = null
     public val isRunning: Boolean
@@ -107,14 +105,14 @@ public class PhoneServer(
                         return@webSocket
                     }
 
-                    sessionsMutex.withLock { sessions.add(this) }
+                    synchronized(sessionsLock) { sessions.add(this) }
                     try {
                         send(Frame.Text(stateMessage()))
                         for (frame in incoming) {
                             if (frame is Frame.Close) break
                         }
                     } finally {
-                        sessionsMutex.withLock { sessions.remove(this) }
+                        synchronized(sessionsLock) { sessions.remove(this) }
                     }
                 }
             }
@@ -126,12 +124,13 @@ public class PhoneServer(
     public fun stop() {
         engine?.stop(gracePeriodMillis = 500, timeoutMillis = 1500)
         engine = null
+        synchronized(sessionsLock) { sessions.clear() }
     }
 
     public suspend fun broadcastState() {
         val message = stateMessage()
         val deadSessions = mutableListOf<DefaultWebSocketServerSession>()
-        val activeSessions = sessionsMutex.withLock { sessions.toList() }
+        val activeSessions = synchronized(sessionsLock) { sessions.toList() }
 
         activeSessions.forEach { session ->
             try {
@@ -142,7 +141,7 @@ public class PhoneServer(
         }
 
         if (deadSessions.isNotEmpty()) {
-            sessionsMutex.withLock {
+            synchronized(sessionsLock) {
                 sessions.removeAll(deadSessions.toSet())
             }
         }
