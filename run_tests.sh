@@ -9,4 +9,4 @@ require_java_17
 export ANDROID_HOME="$SDK_DIR"
 export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH"
 
-"$PROJECT_DIR/gradlew" testDebugUnitTest "$@"
+"$PROJECT_DIR/gradlew" testDevDebugUnitTest "$@"

@@ -23,10 +23,11 @@ of truth. Existing laptop history is not imported or merged.
 
 Requires JDK 17+.
 
-Use the Gradle wrapper when the Android SDK is already configured:
+Use the Gradle wrapper when the Android SDK is already configured. The dev
+variant is unminified and is the fast local build:
 
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDevDebug
 ```
 
 Or use the lightweight builder, which bootstraps the local Android SDK in this
@@ -39,13 +40,19 @@ checkout before calling the wrapper:
 Debug APK:
 
 ```text
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/dev/debug/app-dev-debug.apk
+```
+
+Production release APKs run R8 minification and resource shrinking:
+
+```bash
+./gradlew assembleProdRelease
 ```
 
 ## Run On A Device
 
 ```bash
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk
 adb shell am start -n com.pomo/.MainActivity
 ```
 
@@ -168,7 +175,7 @@ For the thin TypeScript laptop client, see [docs/desktop-client.md](docs/desktop
 Build check:
 
 ```bash
-gradle assembleDebug
+gradle assembleDevDebug
 ```
 
 Manual checks worth doing on device:
@@ -199,9 +206,9 @@ The bump type follows Conventional Commits:
 - `!` or `BREAKING CHANGE:` creates a major release.
 - Anything else defaults to a patch release, so every merged PR can still ship.
 
-When a `v*` tag is pushed, `.github/workflows/release.yml` builds debug and
-unsigned release APKs, uploads them as workflow artifacts, and publishes a
-GitHub Release with generated release notes.
+When a `v*` tag is pushed, `.github/workflows/release.yml` builds the dev debug
+and unsigned prod release APKs, uploads them as workflow artifacts, and
+publishes a GitHub Release with generated release notes.
 
 ## Notes
 

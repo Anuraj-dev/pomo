@@ -24,13 +24,14 @@ Requires JDK 17+.
 If local Gradle and Android SDK are configured:
 
 ```bash
-./gradlew assembleDebug
+./gradlew assembleDevDebug
+./gradlew assembleProdRelease
 ```
 
 ## Useful ADB
 
 ```bash
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk
 adb shell am start -n com.pomo/.MainActivity
 adb logcat -s PomodoroService PhoneServer
 ```

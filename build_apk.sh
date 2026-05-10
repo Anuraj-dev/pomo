@@ -32,10 +32,10 @@ if [ ! -d "$SDK_DIR/platforms/android-34" ]; then
     sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 fi
 
-echo -e "${GREEN}Building APK...${NC}"
-"$PROJECT_DIR/gradlew" assembleDebug
+echo -e "${GREEN}Building dev APK...${NC}"
+"$PROJECT_DIR/gradlew" assembleDevDebug
 
-APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+APK_PATH="$PROJECT_DIR/app/build/outputs/apk/dev/debug/app-dev-debug.apk"
 if [ -f "$APK_PATH" ]; then
     echo -e "${GREEN}Build Success!${NC}"
     echo "APK location: $APK_PATH"
