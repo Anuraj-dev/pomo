@@ -24,12 +24,19 @@ public class HistoryCacheRepository(context: Context) {
     public suspend fun getCachedDayStats(): List<DayStatsEntity> = dao.getAllDayStatsSnapshot()
 
     public suspend fun getHistoryPayload(): Map<String, ServerDayEntry> = withContext(Dispatchers.IO) {
-        dao.getAllDayStatsSnapshot().associate { day ->
+        val days = dao.getAllDayStatsSnapshot()
+        val sessionsByDate = if (days.isEmpty()) {
+            emptyMap()
+        } else {
+            dao.getSessionsForDates(days.map { it.date }).groupBy { it.date }
+        }
+
+        days.associate { day ->
             day.date to ServerDayEntry(
                 completed = day.completed,
                 work_minutes = day.workMinutes,
                 break_minutes = day.breakMinutes,
-                sessions = dao.getSessionsForDate(day.date).map {
+                sessions = sessionsByDate[day.date].orEmpty().map {
                     ServerSession(
                         type = it.type,
                         start = it.start,

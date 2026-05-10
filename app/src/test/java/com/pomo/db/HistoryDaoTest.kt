@@ -74,6 +74,31 @@ public class HistoryDaoTest {
     }
 
     @Test
+    public fun getSessionsForDates_returnsOnlyRequestedDatesInExportOrder(): Unit = runTest {
+        dao.insertAllDayStats(
+            listOf(
+                DayStatsEntity("2026-05-05", 1, 25, 0),
+                DayStatsEntity("2026-05-06", 1, 25, 0),
+                DayStatsEntity("2026-05-07", 2, 25, 5),
+            ),
+        )
+        dao.insertAllSessions(
+            listOf(
+                SessionEntity(start = 200L, date = "2026-05-07", type = "work", duration = 1500, completed = true),
+                SessionEntity(start = 100L, date = "2026-05-07", type = "short", duration = 300, completed = true),
+                SessionEntity(start = 300L, date = "2026-05-06", type = "work", duration = 1500, completed = true),
+                SessionEntity(start = 400L, date = "2026-05-05", type = "work", duration = 1500, completed = true),
+            ),
+        )
+
+        val sessions = dao.getSessionsForDates(listOf("2026-05-07", "2026-05-06"))
+
+        assertEquals(3, sessions.size)
+        assertEquals(listOf("2026-05-07", "2026-05-07", "2026-05-06"), sessions.map { it.date })
+        assertEquals(listOf(100L, 200L, 300L), sessions.map { it.start })
+    }
+
+    @Test
     public fun aggregates_returnExpectedSums(): Unit = runTest {
         dao.insertAllDayStats(
             listOf(
