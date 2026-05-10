@@ -68,7 +68,7 @@ public abstract class AppDatabase : RoomDatabase() {
                 )
                 db.execSQL(
                     """
-                    INSERT OR IGNORE INTO `sessions_new` (`start`, `date`, `type`, `duration`, `completed`, `synced`)
+                    INSERT OR REPLACE INTO `sessions_new` (`start`, `date`, `type`, `duration`, `completed`, `synced`)
                     SELECT `start`, `date`, `type`, `duration`, `completed`, 1
                     FROM `sessions`
                     ORDER BY `id` ASC

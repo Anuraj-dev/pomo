@@ -33,6 +33,7 @@ public class PhoneServer(
     private val gson = Gson()
     private val sessions = mutableSetOf<DefaultWebSocketServerSession>()
     private val sessionsLock = Any()
+    private val unauthorizedAttemptsLock = Any()
     private val unauthorizedAttempts = mutableListOf<Long>()
     private var engine: ApplicationEngine? = null
     public val isRunning: Boolean
@@ -191,9 +192,11 @@ public class PhoneServer(
     private fun isRateLimited(): Boolean {
         val now = System.currentTimeMillis()
         val windowStart = now - UNAUTHORIZED_WINDOW_MS
-        unauthorizedAttempts.removeAll { it < windowStart }
-        unauthorizedAttempts.add(now)
-        return unauthorizedAttempts.size > MAX_UNAUTHORIZED_ATTEMPTS
+        return synchronized(unauthorizedAttemptsLock) {
+            unauthorizedAttempts.removeAll { it < windowStart }
+            unauthorizedAttempts.add(now)
+            unauthorizedAttempts.size > MAX_UNAUTHORIZED_ATTEMPTS
+        }
     }
 
     private suspend fun io.ktor.server.application.ApplicationCall.unauthorized() {

@@ -44,6 +44,7 @@ public class OfflineTimerTest {
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
         prefs = UtilPreferenceManager(ctx)
         repo = HistoryCacheRepository(ctx)
+        runBlocking { repo.clearCache() }
         scope = CoroutineScope(Dispatchers.Unconfined)
         observer = RecordingObserver()
         timer = OfflineTimer(observer, prefs, repo, scope)

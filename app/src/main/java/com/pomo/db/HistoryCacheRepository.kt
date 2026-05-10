@@ -81,11 +81,16 @@ public class HistoryCacheRepository(context: Context) {
         return dao.getTodayCompletedCount(date)
     }
 
+    public suspend fun getCompletedCountForDate(date: String): Int =
+        dao.getTodayCompletedCount(date)
+
     public fun getEffectiveDateString(): String {
         val calendar = java.util.Calendar.getInstance()
         val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         return dateFormat.format(calendar.time)
     }
+
+    public fun dateStringForEpochSecond(epochSecond: Long): String = dateForEpochSecond(epochSecond)
 
     private fun splitSessionByCalendarDay(session: com.pomo.models.Session): List<SessionSegment> {
         if (session.duration <= 0) {

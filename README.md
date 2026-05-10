@@ -182,7 +182,7 @@ For the thin TypeScript laptop client, see [docs/desktop-client.md](docs/desktop
 Build check:
 
 ```bash
-gradle assembleDevDebug
+./gradlew assembleDevDebug
 ```
 
 Manual checks worth doing on device:

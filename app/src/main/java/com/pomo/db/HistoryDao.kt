@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.pomo.timer.TimerState
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -59,8 +60,9 @@ public interface HistoryDao {
             lastUpdated = System.currentTimeMillis(),
         )
 
-        val isWork = session.type == "work"
-        val isBreak = session.type == "short" || session.type == "long"
+        val isWork = session.type == TimerState.PHASE_WORK
+        val isBreak = session.type == TimerState.PHASE_SHORT || session.type == TimerState.PHASE_LONG
+        val durationMinutes = (session.duration + 59) / 60
 
         val newStats = currentStats.copy(
             completed = if (isWork && session.completed && countCompletedSession) {
@@ -68,8 +70,8 @@ public interface HistoryDao {
             } else {
                 currentStats.completed
             },
-            workMinutes = if (isWork && session.completed) currentStats.workMinutes + (session.duration / 60) else currentStats.workMinutes,
-            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + (session.duration / 60) else currentStats.breakMinutes,
+            workMinutes = if (isWork && session.completed) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
+            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + durationMinutes else currentStats.breakMinutes,
             lastUpdated = System.currentTimeMillis(),
         )
 

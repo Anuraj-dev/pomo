@@ -49,7 +49,7 @@ jobs:
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build APKs
-        run: gradle assembleDevDebug assembleProdRelease
+        run: ./gradlew assembleDevDebug assembleProdRelease
 
       - name: Collect artifacts
         shell: bash

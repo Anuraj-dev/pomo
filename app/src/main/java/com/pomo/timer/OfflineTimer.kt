@@ -65,6 +65,9 @@ public class OfflineTimer(
             .takeIf { it > 0 }
             ?.toLong()
             ?: now - completionState.duration.toLong()
+        // Capture the effective date at the moment of completion, before any suspending
+        // DB writes that could resume after midnight and read the wrong calendar day.
+        val completionDate = historyRepository.dateStringForEpochSecond(now)
         val session = Session(
             type = completionState.phase,
             start = sessionStart,
@@ -83,8 +86,8 @@ public class OfflineTimer(
             state.status = TimerState.STATUS_STOPPED
 
             if (TimerState.PHASE_WORK == completionState.phase) {
-                state.completed = historyRepository.getTodayCompletedCount()
-                state.date = historyRepository.getEffectiveDateString()
+                state.completed = historyRepository.getCompletedCountForDate(completionDate)
+                state.date = completionDate
                 val longBreakAfter = prefs.longBreakAfter
 
                 if (state.completed > 0 && state.completed % longBreakAfter == 0) {

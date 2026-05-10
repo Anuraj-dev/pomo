@@ -2,7 +2,9 @@ package com.pomo.service
 
 import android.app.Service
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.content.Context
 import android.content.Intent
 import android.media.Ringtone
@@ -44,6 +46,18 @@ public class PomodoroService : Service(), TimerObserver {
 
     private val serviceScope = MainScope()
     private val commandMutex = Mutex()
+
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) {
+            serviceScope.launch { restartPhoneServerIfNeeded() }
+        }
+        override fun onLost(network: Network) {
+            serviceScope.launch { restartPhoneServerIfNeeded() }
+        }
+        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
+            serviceScope.launch { restartPhoneServerIfNeeded() }
+        }
+    }
 
     public val pairingToken: String
         get() = prefs.pairingToken
@@ -119,6 +133,12 @@ public class PomodoroService : Service(), TimerObserver {
 
         restartPhoneServerIfNeeded()
 
+        val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val networkRequest = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+            .build()
+        connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
+
         if (shouldCompleteRestoredTimer) {
             offlineTimer.completeExpiredTimer()
         }
@@ -168,6 +188,12 @@ public class PomodoroService : Service(), TimerObserver {
 
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            connectivityManager.unregisterNetworkCallback(networkCallback)
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to unregister network callback", e)
+        }
         serviceScope.cancel()
         phoneServer.stop()
     }
