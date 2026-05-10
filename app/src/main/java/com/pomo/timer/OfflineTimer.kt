@@ -65,9 +65,11 @@ public class OfflineTimer(
             .takeIf { it > 0 }
             ?.toLong()
             ?: now - completionState.duration.toLong()
-        // Capture the effective date at the moment of completion, before any suspending
-        // DB writes that could resume after midnight and read the wrong calendar day.
-        val completionDate = historyRepository.dateStringForEpochSecond(now)
+        // Derive the completion date from the session's actual end time (start + duration)
+        // so that process-death restores and midnight-crossing coroutines both use the
+        // correct calendar day rather than the time the app reopened.
+        val sessionEnd = sessionStart + completionState.duration.toLong()
+        val completionDate = historyRepository.dateStringForEpochSecond(sessionEnd)
         val session = Session(
             type = completionState.phase,
             start = sessionStart,

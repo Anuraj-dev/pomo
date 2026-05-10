@@ -395,7 +395,14 @@ public class PomodoroService : Service(), TimerObserver {
 
     public fun rotatePairingToken(): String {
         val token = prefs.rotatePairingToken()
-        restartPhoneServerIfNeeded()
+        // Force a full stop+start so existing WebSocket clients are disconnected and
+        // must re-pair with the new token. restartPhoneServerIfNeeded() skips the
+        // restart when the port is unchanged and the server is already running.
+        phoneServer.stop()
+        if (isPhoneServerServing) {
+            phoneServer = PhoneServer(this, activePhoneServerPort)
+            phoneServer.start()
+        }
         broadcastStateUpdate()
         return token
     }

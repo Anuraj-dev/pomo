@@ -31,7 +31,11 @@ public class HistoryCacheRepository(context: Context) {
         val sessionsByDate = if (days.isEmpty()) {
             emptyMap()
         } else {
-            dao.getSessionsForDates(days.map { it.date }).groupBy { it.date }
+            // Chunk dates to avoid SQLite's 999 parameter limit on older Android builds
+            days.map { it.date }
+                .chunked(500)
+                .flatMap { chunk -> dao.getSessionsForDates(chunk) }
+                .groupBy { it.date }
         }
 
         days.associate { day ->
