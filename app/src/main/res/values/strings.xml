@@ -28,9 +28,18 @@
     
     <string name="phone_api_port_title">Phone API port</string>
     <string name="phone_api_port_summary">Port used by desktop clients on this phone</string>
+    <string name="phone_api_enabled_title">Phone API</string>
+    <string name="phone_api_enabled_summary">Allow paired desktop clients to connect to this phone</string>
+    <string name="phone_api_wifi_only_title">Wi-Fi only</string>
+    <string name="phone_api_wifi_only_summary">Serve the phone API only on Wi-Fi or Ethernet</string>
     <string name="pair_desktop_title">Pair desktop client</string>
     <string name="pair_desktop_summary">Show URL, token, and QR for desktop setup</string>
     <string name="pair_desktop_unavailable">Start the timer service, then reopen this screen.</string>
+    <string name="rotate_pairing_token_title">Rotate pairing token</string>
+    <string name="rotate_pairing_token_summary">Invalidate existing desktop pairings</string>
+    <string name="rotate_pairing_token_confirm">Existing desktop clients will stop working until paired again.</string>
+    <string name="rotate_pairing_token_action">Rotate</string>
+    <string name="rotate_pairing_token_done">Pairing token rotated</string>
     <string name="pairing_url_label">Phone URL</string>
     <string name="pairing_token_label">Pairing token</string>
     <string name="pairing_payload_label">Pairing payload</string>

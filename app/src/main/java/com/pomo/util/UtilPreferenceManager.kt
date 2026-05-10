@@ -39,12 +39,22 @@ public class UtilPreferenceManager(context: Context) {
             val existing = prefs.getString("pairing_token", null)
             if (!existing.isNullOrBlank()) return existing
 
-            val bytes = ByteArray(24)
-            SecureRandom().nextBytes(bytes)
-            val token = bytes.joinToString("") { "%02x".format(it) }
+            val token = generateToken()
             prefs.edit().putString("pairing_token", token).apply()
             return token
         }
+
+    public fun rotatePairingToken(): String {
+        val token = generateToken()
+        prefs.edit().putString("pairing_token", token).apply()
+        return token
+    }
+
+    public val isPhoneServerEnabled: Boolean
+        get() = prefs.getBoolean("phone_server_enabled", true)
+
+    public val isPhoneServerWifiOnly: Boolean
+        get() = prefs.getBoolean("phone_server_wifi_only", true)
 
     public val isVibrateEnabled: Boolean
         get() = prefs.getBoolean("vibrate_enabled", true)
@@ -107,6 +117,12 @@ public class UtilPreferenceManager(context: Context) {
         }
 
     public companion object {
+        private fun generateToken(): String {
+            val bytes = ByteArray(24)
+            SecureRandom().nextBytes(bytes)
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
+
         public fun sanitizeIntPreference(key: String, value: Int?, default: Int): Int {
             val parsed = value ?: return default
             return when (key) {

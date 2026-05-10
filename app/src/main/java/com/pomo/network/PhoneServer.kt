@@ -35,7 +35,10 @@ public class PhoneServer(
     private val gson = Gson()
     private val sessions = mutableSetOf<DefaultWebSocketServerSession>()
     private val sessionsMutex = Mutex()
+    private val unauthorizedAttempts = mutableListOf<Long>()
     private var engine: ApplicationEngine? = null
+    public val isRunning: Boolean
+        get() = engine != null
 
     public fun start() {
         if (engine != null) return
@@ -44,39 +47,39 @@ public class PhoneServer(
             install(WebSockets)
             routing {
                 get("/api/status") {
-                    if (!call.isAuthorized()) return@get call.unauthorized()
+                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
                     call.respondJson(service.stateSnapshot())
                 }
 
                 post("/api/toggle") {
-                    if (!call.isAuthorized()) return@post call.unauthorized()
+                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
                     call.respondJson(success(service.toggleTimerBlocking()))
                 }
 
                 post("/api/skip") {
-                    if (!call.isAuthorized()) return@post call.unauthorized()
+                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
                     call.respondJson(success(service.skipTimerBlocking()))
                 }
 
                 post("/api/reset") {
-                    if (!call.isAuthorized()) return@post call.unauthorized()
+                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
                     call.respondJson(success(service.resetTimerBlocking()))
                 }
 
                 post("/api/extend") {
-                    if (!call.isAuthorized()) return@post call.unauthorized()
+                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
                     val minutes = parseMinutes(call.receiveText())
                         ?: return@post call.respondBadRequest("invalid minutes")
                     call.respondJson(success(service.extendTimerBlocking(minutes)))
                 }
 
                 get("/api/config") {
-                    if (!call.isAuthorized()) return@get call.unauthorized()
+                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
                     call.respondJson(service.getConfigPayload())
                 }
 
                 post("/api/config") {
-                    if (!call.isAuthorized()) return@post call.unauthorized()
+                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
                     val state = try {
                         service.applyConfigPayload(call.receiveText())
                     } catch (_: Exception) {
@@ -86,7 +89,7 @@ public class PhoneServer(
                 }
 
                 get("/api/history") {
-                    if (!call.isAuthorized()) return@get call.unauthorized()
+                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
                     call.respondJson(service.getHistoryPayload())
                 }
 
@@ -170,6 +173,25 @@ public class PhoneServer(
         return request.headers["X-Pomo-Token"] == service.pairingToken
     }
 
+    private suspend fun io.ktor.server.application.ApplicationCall.rejectUnauthorized() {
+        if (isRateLimited()) {
+            return respondText(
+                gson.toJson(mapOf("success" to false, "error" to "too many unauthorized requests")),
+                ContentType.Application.Json,
+                HttpStatusCode.TooManyRequests,
+            )
+        }
+        unauthorized()
+    }
+
+    private fun isRateLimited(): Boolean {
+        val now = System.currentTimeMillis()
+        val windowStart = now - UNAUTHORIZED_WINDOW_MS
+        unauthorizedAttempts.removeAll { it < windowStart }
+        unauthorizedAttempts.add(now)
+        return unauthorizedAttempts.size > MAX_UNAUTHORIZED_ATTEMPTS
+    }
+
     private suspend fun io.ktor.server.application.ApplicationCall.unauthorized() {
         respondText(
             gson.toJson(mapOf("success" to false, "error" to "unauthorized")),
@@ -194,6 +216,8 @@ public class PhoneServer(
 
     public companion object {
         public const val DEFAULT_PORT: Int = 9876
+        private const val MAX_UNAUTHORIZED_ATTEMPTS: Int = 20
+        private const val UNAUTHORIZED_WINDOW_MS: Long = 60_000
         private const val TAG: String = "PhoneServer"
     }
 }

@@ -49,6 +49,9 @@ public class PomodoroService : Service(), TimerObserver {
     public val pairingUrl: String
         get() = "http://${getLocalIpAddress()}:${prefs.phoneServerPort}"
 
+    private val isPhoneServerServing: Boolean
+        get() = prefs.isPhoneServerEnabled && (!prefs.isPhoneServerWifiOnly || hasActiveLanNetwork())
+
     public val pairingPayload: String
         get() = gson.toJson(mapOf("url" to pairingUrl, "token" to pairingToken))
 
@@ -109,10 +112,10 @@ public class PomodoroService : Service(), TimerObserver {
 
         startForeground(
             NotificationHelper.NOTIFICATION_ID,
-            notificationHelper.buildNotification(currentState, true),
+            notificationHelper.buildNotification(currentState, isPhoneServerServing),
         )
 
-        phoneServer.start()
+        restartPhoneServerIfNeeded()
 
         if (shouldCompleteRestoredTimer) {
             offlineTimer.completeExpiredTimer()
@@ -259,7 +262,7 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private fun updateNotification() {
-        notificationHelper.updateNotification(currentState, true)
+        notificationHelper.updateNotification(currentState, isPhoneServerServing)
     }
 
     public fun toggleTimer() {
@@ -344,19 +347,32 @@ public class PomodoroService : Service(), TimerObserver {
 
     public fun syncConfig() {
         updateDailyGoal()
-        restartPhoneServerIfPortChanged()
+        restartPhoneServerIfNeeded()
         broadcastStateUpdate()
     }
 
-    private fun restartPhoneServerIfPortChanged() {
+    private fun restartPhoneServerIfNeeded() {
         val newPort = prefs.phoneServerPort
-        if (newPort == activePhoneServerPort) return
+        val shouldServe = isPhoneServerServing
+        if (!shouldServe) {
+            phoneServer.stop()
+            return
+        }
+
+        if (newPort == activePhoneServerPort && phoneServer.isRunning) return
 
         Log.d(TAG, "Restarting phone API on port $newPort")
         phoneServer.stop()
         activePhoneServerPort = newPort
         phoneServer = PhoneServer(this, activePhoneServerPort)
         phoneServer.start()
+    }
+
+    public fun rotatePairingToken(): String {
+        val token = prefs.rotatePairingToken()
+        restartPhoneServerIfNeeded()
+        broadcastStateUpdate()
+        return token
     }
 
     public suspend fun stateSnapshot(): TimerState = withContext(Dispatchers.Main) {
@@ -449,6 +465,18 @@ public class PomodoroService : Service(), TimerObserver {
                 ?.hostAddress
         } catch (e: Exception) {
             null
+        }
+    }
+
+    private fun hasActiveLanNetwork(): Boolean {
+        return try {
+            val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+            val network = connectivityManager.activeNetwork ?: return false
+            val capabilities = connectivityManager.getNetworkCapabilities(network) ?: return false
+            capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                capabilities.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+        } catch (e: Exception) {
+            false
         }
     }
 

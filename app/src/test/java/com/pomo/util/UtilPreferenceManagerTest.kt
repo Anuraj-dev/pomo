@@ -43,6 +43,8 @@ public class UtilPreferenceManagerTest {
         assertEquals(8, prefs.dailyGoal)
         assertEquals(3, prefs.dayStartHour)
         assertEquals(9876, prefs.phoneServerPort)
+        assertTrue(prefs.isPhoneServerEnabled)
+        assertTrue(prefs.isPhoneServerWifiOnly)
         assertTrue(prefs.isVibrateEnabled)
         assertTrue(prefs.isSoundEnabled)
     }
@@ -82,6 +84,15 @@ public class UtilPreferenceManagerTest {
         val newPrefs = UtilPreferenceManager(ctx)
         val b = newPrefs.pairingToken
         assertNotEquals(a, b)
+    }
+
+    @Test
+    public fun rotatePairingToken_replacesExistingToken() {
+        val first = prefs.pairingToken
+        val rotated = prefs.rotatePairingToken()
+
+        assertNotEquals(first, rotated)
+        assertEquals(rotated, prefs.pairingToken)
     }
 
     @Test
