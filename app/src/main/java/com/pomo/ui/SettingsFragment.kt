@@ -78,6 +78,18 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
 
     private fun buildItems(): List<SettingsItem> = listOf(
         SettingsItem.Section(getString(R.string.category_connection)),
+        SettingsItem.BoolPref(
+            key = "phone_server_enabled",
+            title = getString(R.string.phone_api_enabled_title),
+            summary = getString(R.string.phone_api_enabled_summary),
+            default = true,
+        ),
+        SettingsItem.BoolPref(
+            key = "phone_server_wifi_only",
+            title = getString(R.string.phone_api_wifi_only_title),
+            summary = getString(R.string.phone_api_wifi_only_summary),
+            default = true,
+        ),
         SettingsItem.IntPref(
             key = "phone_server_port",
             title = getString(R.string.phone_api_port_title),
@@ -88,6 +100,11 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             title = getString(R.string.pair_desktop_title),
             summary = getString(R.string.pair_desktop_summary),
             onClick = ::onPairingClick,
+        ),
+        SettingsItem.Action(
+            title = getString(R.string.rotate_pairing_token_title),
+            summary = getString(R.string.rotate_pairing_token_summary),
+            onClick = ::onRotatePairingTokenClick,
         ),
         SettingsItem.Action(
             title = getString(R.string.scan_pairing_qr_title),
@@ -121,12 +138,6 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             title = getString(R.string.daily_goal_title),
             summary = getString(R.string.daily_goal_summary),
             default = 8,
-        ),
-        SettingsItem.IntPref(
-            key = "day_start_hour",
-            title = getString(R.string.day_start_hour_title),
-            summary = getString(R.string.day_start_hour_summary),
-            default = 3,
         ),
 
         SettingsItem.Section(getString(R.string.category_notifications)),
@@ -169,12 +180,12 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         val activity = activity as? MainActivity ?: return
         when (key) {
-            "daily_goal", "day_start_hour" -> {
+            "daily_goal" -> {
                 activity.service?.updateDailyGoal()
                 activity.service?.syncConfig()
             }
             "pomodoro_duration", "short_break_duration", "long_break_duration",
-            "long_break_after", "phone_server_port" -> {
+            "long_break_after", "phone_server_port", "phone_server_enabled", "phone_server_wifi_only" -> {
                 activity.service?.syncConfig()
             }
         }
@@ -220,6 +231,23 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             .setPositiveButton(R.string.pairing_copy) { _, _ -> copyPairingPayload(payload) }
             .setNegativeButton(R.string.pairing_share) { _, _ -> sharePairingPayload(payload) }
             .setNeutralButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun onRotatePairingTokenClick() {
+        AlertDialog.Builder(requireContext())
+            .setTitle(R.string.rotate_pairing_token_title)
+            .setMessage(R.string.rotate_pairing_token_confirm)
+            .setPositiveButton(R.string.rotate_pairing_token_action) { _, _ ->
+                val service = (activity as? MainActivity)?.service
+                if (service == null) {
+                    showMessage(R.string.pair_desktop_unavailable)
+                } else {
+                    service.rotatePairingToken()
+                    showMessage(R.string.rotate_pairing_token_done)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
             .show()
     }
 

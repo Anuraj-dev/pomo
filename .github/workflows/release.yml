@@ -49,15 +49,15 @@ jobs:
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Build APKs
-        run: gradle assembleDebug assembleRelease
+        run: ./gradlew assembleDevDebug assembleProdRelease
 
       - name: Collect artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/debug/app-debug.apk release-artifacts/pomo-remote-debug.apk
-          cp app/build/outputs/apk/release/app-release-unsigned.apk release-artifacts/pomo-remote-release-unsigned.apk
+          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk release-artifacts/pomo-remote-dev-debug.apk
+          cp app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk release-artifacts/pomo-remote-prod-release-unsigned.apk
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v4

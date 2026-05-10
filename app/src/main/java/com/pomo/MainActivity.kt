@@ -9,12 +9,15 @@ import android.os.IBinder
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.pomo.service.PomodoroService
+import com.pomo.service.PomodoroServiceStarter
 import com.pomo.ui.TimerFragment
 import com.pomo.util.UtilPreferenceManager
+import kotlinx.coroutines.launch
 
 public class MainActivity : AppCompatActivity() {
     public var service: PomodoroService? = null
@@ -67,7 +70,10 @@ public class MainActivity : AppCompatActivity() {
         val currentFragment = navHostFragment?.childFragmentManager?.primaryNavigationFragment
 
         if (currentFragment is TimerFragment) {
-            service?.currentState?.let { currentFragment.updateUI(it) }
+            val service = service ?: return
+            lifecycleScope.launch {
+                currentFragment.updateUI(service.stateSnapshot())
+            }
         }
     }
 
@@ -107,12 +113,9 @@ public class MainActivity : AppCompatActivity() {
 
     private fun startService() {
         val intent = Intent(this, PomodoroService::class.java)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
+        if (PomodoroServiceStarter.start(this, intent)) {
+            bindService(intent, connection, Context.BIND_AUTO_CREATE)
         }
-        bindService(intent, connection, Context.BIND_AUTO_CREATE)
     }
 
     override fun onResume() {

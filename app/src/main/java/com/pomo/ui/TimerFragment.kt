@@ -18,6 +18,10 @@ import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.util.DateLogic
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -64,7 +68,9 @@ public class TimerFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        mainActivity?.service?.currentState?.let { updateUI(it) }
+        viewLifecycleOwner.lifecycleScope.launch {
+            mainActivity?.service?.stateSnapshot()?.let { updateUI(it) }
+        }
         observeStats()
     }
 
@@ -76,7 +82,7 @@ public class TimerFragment : Fragment() {
         val ctx = context ?: return
         val repo = HistoryCacheRepository(ctx)
         viewLifecycleOwner.lifecycleScope.launch {
-            repo.observeDayStats().collectLatest { entities ->
+            repo.observeDayStats().combine(currentDateFlow()) { entities, today ->
                 val map = entities.associate { e ->
                     e.date to DayEntry(
                         completed = e.completed,
@@ -84,17 +90,29 @@ public class TimerFragment : Fragment() {
                         break_minutes = e.breakMinutes,
                     )
                 }
-                val dayStartHour = mainActivity?.prefs?.dayStartHour ?: 3
-                val today = DateLogic.effectiveDate(System.currentTimeMillis(), dayStartHour)
+                val activeDates = map.entries
+                    .filter { it.value.completed > 0 }
+                    .map { it.key }
+                    .toSet()
                 val todayEntry = map[today]
-                val activeDates = map.entries.filter { it.value.completed > 0 }.map { it.key }.toSet()
-                timerStats.value = TimerStats(
+                TimerStats(
                     todayMinutes = todayEntry?.work_minutes ?: 0,
                     todaySessions = todayEntry?.completed ?: 0,
-                    streak = DateLogic.currentStreak(activeDates, System.currentTimeMillis(), dayStartHour),
+                    streak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
                 )
+            }.collectLatest { stats ->
+                timerStats.value = stats
             }
         }
     }
 
+    private fun currentDateFlow() = flow {
+        while (true) {
+            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+            delay(DATE_REFRESH_INTERVAL_MS)
+        }
+    }.distinctUntilChanged()
+
 }
+
+private const val DATE_REFRESH_INTERVAL_MS: Long = 60_000L

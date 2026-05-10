@@ -15,24 +15,35 @@ the embedded desktop-client API. Do not reintroduce laptop/server authority.
 
 ## Build
 
-Requires JDK 17+.
+Requires JDK 17+ and Android SDK.
+
+**Environment Setup:**
+- Android SDK should be at `~/Android/Sdk` (standard location)
+- Set `ANDROID_HOME="$HOME/Android/Sdk"` in `~/.zshrc`
+- Build scripts prefer system SDK over local download
 
 ```bash
 ./build_apk.sh
 ```
 
-If local Gradle and Android SDK are configured:
+Fast local dev build and tests use the unminified `devDebug` variant:
 
 ```bash
-gradle assembleDebug
+./gradlew assembleDevDebug
+./run_tests.sh
 ```
 
-This repo currently has no `./gradlew`.
+Production release builds use the `prodRelease` variant with R8 minification and
+resource shrinking:
+
+```bash
+./gradlew assembleProdRelease
+```
 
 ## Useful ADB
 
 ```bash
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk
 adb shell am start -n com.pomo/.MainActivity
 adb logcat -s PomodoroService PhoneServer
 ```
@@ -60,5 +71,17 @@ PomodoroService -> OfflineTimer/Room -> UI, notification, widget, PhoneServer
 - Read relevant files before editing.
 - Do not restore old laptop sync paths.
 - Treat Room as canonical history.
+- History uses the phone's local calendar day. Sessions that cross midnight are
+  split across dates; seconds are rounded up to minutes per date segment.
 - Update `versionCode` and `versionName` for significant app changes.
 - Run the narrowest relevant build/check before finishing.
+
+## State Management Constraints
+
+- `PomodoroService.stateSnapshot()` must be read-only. It returns a copy of
+  current state without triggering any mutations, reconciliations, or side effects.
+- Day transitions are handled in `executeCommand()` before state-modifying
+  operations, not in read paths.
+- Never call `reconcileDayTransitionIfNeeded()` from read-only operations like
+  status queries, UI refreshes, or API polls—this would reset active timers
+  crossing midnight.

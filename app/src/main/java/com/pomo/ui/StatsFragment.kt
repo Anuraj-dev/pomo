@@ -19,7 +19,12 @@ import com.pomo.db.SessionEntity
 import com.pomo.ui.screens.StatsScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.util.DateLogic
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import java.io.File
 
@@ -34,6 +39,7 @@ public class StatsFragment : Fragment() {
     private val mainActivity: MainActivity?
         get() = activity as? MainActivity
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -50,25 +56,26 @@ public class StatsFragment : Fragment() {
                 )
             }
         }
-        val today = DateLogic.effectiveDate(System.currentTimeMillis(), mainActivity?.prefs?.dayStartHour ?: 3)
-        val sessionsFlow: Flow<List<SessionEntity>> = repo.observeSessionsForDate(today)
+        val todayFlow = currentDateFlow()
+        val sessionsFlow: Flow<List<SessionEntity>> = todayFlow.flatMapLatest { date ->
+            repo.observeSessionsForDate(date)
+        }
 
         return ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 PomoTheme {
                     val history by historyFlow.collectAsState(initial = emptyMap())
+                    val today by todayFlow.collectAsState(initial = DateLogic.effectiveDate(System.currentTimeMillis()))
                     val sessions by sessionsFlow.collectAsState(initial = emptyList())
                     val act = mainActivity
-                    val goal = act?.service?.currentState?.goal?.takeIf { it > 0 }
-                        ?: act?.prefs?.dailyGoal ?: 8
-                    val dayStart = act?.prefs?.dayStartHour ?: 3
+                    val goal = act?.prefs?.dailyGoal ?: 8
                     val sessionMins = act?.prefs?.pomodoroDuration ?: 25
                     StatsScreen(
                         history = history,
+                        today = today,
                         todaySessions = sessions,
                         dailyGoal = goal,
-                        dayStartHour = dayStart,
                         sessionMinutes = sessionMins,
                         onExport = { exportStats(history) },
                     )
@@ -76,6 +83,13 @@ public class StatsFragment : Fragment() {
             }
         }
     }
+
+    private fun currentDateFlow(): Flow<String> = flow {
+        while (true) {
+            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+            delay(DATE_REFRESH_INTERVAL_MS)
+        }
+    }.distinctUntilChanged()
 
     private fun exportStats(history: Map<String, DayEntry>) {
         val ctx = context ?: return
@@ -104,3 +118,5 @@ public class StatsFragment : Fragment() {
     }
 
 }
+
+private const val DATE_REFRESH_INTERVAL_MS: Long = 60_000L

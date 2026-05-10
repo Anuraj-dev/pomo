@@ -10,6 +10,7 @@ import android.widget.RemoteViews
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.service.PomodoroService
+import com.pomo.service.PomodoroServiceStarter
 import com.pomo.timer.TimerState
 import java.util.Locale
 
@@ -28,11 +29,7 @@ public class TimerWidgetProvider : AppWidgetProvider() {
             val serviceIntent = Intent(context, PomodoroService::class.java).apply {
                 action = "TOGGLE"
             }
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
+            PomodoroServiceStarter.start(context, serviceIntent)
         }
     }
 

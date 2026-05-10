@@ -12,15 +12,8 @@ public object DateLogic {
 
     private const val DATE_PATTERN: String = "yyyy-MM-dd"
 
-    /**
-     * Logical date taking dayStartHour into account: anything before dayStartHour
-     * still belongs to the previous day.
-     */
-    public fun effectiveDate(nowMs: Long, dayStartHour: Int, tz: TimeZone = TimeZone.getDefault()): String {
+    public fun effectiveDate(nowMs: Long, tz: TimeZone = TimeZone.getDefault()): String {
         val cal = Calendar.getInstance(tz).apply { timeInMillis = nowMs }
-        if (cal.get(Calendar.HOUR_OF_DAY) < dayStartHour) {
-            cal.add(Calendar.DAY_OF_YEAR, -1)
-        }
         val df = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { timeZone = tz }
         return df.format(cal.time)
     }
@@ -32,14 +25,10 @@ public object DateLogic {
     public fun currentStreak(
         activeDates: Set<String>,
         nowMs: Long,
-        dayStartHour: Int,
         tz: TimeZone = TimeZone.getDefault(),
     ): Int {
         if (activeDates.isEmpty()) return 0
         val cal = Calendar.getInstance(tz).apply { timeInMillis = nowMs }
-        if (cal.get(Calendar.HOUR_OF_DAY) < dayStartHour) {
-            cal.add(Calendar.DAY_OF_YEAR, -1)
-        }
         val df = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { timeZone = tz }
         val todayKey = df.format(cal.time)
         val todayActive = activeDates.contains(todayKey)

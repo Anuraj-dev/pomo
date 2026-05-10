@@ -25,6 +25,7 @@ public class UtilPreferenceManagerTest {
     public fun setUp() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         prefs = UtilPreferenceManager(ctx)
     }
 
@@ -32,6 +33,7 @@ public class UtilPreferenceManagerTest {
     public fun tearDown() {
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
     }
 
     @Test
@@ -41,8 +43,9 @@ public class UtilPreferenceManagerTest {
         assertEquals(15, prefs.longBreakDuration)
         assertEquals(4, prefs.longBreakAfter)
         assertEquals(8, prefs.dailyGoal)
-        assertEquals(3, prefs.dayStartHour)
         assertEquals(9876, prefs.phoneServerPort)
+        assertTrue(prefs.isPhoneServerEnabled)
+        assertTrue(prefs.isPhoneServerWifiOnly)
         assertTrue(prefs.isVibrateEnabled)
         assertTrue(prefs.isSoundEnabled)
     }
@@ -54,14 +57,12 @@ public class UtilPreferenceManagerTest {
         prefs.longBreakDuration = 20
         prefs.longBreakAfter = 5
         prefs.dailyGoal = 12
-        prefs.dayStartHour = 5
 
         assertEquals(30, prefs.pomodoroDuration)
         assertEquals(7, prefs.shortBreakDuration)
         assertEquals(20, prefs.longBreakDuration)
         assertEquals(5, prefs.longBreakAfter)
         assertEquals(12, prefs.dailyGoal)
-        assertEquals(5, prefs.dayStartHour)
     }
 
     @Test
@@ -79,9 +80,37 @@ public class UtilPreferenceManagerTest {
         // Clear and create again — fresh token expected
         val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
         PreferenceManager.getDefaultSharedPreferences(ctx).edit().clear().apply()
+        ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
         val newPrefs = UtilPreferenceManager(ctx)
         val b = newPrefs.pairingToken
         assertNotEquals(a, b)
+    }
+
+    @Test
+    public fun rotatePairingToken_replacesExistingToken() {
+        val first = prefs.pairingToken
+        val rotated = prefs.rotatePairingToken()
+
+        assertNotEquals(first, rotated)
+        assertEquals(rotated, prefs.pairingToken)
+    }
+
+    @Test
+    public fun pairingToken_migratesLegacyDefaultPrefAndRemovesIt() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit()
+            .putString("pairing_token", "legacy-token")
+            .apply()
+
+        val token = prefs.pairingToken
+
+        assertEquals("legacy-token", token)
+        assertNull(PreferenceManager.getDefaultSharedPreferences(ctx).getString("pairing_token", null))
+        assertEquals(
+            "legacy-token",
+            ctx.getSharedPreferences("pairing_prefs", android.content.Context.MODE_PRIVATE)
+                .getString("pairing_token", null),
+        )
     }
 
     @Test
@@ -112,6 +141,39 @@ public class UtilPreferenceManagerTest {
             .putString("daily_goal", "xyz")
             .apply()
         assertEquals(25, prefs.pomodoroDuration)
+        assertEquals(8, prefs.dailyGoal)
+    }
+
+    @Test
+    public fun intProps_rejectInvalidBounds() {
+        val ctx = ApplicationProvider.getApplicationContext<android.content.Context>()
+        PreferenceManager.getDefaultSharedPreferences(ctx).edit()
+            .putString("pomodoro_duration", "0")
+            .putString("short_break_duration", "0")
+            .putString("long_break_duration", "-1")
+            .putString("long_break_after", "0")
+            .putString("daily_goal", "-1")
+            .apply()
+
+        assertEquals(25, prefs.pomodoroDuration)
+        assertEquals(5, prefs.shortBreakDuration)
+        assertEquals(15, prefs.longBreakDuration)
+        assertEquals(4, prefs.longBreakAfter)
+        assertEquals(8, prefs.dailyGoal)
+    }
+
+    @Test
+    public fun intProps_settersSanitizeInvalidBounds() {
+        prefs.pomodoroDuration = 0
+        prefs.shortBreakDuration = 0
+        prefs.longBreakDuration = -1
+        prefs.longBreakAfter = 0
+        prefs.dailyGoal = -1
+
+        assertEquals(25, prefs.pomodoroDuration)
+        assertEquals(5, prefs.shortBreakDuration)
+        assertEquals(15, prefs.longBreakDuration)
+        assertEquals(4, prefs.longBreakAfter)
         assertEquals(8, prefs.dailyGoal)
     }
 

@@ -150,15 +150,15 @@ Returns timer configuration:
     "long_break": 15
   },
   "long_break_after": 4,
-  "daily_goal": 8,
-  "day_start_hour": 3
+  "daily_goal": 8
 }
 ```
 
 ### POST /api/config
 
-Replaces timer configuration on the phone. If the timer is not running, the
-current phase duration is recalculated from the new config.
+Updates timer configuration on the phone. Payloads may be partial; omitted or
+invalid values keep the existing phone setting. If the timer is not running, the
+current phase duration is recalculated from the merged config.
 
 ```bash
 curl -X POST \
@@ -167,15 +167,24 @@ curl -X POST \
   -d '{
     "durations": { "work": 25, "short_break": 5, "long_break": 15 },
     "long_break_after": 4,
-    "daily_goal": 8,
-    "day_start_hour": 3
+    "daily_goal": 8
   }' \
   "$PHONE_URL/api/config"
 ```
 
+Accepted fields:
+
+```text
+durations.work       positive integer minutes
+durations.short_break positive integer minutes
+durations.long_break positive integer minutes
+long_break_after     positive integer
+daily_goal           non-negative integer
+```
+
 ### GET /api/history
 
-Returns Room-backed canonical history keyed by logical date:
+Returns Room-backed canonical history keyed by the phone's local calendar date:
 
 ```json
 {
@@ -195,7 +204,10 @@ Returns Room-backed canonical history keyed by logical date:
 }
 ```
 
-The logical date respects the phone's `day_start_hour`.
+Sessions that cross midnight are split into per-date segments. Work and break
+seconds are rounded up to minutes for each date segment. A completed work
+session increments the completed-session count only on the final segment, so a
+single session never double-counts against the daily goal.
 
 ## WebSocket
 

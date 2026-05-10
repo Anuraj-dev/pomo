@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import androidx.room.Upsert
+import com.pomo.timer.TimerState
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -36,11 +37,47 @@ public interface HistoryDao {
     @Query("SELECT * FROM sessions WHERE date = :date ORDER BY start ASC")
     public suspend fun getSessionsForDate(date: String): List<SessionEntity>
 
+    @Query("SELECT * FROM sessions WHERE date IN (:dates) ORDER BY date DESC, start ASC")
+    public suspend fun getSessionsForDates(dates: List<String>): List<SessionEntity>
+
     @Query("SELECT * FROM sessions WHERE date = :date ORDER BY start ASC")
     public fun getSessionsForDateFlow(date: String): Flow<List<SessionEntity>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertSession(session: SessionEntity)
+
+    @Transaction
+    public suspend fun insertSessionWithDayStats(
+        date: String,
+        session: SessionEntity,
+        countCompletedSession: Boolean = true,
+    ) {
+        val currentStats = getDayStats(date) ?: DayStatsEntity(
+            date = date,
+            completed = 0,
+            workMinutes = 0,
+            breakMinutes = 0,
+            lastUpdated = System.currentTimeMillis(),
+        )
+
+        val isWork = session.type == TimerState.PHASE_WORK
+        val isBreak = session.type == TimerState.PHASE_SHORT || session.type == TimerState.PHASE_LONG
+        val durationMinutes = (session.duration + 59) / 60
+
+        val newStats = currentStats.copy(
+            completed = if (isWork && session.completed && countCompletedSession) {
+                currentStats.completed + 1
+            } else {
+                currentStats.completed
+            },
+            workMinutes = if (isWork && session.completed) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
+            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + durationMinutes else currentStats.breakMinutes,
+            lastUpdated = System.currentTimeMillis(),
+        )
+
+        insertDayStats(newStats)
+        insertSession(session)
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertAllSessions(sessions: List<SessionEntity>)

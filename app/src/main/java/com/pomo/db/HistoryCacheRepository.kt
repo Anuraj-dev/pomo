@@ -5,6 +5,9 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
 
 public class HistoryCacheRepository(context: Context) {
 
@@ -16,20 +19,31 @@ public class HistoryCacheRepository(context: Context) {
 
     public fun observeDayStats(): Flow<List<DayStatsEntity>> = dao.getAllDayStats()
 
-    public fun observeTodayCompletedCount(dayStartHour: Int): Flow<Int> {
-        val date = getEffectiveDateString(dayStartHour)
+    public fun observeTodayCompletedCount(): Flow<Int> {
+        val date = getEffectiveDateString()
         return dao.getTodayCompletedCountFlow(date)
     }
 
     public suspend fun getCachedDayStats(): List<DayStatsEntity> = dao.getAllDayStatsSnapshot()
 
     public suspend fun getHistoryPayload(): Map<String, ServerDayEntry> = withContext(Dispatchers.IO) {
-        dao.getAllDayStatsSnapshot().associate { day ->
+        val days = dao.getAllDayStatsSnapshot()
+        val sessionsByDate = if (days.isEmpty()) {
+            emptyMap()
+        } else {
+            // Chunk dates to avoid SQLite's 999 parameter limit on older Android builds
+            days.map { it.date }
+                .chunked(500)
+                .flatMap { chunk -> dao.getSessionsForDates(chunk) }
+                .groupBy { it.date }
+        }
+
+        days.associate { day ->
             day.date to ServerDayEntry(
                 completed = day.completed,
                 work_minutes = day.workMinutes,
                 break_minutes = day.breakMinutes,
-                sessions = dao.getSessionsForDate(day.date).map {
+                sessions = sessionsByDate[day.date].orEmpty().map {
                     ServerSession(
                         type = it.type,
                         start = it.start,
@@ -47,33 +61,82 @@ public class HistoryCacheRepository(context: Context) {
     public fun observeSessionsForDate(date: String): Flow<List<SessionEntity>> =
         dao.getSessionsForDateFlow(date)
 
-    public suspend fun saveLocalSession(session: com.pomo.models.Session, dayStartHour: Int) {
-        val date = getEffectiveDateString(dayStartHour)
-        val entity = SessionEntity(
-            start = session.start,
-            date = date,
-            type = session.type,
-            duration = session.duration,
-            completed = session.completed,
-            synced = true,
-        )
-        // day_stats parent row must exist before sessions FK insert
-        updateLocalDayStats(date, entity)
-        dao.insertSession(entity)
+    public suspend fun saveLocalSession(session: com.pomo.models.Session) {
+        val segments = splitSessionByCalendarDay(session)
+        segments.forEachIndexed { index, segment ->
+            val entity = SessionEntity(
+                start = segment.start,
+                date = segment.date,
+                type = session.type,
+                duration = segment.duration,
+                completed = session.completed,
+                synced = true,
+            )
+            dao.insertSessionWithDayStats(
+                date = segment.date,
+                session = entity,
+                countCompletedSession = index == segments.lastIndex,
+            )
+        }
     }
 
-    public suspend fun getTodayCompletedCount(dayStartHour: Int): Int {
-        val date = getEffectiveDateString(dayStartHour)
+    public suspend fun getTodayCompletedCount(): Int {
+        val date = getEffectiveDateString()
         return dao.getTodayCompletedCount(date)
     }
 
-    public fun getEffectiveDateString(dayStartHour: Int): String {
+    public suspend fun getCompletedCountForDate(date: String): Int =
+        dao.getTodayCompletedCount(date)
+
+    public fun getEffectiveDateString(): String {
         val calendar = java.util.Calendar.getInstance()
-        if (calendar.get(java.util.Calendar.HOUR_OF_DAY) < dayStartHour) {
-            calendar.add(java.util.Calendar.DAY_OF_YEAR, -1)
-        }
         val dateFormat = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
         return dateFormat.format(calendar.time)
+    }
+
+    public fun dateStringForEpochSecond(epochSecond: Long): String = dateForEpochSecond(epochSecond)
+
+    private fun splitSessionByCalendarDay(session: com.pomo.models.Session): List<SessionSegment> {
+        if (session.duration <= 0) {
+            return listOf(SessionSegment(start = session.start, date = dateForEpochSecond(session.start), duration = 0))
+        }
+
+        val segments = mutableListOf<SessionSegment>()
+        var segmentStart = session.start
+        val endExclusive = session.start + session.duration
+        while (segmentStart < endExclusive) {
+            val nextMidnight = nextLocalMidnightEpochSecond(segmentStart)
+            val segmentEnd = minOf(endExclusive, nextMidnight)
+            val seconds = (segmentEnd - segmentStart).coerceAtLeast(0)
+            segments += SessionSegment(
+                start = segmentStart,
+                date = dateForEpochSecond(segmentStart),
+                duration = ceilSecondsToMinutes(seconds) * 60,
+            )
+            segmentStart = segmentEnd
+        }
+        return segments
+    }
+
+    private fun dateForEpochSecond(epochSecond: Long): String {
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        return dateFormat.format(java.util.Date(epochSecond * 1000L))
+    }
+
+    private fun nextLocalMidnightEpochSecond(epochSecond: Long): Long {
+        val calendar = Calendar.getInstance().apply {
+            timeInMillis = epochSecond * 1000L
+            add(Calendar.DAY_OF_YEAR, 1)
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return calendar.timeInMillis / 1000L
+    }
+
+    private fun ceilSecondsToMinutes(seconds: Long): Int {
+        return ((seconds + 59L) / 60L).toInt()
     }
 
     public suspend fun clearCache() {
@@ -94,25 +157,10 @@ public class HistoryCacheRepository(context: Context) {
         val completed: Boolean = false,
     )
 
-    private suspend fun updateLocalDayStats(date: String, session: SessionEntity) {
-        val currentStats = dao.getDayStats(date) ?: DayStatsEntity(
-            date = date,
-            completed = 0,
-            workMinutes = 0,
-            breakMinutes = 0,
-            lastUpdated = System.currentTimeMillis(),
-        )
+    private data class SessionSegment(
+        val start: Long,
+        val date: String,
+        val duration: Int,
+    )
 
-        val isWork = session.type == "work"
-        val isBreak = session.type == "short" || session.type == "long"
-
-        val newStats = currentStats.copy(
-            completed = if (isWork && session.completed) currentStats.completed + 1 else currentStats.completed,
-            workMinutes = if (isWork && session.completed) currentStats.workMinutes + (session.duration / 60) else currentStats.workMinutes,
-            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + (session.duration / 60) else currentStats.breakMinutes,
-            lastUpdated = System.currentTimeMillis(),
-        )
-
-        dao.insertDayStats(newStats)
-    }
 }

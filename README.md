@@ -13,6 +13,7 @@ of truth. Existing laptop history is not imported or merged.
 - Runs a Pomodoro timer locally in an Android foreground service.
 - Persists timer state across app restarts.
 - Stores completed sessions and daily stats in Room.
+- Splits sessions that cross midnight across local calendar days.
 - Updates the Timer, Stats, History, notification, and home-screen widget from
   phone-owned state.
 - Hosts a local HTTP/WebSocket API for desktop clients.
@@ -23,29 +24,42 @@ of truth. Existing laptop history is not imported or merged.
 
 Requires JDK 17+.
 
-The repository does not currently include a Gradle wrapper. Use the lightweight
-builder, which uses the local SDK/Gradle setup in this checkout:
+Use the Gradle wrapper when the Android SDK is already configured. The dev
+variant is unminified and is the fast local build:
+
+```bash
+./gradlew assembleDevDebug
+```
+
+Or use the lightweight builder, which bootstraps the local Android SDK in this
+checkout before calling the wrapper:
 
 ```bash
 ./build_apk.sh
 ```
 
-Or, if Gradle and the Android SDK are already on your path:
-
-```bash
-gradle assembleDebug
-```
-
 Debug APK:
 
 ```text
-app/build/outputs/apk/debug/app-debug.apk
+app/build/outputs/apk/dev/debug/app-dev-debug.apk
+```
+
+Production release APKs run R8 minification and resource shrinking:
+
+```bash
+./gradlew assembleProdRelease
+```
+
+Production APK:
+
+```text
+app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk
 ```
 
 ## Run On A Device
 
 ```bash
-adb install -r -g app/build/outputs/apk/debug/app-debug.apk
+adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk
 adb shell am start -n com.pomo/.MainActivity
 ```
 
@@ -168,7 +182,7 @@ For the thin TypeScript laptop client, see [docs/desktop-client.md](docs/desktop
 Build check:
 
 ```bash
-gradle assembleDebug
+./gradlew assembleDevDebug
 ```
 
 Manual checks worth doing on device:
@@ -177,6 +191,8 @@ Manual checks worth doing on device:
 - Start, pause, resume, skip, reset, and extend all mutate phone state.
 - Completed focus sessions appear in Today, Stats, History, notification, and
   widget.
+- A focus session that crosses midnight is split across the two local calendar
+  days, with seconds rounded up to minutes per day.
 - Restarting the app restores stopped/paused/running timer state sensibly.
 - `GET /api/status` rejects missing tokens and returns state with a valid token.
 - `/ws` accepts a valid hello token and streams state updates.
@@ -199,13 +215,14 @@ The bump type follows Conventional Commits:
 - `!` or `BREAKING CHANGE:` creates a major release.
 - Anything else defaults to a patch release, so every merged PR can still ship.
 
-When a `v*` tag is pushed, `.github/workflows/release.yml` builds debug and
-unsigned release APKs, uploads them as workflow artifacts, and publishes a
-GitHub Release with generated release notes.
+When a `v*` tag is pushed, `.github/workflows/release.yml` builds the dev debug
+and unsigned prod release APKs, uploads them as workflow artifacts, and
+publishes a GitHub Release with generated release notes.
 
 ## Notes
 
-- Cleartext local-network traffic is allowed by
+- The embedded phone API is local-network HTTP protected by the pairing token;
+  Android app-initiated cleartext traffic remains disabled in
   `network_security_config.xml`.
-- The pairing token is generated and stored in shared preferences.
+- The pairing token is stored in dedicated non-backed-up shared preferences.
 - Legacy laptop/server sync classes were removed from the Android app.

@@ -2,51 +2,48 @@
 set -e
 
 PROJECT_DIR="$(pwd)"
-SDK_DIR="$PROJECT_DIR/android-sdk"
-GRADLE_DIR="$PROJECT_DIR/gradle-dist"
 CMDLINE_TOOLS_URL="https://dl.google.com/android/repository/commandlinetools-linux-10406996_latest.zip"
-GRADLE_URL="https://services.gradle.org/distributions/gradle-9.2.1-bin.zip"
 
 GREEN='\033[0;32m'
 NC='\033[0m'
 
 echo -e "${GREEN}=== Pomo Lightweight Builder ===${NC}"
 
-export JAVA_HOME="/usr/lib/jvm/jdk-17.0.12-oracle-x64"
+source "$PROJECT_DIR/scripts/java_env.sh"
+require_java_17
 
-mkdir -p "$SDK_DIR/cmdline-tools"
-mkdir -p "$GRADLE_DIR"
-
-if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
-    echo "Downloading Android Command Line Tools..."
-    wget -q --show-progress -O tools.zip "$CMDLINE_TOOLS_URL"
-    unzip -q tools.zip -d "$SDK_DIR/cmdline-tools"
-    mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
-    rm -f tools.zip
+# Check if ANDROID_HOME is already set and valid
+if [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME/platforms" ]; then
+    echo "Using system Android SDK at: $ANDROID_HOME"
+    SDK_DIR="$ANDROID_HOME"
+else
+    echo "No system Android SDK found, using local SDK..."
+    SDK_DIR="$PROJECT_DIR/android-sdk"
+    
+    mkdir -p "$SDK_DIR/cmdline-tools"
+    
+    if [ ! -f "$SDK_DIR/cmdline-tools/latest/bin/sdkmanager" ]; then
+        echo "Downloading Android Command Line Tools..."
+        wget -q --show-progress -O tools.zip "$CMDLINE_TOOLS_URL"
+        unzip -q tools.zip -d "$SDK_DIR/cmdline-tools"
+        mv "$SDK_DIR/cmdline-tools/cmdline-tools" "$SDK_DIR/cmdline-tools/latest"
+        rm -f tools.zip
+    fi
+    
+    export ANDROID_HOME="$SDK_DIR"
+    export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH"
+    
+    if [ ! -d "$SDK_DIR/platforms/android-34" ]; then
+        echo "Installing SDK components..."
+        yes | sdkmanager --licenses > /dev/null 2>&1
+        sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+    fi
 fi
 
-export ANDROID_HOME="$SDK_DIR"
-export PATH="$SDK_DIR/cmdline-tools/latest/bin:$SDK_DIR/platform-tools:$PATH"
+echo -e "${GREEN}Building dev APK...${NC}"
+"$PROJECT_DIR/gradlew" assembleDevDebug
 
-if [ ! -d "$SDK_DIR/platforms/android-34" ]; then
-    echo "Installing SDK components..."
-    yes | sdkmanager --licenses > /dev/null 2>&1
-    sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
-fi
-
-if [ ! -f "$GRADLE_DIR/gradle-9.2.1/bin/gradle" ]; then
-    echo "Downloading Gradle..."
-    wget -q --show-progress -O gradle.zip "$GRADLE_URL"
-    unzip -q gradle.zip -d "$GRADLE_DIR"
-    rm -f gradle.zip
-fi
-
-export PATH="$GRADLE_DIR/gradle-9.2.1/bin:$PATH"
-
-echo -e "${GREEN}Building APK...${NC}"
-gradle assembleDebug
-
-APK_PATH="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+APK_PATH="$PROJECT_DIR/app/build/outputs/apk/dev/debug/app-dev-debug.apk"
 if [ -f "$APK_PATH" ]; then
     echo -e "${GREEN}Build Success!${NC}"
     echo "APK location: $APK_PATH"

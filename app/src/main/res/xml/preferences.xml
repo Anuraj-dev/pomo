@@ -2,6 +2,18 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory app:title="@string/category_connection">
+        <SwitchPreferenceCompat
+            app:key="phone_server_enabled"
+            app:title="@string/phone_api_enabled_title"
+            app:summary="@string/phone_api_enabled_summary"
+            app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="phone_server_wifi_only"
+            app:title="@string/phone_api_wifi_only_title"
+            app:summary="@string/phone_api_wifi_only_summary"
+            app:defaultValue="true" />
+
         <EditTextPreference
             app:key="phone_server_port"
             app:title="@string/phone_api_port_title"
@@ -13,6 +25,11 @@
             app:key="pairing_info"
             app:title="@string/pair_desktop_title"
             app:summary="@string/pair_desktop_summary" />
+
+        <Preference
+            app:key="rotate_pairing_token"
+            app:title="@string/rotate_pairing_token_title"
+            app:summary="@string/rotate_pairing_token_summary" />
 
         <Preference
             app:key="scan_pairing_qr"
@@ -49,13 +66,6 @@
             app:title="@string/daily_goal_title"
             app:summary="@string/daily_goal_summary"
             app:defaultValue="8"
-            android:inputType="number" />
-
-        <EditTextPreference
-            app:key="day_start_hour"
-            app:title="@string/day_start_hour_title"
-            app:summary="@string/day_start_hour_summary"
-            app:defaultValue="3"
             android:inputType="number" />
     </PreferenceCategory>
 
