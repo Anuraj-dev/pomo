@@ -131,15 +131,20 @@ public class PhoneServer(
     public suspend fun broadcastState() {
         val message = stateMessage()
         val deadSessions = mutableListOf<DefaultWebSocketServerSession>()
-        sessionsMutex.withLock {
-            sessions.forEach { session ->
-                try {
-                    session.send(Frame.Text(message))
-                } catch (e: Exception) {
-                    deadSessions.add(session)
-                }
+        val activeSessions = sessionsMutex.withLock { sessions.toList() }
+
+        activeSessions.forEach { session ->
+            try {
+                session.send(Frame.Text(message))
+            } catch (e: Exception) {
+                deadSessions.add(session)
             }
-            sessions.removeAll(deadSessions.toSet())
+        }
+
+        if (deadSessions.isNotEmpty()) {
+            sessionsMutex.withLock {
+                sessions.removeAll(deadSessions.toSet())
+            }
         }
     }
 
