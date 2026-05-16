@@ -19,6 +19,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -34,6 +39,11 @@ import com.pomo.R
 import com.pomo.ui.screens.SettingsItem
 import com.pomo.ui.screens.SettingsScreen
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.THEME_MODE_PREF_KEY
+import com.pomo.ui.theme.ThemeMode
+import com.pomo.ui.theme.displayName
+import com.pomo.ui.theme.preferenceValue
+import com.pomo.ui.theme.themeMode
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -69,7 +79,15 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         return ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                PomoTheme {
+                var themeMode by remember { mutableStateOf(prefs.themeMode()) }
+                DisposableEffect(prefs) {
+                    val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                        if (key == THEME_MODE_PREF_KEY) themeMode = sp.themeMode()
+                    }
+                    prefs.registerOnSharedPreferenceChangeListener(listener)
+                    onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+                }
+                PomoTheme(mode = themeMode) {
                     SettingsScreen(sharedPreferences = prefs, items = items)
                 }
             }
@@ -152,6 +170,19 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             title = getString(R.string.sound_title),
             summary = getString(R.string.sound_summary),
             default = true,
+        ),
+
+        SettingsItem.Section(getString(R.string.category_theme)),
+        SettingsItem.ChoicePref(
+            key = THEME_MODE_PREF_KEY,
+            title = getString(R.string.theme_mode_title),
+            summary = getString(R.string.theme_mode_summary),
+            default = ThemeMode.System.preferenceValue,
+            choices = listOf(
+                SettingsItem.Choice(ThemeMode.System.preferenceValue, ThemeMode.System.displayName),
+                SettingsItem.Choice(ThemeMode.Light.preferenceValue, ThemeMode.Light.displayName),
+                SettingsItem.Choice(ThemeMode.Dark.preferenceValue, ThemeMode.Dark.displayName),
+            ),
         ),
 
         SettingsItem.Section(getString(R.string.category_info)),

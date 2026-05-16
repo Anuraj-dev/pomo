@@ -22,6 +22,7 @@
     <string name="settings_title">Settings</string>
     <string name="category_connection">Connection</string>
     <string name="category_notifications">Notifications</string>
+    <string name="category_theme">Theme</string>
     <string name="category_info">Info</string>
     
     <string name="ip_address_summary">Desktop clients connect to the phone URL shown in pairing.</string>
@@ -72,6 +73,18 @@
 
     <!-- Goals -->
     <string name="category_goals">Goals</string>
+    <string name="theme_mode_title">Theme mode</string>
+    <string name="theme_mode_summary">Follow system, light, or dark</string>
+    <string-array name="theme_mode_entries">
+        <item>System</item>
+        <item>Light</item>
+        <item>Dark</item>
+    </string-array>
+    <string-array name="theme_mode_values">
+        <item>system</item>
+        <item>light</item>
+        <item>dark</item>
+    </string-array>
     <string name="daily_goal_title">Daily Goal</string>
     <string name="daily_goal_summary">Number of focus sessions per day</string>
     <string name="about_title">About</string>

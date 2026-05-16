@@ -51,12 +51,24 @@ public sealed interface SettingsItem {
         val summary: String,
         val default: Boolean,
     ) : SettingsItem
+    public data class ChoicePref(
+        val key: String,
+        val title: String,
+        val summary: String,
+        val default: String,
+        val choices: List<Choice>,
+    ) : SettingsItem
     public data class Action(
         val title: String,
         val summary: String,
         val onClick: () -> Unit,
         val iconRes: Int? = null,
     ) : SettingsItem
+
+    public data class Choice(
+        val value: String,
+        val label: String,
+    )
 }
 
 @Composable
@@ -85,6 +97,7 @@ public fun SettingsScreen(
                     is SettingsItem.Section -> SectionHeader(item.title)
                     is SettingsItem.IntPref -> IntPrefRow(sharedPreferences, item)
                     is SettingsItem.BoolPref -> BoolPrefRow(sharedPreferences, item)
+                    is SettingsItem.ChoicePref -> ChoicePrefRow(sharedPreferences, item)
                     is SettingsItem.Action -> ActionRow(item)
                 }
             }
@@ -148,6 +161,66 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
                     editing = false
                 }) { Text("OK") }
             },
+            dismissButton = {
+                TextButton(onClick = { editing = false }) { Text("Cancel") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePref) {
+    var current by remember(item.key) {
+        mutableStateOf(prefs.getString(item.key, item.default) ?: item.default)
+    }
+    DisposableEffect(item.key) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+            if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    var editing by remember { mutableStateOf(false) }
+    val currentLabel = item.choices.firstOrNull { it.value == current }?.label
+        ?: item.choices.firstOrNull { it.value == item.default }?.label
+        ?: current
+
+    PrefRow(
+        title = item.title,
+        summary = item.summary,
+        valueText = currentLabel,
+        onClick = { editing = true },
+        leadingIconRes = null,
+    )
+
+    if (editing) {
+        AlertDialog(
+            onDismissRequest = { editing = false },
+            title = { Text(item.title) },
+            text = {
+                Column {
+                    item.choices.forEach { choice ->
+                        Text(
+                            text = choice.label,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    current = choice.value
+                                    prefs.edit().putString(item.key, choice.value).apply()
+                                    editing = false
+                                }
+                                .padding(vertical = 12.dp),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = if (choice.value == current) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurface
+                            },
+                        )
+                    }
+                }
+            },
+            confirmButton = {},
             dismissButton = {
                 TextButton(onClick = { editing = false }) { Text("Cancel") }
             },

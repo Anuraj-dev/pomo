@@ -17,6 +17,7 @@ import com.pomo.timer.TimerState
 import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.ThemeMode
 import com.pomo.util.DateLogic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -47,7 +48,7 @@ public class TimerFragment : Fragment() {
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
-            PomoTheme {
+            PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                 val state by timerState.collectAsState()
                 val stats by timerStats.collectAsState()
                 val goal = mainActivity?.prefs?.dailyGoal ?: 8

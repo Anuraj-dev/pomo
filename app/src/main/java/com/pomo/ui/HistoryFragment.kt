@@ -8,11 +8,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.preference.PreferenceManager
 import androidx.fragment.app.Fragment
 import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.ui.screens.HistoryScreen
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.themeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
@@ -30,7 +32,7 @@ public class HistoryFragment : Fragment() {
         return ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                PomoTheme {
+                PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
                     val items by itemsFlow.collectAsState(initial = emptyList())
                     HistoryScreen(items)
                 }

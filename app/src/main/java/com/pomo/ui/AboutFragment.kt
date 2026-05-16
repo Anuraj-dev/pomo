@@ -7,9 +7,11 @@ import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import com.google.android.material.transition.MaterialSharedAxis
 import com.pomo.ui.screens.AboutScreen
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.themeMode
 
 public class AboutFragment : Fragment() {
 
@@ -26,7 +28,7 @@ public class AboutFragment : Fragment() {
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
-            PomoTheme {
+            PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
                 AboutScreen()
             }
         }

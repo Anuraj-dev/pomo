@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import androidx.preference.PreferenceManager
 import com.google.gson.Gson
 import com.pomo.timer.TimerState
+import com.pomo.ui.theme.ThemeMode
+import com.pomo.ui.theme.themeMode
 import java.security.SecureRandom
 
 public class UtilPreferenceManager(context: Context) {
@@ -71,6 +73,9 @@ public class UtilPreferenceManager(context: Context) {
 
     public val isSoundEnabled: Boolean
         get() = prefs.getBoolean("sound_enabled", true)
+
+    public val themeMode: ThemeMode
+        get() = prefs.themeMode()
 
     public var pomodoroDuration: Int
         get() {

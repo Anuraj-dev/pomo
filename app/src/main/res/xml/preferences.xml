@@ -83,6 +83,16 @@
             app:defaultValue="true" />
     </PreferenceCategory>
 
+    <PreferenceCategory app:title="@string/category_theme">
+        <ListPreference
+            app:key="theme_mode"
+            app:title="@string/theme_mode_title"
+            app:summary="@string/theme_mode_summary"
+            app:defaultValue="system"
+            app:entries="@array/theme_mode_entries"
+            app:entryValues="@array/theme_mode_values" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/category_info">
         <Preference
             app:key="about"
