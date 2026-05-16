@@ -10,7 +10,9 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialFadeThrough
+import com.pomo.R
 import com.pomo.MainActivity
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.timer.TimerState
@@ -62,6 +64,9 @@ public class TimerFragment : Fragment() {
                     onToggle = { mainActivity?.toggleTimer() },
                     onSkip = { mainActivity?.skipTimer() },
                     onReset = { mainActivity?.resetTimer() },
+                    onStatsClick = {
+                        runCatching { findNavController().navigate(R.id.navigation_stats) }
+                    },
                 )
             }
         }
