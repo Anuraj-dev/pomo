@@ -14,14 +14,20 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -32,9 +38,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.pomo.ui.components.SectionHeader
+import com.pomo.ui.theme.PomoRadius
 import com.pomo.util.UtilPreferenceManager
 
 public sealed interface SettingsItem {
@@ -71,49 +79,94 @@ public sealed interface SettingsItem {
     )
 }
 
+private data class SettingsGroup(
+    val title: String?,
+    val items: List<SettingsItem>,
+)
+
+private fun groupSettings(items: List<SettingsItem>): List<SettingsGroup> {
+    val out = mutableListOf<SettingsGroup>()
+    var currentTitle: String? = null
+    var current = mutableListOf<SettingsItem>()
+    items.forEach { item ->
+        if (item is SettingsItem.Section) {
+            if (current.isNotEmpty() || currentTitle != null) {
+                out += SettingsGroup(currentTitle, current.toList())
+            }
+            currentTitle = item.title
+            current = mutableListOf()
+        } else {
+            current += item
+        }
+    }
+    if (current.isNotEmpty() || currentTitle != null) {
+        out += SettingsGroup(currentTitle, current.toList())
+    }
+    return out
+}
+
 @Composable
 public fun SettingsScreen(
     sharedPreferences: SharedPreferences,
     items: List<SettingsItem>,
 ) {
+    val groups = remember(items) { groupSettings(items) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
-        Box(Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 12.dp)) {
+        Box(Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 8.dp)) {
             Text(
                 "Settings",
-                style = MaterialTheme.typography.headlineMedium,
+                style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
         }
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            items(items.size) { idx ->
-                when (val item = items[idx]) {
-                    is SettingsItem.Section -> SectionHeader(item.title)
-                    is SettingsItem.IntPref -> IntPrefRow(sharedPreferences, item)
-                    is SettingsItem.BoolPref -> BoolPrefRow(sharedPreferences, item)
-                    is SettingsItem.ChoicePref -> ChoicePrefRow(sharedPreferences, item)
-                    is SettingsItem.Action -> ActionRow(item)
-                }
+            items(groups, key = { it.title ?: "_" }) { group ->
+                SettingsGroupCard(group, sharedPreferences)
             }
+            item { Spacer(Modifier.height(32.dp)) }
         }
     }
 }
 
 @Composable
-private fun SectionHeader(title: String) {
-    Text(
-        title,
-        modifier = Modifier.padding(start = 8.dp, top = 16.dp, bottom = 4.dp),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.primary,
-        fontWeight = FontWeight.Bold,
-    )
+private fun SettingsGroupCard(group: SettingsGroup, prefs: SharedPreferences) {
+    Column {
+        if (group.title != null) {
+            SectionHeader(group.title, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(PomoRadius.Lg),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        ) {
+            Column {
+                group.items.forEachIndexed { i, item ->
+                    if (i > 0) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
+                            thickness = 1.dp,
+                            modifier = Modifier.padding(start = 16.dp),
+                        )
+                    }
+                    when (item) {
+                        is SettingsItem.Section -> Unit
+                        is SettingsItem.IntPref -> IntPrefRow(prefs, item)
+                        is SettingsItem.BoolPref -> BoolPrefRow(prefs, item)
+                        is SettingsItem.ChoicePref -> ChoicePrefRow(prefs, item)
+                        is SettingsItem.Action -> ActionRow(item)
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
@@ -240,37 +293,41 @@ private fun BoolPrefRow(prefs: SharedPreferences, item: SettingsItem.BoolPref) {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    item.title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    item.summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable {
+                val next = !checked
+                checked = next
+                prefs.edit().putBoolean(item.key, next).apply()
             }
-            Switch(
-                checked = checked,
-                onCheckedChange = {
-                    checked = it
-                    prefs.edit().putBoolean(item.key, it).apply()
-                },
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                item.title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                item.summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                prefs.edit().putBoolean(item.key, it).apply()
+            },
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                checkedTrackColor = MaterialTheme.colorScheme.primary,
+            ),
+        )
     }
 }
 
@@ -293,48 +350,52 @@ private fun PrefRow(
     onClick: () -> Unit,
     leadingIconRes: Int?,
 ) {
-    Card(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (leadingIconRes != null) {
-                androidx.compose.material3.Icon(
-                    painter = androidx.compose.ui.res.painterResource(leadingIconRes),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(end = 12.dp),
-                )
-            }
-            Column(Modifier.weight(1f)) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-                Text(
-                    summary,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            if (valueText != null) {
-                Spacer(Modifier.height(0.dp))
-                Text(
-                    valueText,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Bold,
-                )
-            }
+        if (leadingIconRes != null) {
+            Icon(
+                painter = painterResource(leadingIconRes),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(end = 12.dp),
+            )
+        }
+        Column(Modifier.weight(1f)) {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                summary,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (valueText != null) {
+            Text(
+                valueText,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Spacer(Modifier.padding(end = 2.dp))
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            Icon(
+                Icons.Outlined.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
