@@ -34,6 +34,7 @@ import com.google.gson.Gson
 import com.google.gson.JsonObject
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
+import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.ui.screens.SettingsItem
@@ -94,86 +95,86 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    private fun buildItems(): List<SettingsItem> = listOf(
-        SettingsItem.Section(getString(R.string.category_connection)),
-        SettingsItem.BoolPref(
+    private fun buildItems(): List<SettingsItem> = buildList {
+        add(SettingsItem.Section(getString(R.string.category_connection)))
+        add(SettingsItem.BoolPref(
             key = "phone_server_enabled",
             title = getString(R.string.phone_api_enabled_title),
             summary = getString(R.string.phone_api_enabled_summary),
             default = true,
-        ),
-        SettingsItem.BoolPref(
+        ))
+        add(SettingsItem.BoolPref(
             key = "phone_server_wifi_only",
             title = getString(R.string.phone_api_wifi_only_title),
             summary = getString(R.string.phone_api_wifi_only_summary),
             default = true,
-        ),
-        SettingsItem.IntPref(
+        ))
+        add(SettingsItem.IntPref(
             key = "phone_server_port",
             title = getString(R.string.phone_api_port_title),
             summary = getString(R.string.phone_api_port_summary),
             default = 9876,
-        ),
-        SettingsItem.Action(
+        ))
+        add(SettingsItem.Action(
             title = getString(R.string.pair_desktop_title),
             summary = getString(R.string.pair_desktop_summary),
             onClick = ::onPairingClick,
-        ),
-        SettingsItem.Action(
+        ))
+        add(SettingsItem.Action(
             title = getString(R.string.rotate_pairing_token_title),
             summary = getString(R.string.rotate_pairing_token_summary),
             onClick = ::onRotatePairingTokenClick,
-        ),
-        SettingsItem.Action(
+        ))
+        add(SettingsItem.Action(
             title = getString(R.string.scan_pairing_qr_title),
             summary = getString(R.string.scan_pairing_qr_summary),
             onClick = ::launchQrScanner,
-        ),
+        ))
 
-        SettingsItem.Section(getString(R.string.category_timer)),
-        SettingsItem.IntPref(
+        add(SettingsItem.Section(getString(R.string.category_timer)))
+        add(SettingsItem.IntPref(
             key = "pomodoro_duration",
             title = getString(R.string.pomodoro_duration_title),
             summary = getString(R.string.pomodoro_duration_summary),
             default = 25,
-        ),
-        SettingsItem.IntPref(
+        ))
+        add(SettingsItem.IntPref(
             key = "short_break_duration",
             title = getString(R.string.short_break_title),
             summary = getString(R.string.short_break_summary),
             default = 5,
-        ),
-        SettingsItem.IntPref(
+        ))
+        add(SettingsItem.IntPref(
             key = "long_break_duration",
             title = getString(R.string.long_break_title),
             summary = getString(R.string.long_break_summary),
             default = 15,
-        ),
+        ))
 
-        SettingsItem.Section(getString(R.string.category_goals)),
-        SettingsItem.IntPref(
+        add(SettingsItem.Section(getString(R.string.category_goals)))
+        add(SettingsItem.IntPref(
             key = "daily_goal",
             title = getString(R.string.daily_goal_title),
             summary = getString(R.string.daily_goal_summary),
             default = 8,
-        ),
+        ))
 
-        SettingsItem.Section(getString(R.string.category_notifications)),
-        SettingsItem.BoolPref(
+        add(SettingsItem.Section(getString(R.string.category_notifications)))
+        add(SettingsItem.BoolPref(
             key = "vibrate_enabled",
             title = getString(R.string.vibrate_title),
             summary = getString(R.string.vibrate_summary),
             default = true,
-        ),
-        SettingsItem.BoolPref(
+        ))
+        add(SettingsItem.BoolPref(
             key = "sound_enabled",
             title = getString(R.string.sound_title),
             summary = getString(R.string.sound_summary),
             default = true,
-        ),
+        ))
 
-        SettingsItem.Section(getString(R.string.category_theme)),
-        SettingsItem.ChoicePref(
+        add(SettingsItem.Section(getString(R.string.category_theme)))
+        add(SettingsItem.ChoicePref(
             key = THEME_MODE_PREF_KEY,
             title = getString(R.string.theme_mode_title),
             summary = getString(R.string.theme_mode_summary),
@@ -183,18 +184,27 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 SettingsItem.Choice(ThemeMode.Light.preferenceValue, ThemeMode.Light.displayName),
                 SettingsItem.Choice(ThemeMode.Dark.preferenceValue, ThemeMode.Dark.displayName),
             ),
-        ),
+        ))
 
-        SettingsItem.Section(getString(R.string.category_info)),
-        SettingsItem.Action(
+        add(SettingsItem.Section(getString(R.string.category_info)))
+        if (BuildConfig.DEBUG) {
+            add(SettingsItem.Action(
+                title = getString(R.string.component_gallery_title),
+                summary = getString(R.string.component_gallery_summary),
+                onClick = {
+                    runCatching { findNavController().navigate(R.id.navigation_component_gallery) }
+                },
+            ))
+        }
+        add(SettingsItem.Action(
             title = getString(R.string.about_title),
             summary = getString(R.string.about_summary),
             iconRes = R.drawable.ic_info,
             onClick = {
                 runCatching { findNavController().navigate(R.id.navigation_about) }
             },
-        ),
-    )
+        ))
+    }
 
     override fun onResume() {
         super.onResume()

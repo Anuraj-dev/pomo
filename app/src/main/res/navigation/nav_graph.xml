@@ -29,4 +29,9 @@
         android:name="com.pomo.ui.AboutFragment"
         android:label="About" />
 
+    <fragment
+        android:id="@+id/navigation_component_gallery"
+        android:name="com.pomo.ui.ComponentGalleryFragment"
+        android:label="Component gallery" />
+
 </navigation>

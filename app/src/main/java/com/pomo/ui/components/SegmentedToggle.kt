@@ -1,0 +1,58 @@
+package com.pomo.ui.components
+
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.tooling.preview.Preview
+import com.pomo.ui.theme.PomoTheme
+
+public data class SegmentedToggleOption(
+    val value: String,
+    val label: String,
+)
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+public fun SegmentedToggle(
+    options: List<SegmentedToggleOption>,
+    selectedValue: String,
+    onSelectedValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    SingleChoiceSegmentedButtonRow(modifier = modifier) {
+        options.forEachIndexed { index, option ->
+            SegmentedButton(
+                selected = option.value == selectedValue,
+                onClick = { onSelectedValueChange(option.value) },
+                shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                colors = SegmentedButtonDefaults.colors(
+                    activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                    activeContentColor = MaterialTheme.colorScheme.primary,
+                ),
+            ) {
+                Text(option.label)
+            }
+        }
+    }
+}
+
+@Preview(showBackground = true)
+@Composable
+private fun SegmentedTogglePreview() {
+    PomoTheme {
+        SegmentedToggle(
+            options = listOf(
+                SegmentedToggleOption("today", "Today"),
+                SegmentedToggleOption("week", "Week"),
+                SegmentedToggleOption("month", "Month"),
+            ),
+            selectedValue = "today",
+            onSelectedValueChange = {},
+        )
+    }
+}
