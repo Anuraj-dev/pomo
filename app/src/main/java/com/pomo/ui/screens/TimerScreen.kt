@@ -1,6 +1,5 @@
 package com.pomo.ui.screens
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -56,11 +55,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.pomo.timer.TimerState
-import com.pomo.ui.components.PhaseChip
 import com.pomo.ui.components.StatTile
 import com.pomo.ui.theme.Gold
 import com.pomo.ui.theme.PomoMotion
-import com.pomo.ui.theme.StatusConnected
 import com.pomo.ui.theme.TimerTextStyle
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -108,16 +105,10 @@ public fun TimerScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         TimerHeader()
-        Spacer(Modifier.height(14.dp))
-        PhaseQueue(
-            completedSessions = state?.completed ?: 0,
-            dailyGoal = dailyGoal,
-            phaseColor = phaseColor,
-        )
-        Spacer(Modifier.height(18.dp))
+        Spacer(Modifier.weight(0.5f))
 
         Box(
-            modifier = Modifier.size(360.dp),
+            modifier = Modifier.size(340.dp),
             contentAlignment = Alignment.Center,
         ) {
             TimerRings(
@@ -127,15 +118,17 @@ public fun TimerScreen(
                 dailyGoal = dailyGoal,
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TimerText(state, phaseColor, fallbackWorkSeconds)
+                TimerText(state, fallbackWorkSeconds)
                 Spacer(Modifier.height(10.dp))
-                AnimatedContent(targetState = phaseLabel, label = "phase-label") { label ->
-                    PhaseChip(label = label, color = phaseColor)
-                }
+                Text(
+                    text = phaseLabel.uppercase(Locale.US),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = phaseColor,
+                )
             }
         }
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(28.dp))
         StatsStrip(stats, sessionsOverride = state?.completed, onClick = onStatsClick)
         Spacer(Modifier.weight(1f))
         ControlsRow(
@@ -156,83 +149,36 @@ private fun TimerHeader() {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
-            text = "Pomo",
-            modifier = Modifier.weight(1f),
-            style = MaterialTheme.typography.displayLarge,
-            color = MaterialTheme.colorScheme.onSurface,
+            text = "POMO",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                modifier = Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(StatusConnected),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = "Phone primary",
-                color = StatusConnected,
-                style = MaterialTheme.typography.labelMedium,
-            )
-        }
     }
 }
 
 @Composable
-private fun PhaseQueue(
-    completedSessions: Int,
-    dailyGoal: Int,
-    phaseColor: Color,
-) {
-    val count = dailyGoal.coerceIn(1, 12)
-    Row(
-        modifier = Modifier.height(24.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        repeat(count) { index ->
-            val isDone = index < completedSessions
-            val isCurrent = index == completedSessions.coerceAtMost(count - 1)
-            val dotSize = if (isCurrent) 10.dp else 8.dp
-            Box(
-                modifier = Modifier
-                    .size(dotSize)
-                    .clip(CircleShape)
-                    .background(
-                        when {
-                            isDone -> Gold
-                            isCurrent -> phaseColor
-                            else -> MaterialTheme.colorScheme.surfaceVariant
-                        },
-                    ),
-            )
-        }
-    }
-}
-
-@Composable
-private fun TimerText(state: TimerState?, color: Color, fallbackWorkSeconds: Int) {
+private fun TimerText(state: TimerState?, fallbackWorkSeconds: Int) {
     val now = remember { mutableStateOf(System.currentTimeMillis()) }
     val syncTime = remember(state) { System.currentTimeMillis() }
 
     LaunchedEffect(state) {
         while (state?.status == TimerState.STATUS_RUNNING) {
             now.value = System.currentTimeMillis()
-            delay(250)
+            delay(500)
         }
         now.value = System.currentTimeMillis()
     }
 
-    val text = if (state == null) {
-        formatClock(fallbackWorkSeconds.toDouble(), includeCentiseconds = false)
+    val seconds = if (state == null) {
+        fallbackWorkSeconds.toDouble()
     } else {
-        formatClock(computeRemaining(state, syncTime, now.value), includeCentiseconds = true)
+        computeRemaining(state, syncTime, now.value)
     }
 
     Text(
-        text = text,
+        text = formatClock(seconds),
         modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        color = color,
+        color = MaterialTheme.colorScheme.onSurface,
         style = TimerTextStyle,
         textAlign = TextAlign.Center,
     )
@@ -245,7 +191,8 @@ private fun TimerRings(
     completedSessions: Int,
     dailyGoal: Int,
 ) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    val innerTrack = MaterialTheme.colorScheme.surfaceVariant
+    val goalTrack = MaterialTheme.colorScheme.outline
     val now = remember { mutableStateOf(System.currentTimeMillis()) }
     val syncTime = remember(state) { System.currentTimeMillis() }
     LaunchedEffect(state) {
@@ -276,30 +223,35 @@ private fun TimerRings(
     Canvas(modifier = Modifier.fillMaxSize()) {
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(phaseColor.copy(alpha = 0.18f), Color.Transparent),
+                colors = listOf(
+                    phaseColor.copy(alpha = 0.32f),
+                    phaseColor.copy(alpha = 0.10f),
+                    Color.Transparent,
+                ),
                 center = center,
-                radius = size.minDimension * 0.45f,
+                radius = size.minDimension * 0.58f,
             ),
-            radius = size.minDimension * 0.45f,
+            radius = size.minDimension * 0.58f,
             center = center,
         )
 
-        val outerStroke = 14.dp.toPx()
+        val outerStroke = 12.dp.toPx()
         val innerStroke = 14.dp.toPx()
-        val outerInset = outerStroke / 2f + 8.dp.toPx()
-        val innerInset = outerInset + 32.dp.toPx()
+        val outerInset = outerStroke / 2f + 6.dp.toPx()
+        val innerInset = outerInset + 42.dp.toPx()
 
         drawSegmentedGoalRing(
-            track = track,
+            track = goalTrack,
             fill = Gold,
             progress = animatedGoal,
             segments = dailyGoal.coerceIn(1, 12),
             inset = outerInset,
             strokeWidth = outerStroke,
+            gapDegrees = 6f,
         )
 
         drawArc(
-            color = track,
+            color = innerTrack,
             startAngle = -90f,
             sweepAngle = 360f,
             useCenter = false,
@@ -328,8 +280,8 @@ private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSegmentedGoalRi
     segments: Int,
     inset: Float,
     strokeWidth: Float,
+    gapDegrees: Float = 4f,
 ) {
-    val gapDegrees = 4f
     val sweep = (360f / segments) - gapDegrees
     val filledSegments = progress * segments
     repeat(segments) { index ->
@@ -379,9 +331,15 @@ private fun StatsStrip(
     ) {
         StatTile(focusText, "Today", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
         StatDivider()
-        StatTile("$sessions", "Sessions", Modifier.weight(1f), accentColor = MaterialTheme.colorScheme.secondary, horizontalAlignment = Alignment.CenterHorizontally)
+        StatTile("$sessions", "Sessions", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
         StatDivider()
-        StatTile("${stats.streak}", "Streak", Modifier.weight(1f), accentColor = Gold, horizontalAlignment = Alignment.CenterHorizontally)
+        StatTile(
+            "${stats.streak}",
+            "Streak",
+            Modifier.weight(1f),
+            accentColor = if (stats.streak > 0) Gold else MaterialTheme.colorScheme.onSurface,
+            horizontalAlignment = Alignment.CenterHorizontally,
+        )
     }
 }
 
@@ -424,7 +382,7 @@ private fun ControlsRow(
             },
             modifier = Modifier.size(56.dp),
         ) {
-            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = phaseColor)
+            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Spacer(Modifier.width(26.dp))
         FloatingActionButton(
@@ -475,21 +433,17 @@ private fun ControlsRow(
                         )
                     }
                 }
-                Icon(Icons.Default.Refresh, contentDescription = "Hold to reset", tint = phaseColor)
+                Icon(Icons.Default.Refresh, contentDescription = "Hold to reset", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
 }
 
-private fun formatClock(seconds: Double, includeCentiseconds: Boolean): String {
-    val totalSeconds = seconds.toInt().coerceAtLeast(0)
+private fun formatClock(seconds: Double): String {
+    val totalSeconds = kotlin.math.ceil(seconds).toInt().coerceAtLeast(0)
     val mins = totalSeconds / 60
     val secs = totalSeconds % 60
-    if (!includeCentiseconds) {
-        return String.format(Locale.US, "%02d:%02d", mins, secs)
-    }
-    val cs = ((seconds - totalSeconds) * 100).toInt().coerceIn(0, 99)
-    return String.format(Locale.US, "%02d:%02d.%02d", mins, secs, cs)
+    return String.format(Locale.US, "%02d:%02d", mins, secs)
 }
 
 private fun computeRemaining(state: TimerState?, syncTime: Long, nowMs: Long): Double {

@@ -16,7 +16,7 @@ public fun StatTile(
     label: String,
     modifier: Modifier = Modifier,
     delta: String? = null,
-    accentColor: Color = MaterialTheme.colorScheme.primary,
+    accentColor: Color = MaterialTheme.colorScheme.onSurface,
     horizontalAlignment: Alignment.Horizontal = Alignment.Start,
 ) {
     Column(modifier = modifier, horizontalAlignment = horizontalAlignment) {
