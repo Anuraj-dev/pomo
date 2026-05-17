@@ -64,7 +64,7 @@ public class StatsFragment : Fragment() {
         return ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
-                PomoTheme {
+                PomoTheme(mode = mainActivity?.prefs?.themeMode ?: com.pomo.ui.theme.ThemeMode.System) {
                     val history by historyFlow.collectAsState(initial = emptyMap())
                     val today by todayFlow.collectAsState(initial = DateLogic.effectiveDate(System.currentTimeMillis()))
                     val sessions by sessionsFlow.collectAsState(initial = emptyList())

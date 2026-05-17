@@ -10,13 +10,16 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialFadeThrough
+import com.pomo.R
 import com.pomo.MainActivity
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.timer.TimerState
 import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.ThemeMode
 import com.pomo.util.DateLogic
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
@@ -47,7 +50,7 @@ public class TimerFragment : Fragment() {
     ): View = ComposeView(requireContext()).apply {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
-            PomoTheme {
+            PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                 val state by timerState.collectAsState()
                 val stats by timerStats.collectAsState()
                 val goal = mainActivity?.prefs?.dailyGoal ?: 8
@@ -61,6 +64,9 @@ public class TimerFragment : Fragment() {
                     onToggle = { mainActivity?.toggleTimer() },
                     onSkip = { mainActivity?.skipTimer() },
                     onReset = { mainActivity?.resetTimer() },
+                    onStatsClick = {
+                        runCatching { findNavController().navigate(R.id.navigation_stats) }
+                    },
                 )
             }
         }

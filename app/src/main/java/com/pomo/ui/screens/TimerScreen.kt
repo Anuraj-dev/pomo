@@ -1,8 +1,15 @@
 package com.pomo.ui.screens
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,18 +22,15 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -39,16 +43,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pomo.timer.TimerState
+import com.pomo.ui.components.StatTile
 import com.pomo.ui.theme.Gold
-import com.pomo.ui.theme.StatusConnected
+import com.pomo.ui.theme.PomoMotion
+import com.pomo.ui.theme.TimerTextStyle
 import kotlinx.coroutines.delay
 import java.util.Locale
 
@@ -67,32 +77,37 @@ public fun TimerScreen(
     onToggle: () -> Unit,
     onSkip: () -> Unit,
     onReset: () -> Unit,
+    onStatsClick: () -> Unit,
 ) {
-    val phaseColor = when (state?.phase) {
+    val rawPhaseColor = when (state?.phase) {
         TimerState.PHASE_WORK -> MaterialTheme.colorScheme.primary
         TimerState.PHASE_SHORT, TimerState.PHASE_LONG -> MaterialTheme.colorScheme.secondary
         else -> MaterialTheme.colorScheme.primary
     }
+    val phaseColor by animateColorAsState(
+        targetValue = rawPhaseColor,
+        animationSpec = tween(PomoMotion.DurationL, easing = PomoMotion.EaseStandard),
+        label = "phase-color",
+    )
     val phaseLabel = when (state?.phase) {
-        TimerState.PHASE_WORK -> "FOCUS"
-        TimerState.PHASE_SHORT -> "SHORT BREAK"
-        TimerState.PHASE_LONG -> "LONG BREAK"
-        else -> "FOCUS"
+        TimerState.PHASE_WORK -> "Focus"
+        TimerState.PHASE_SHORT -> "Short break"
+        TimerState.PHASE_LONG -> "Long break"
+        else -> "Focus"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(24.dp),
+            .padding(horizontal = 24.dp, vertical = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ConnectionStatusPill()
-        Spacer(Modifier.height(8.dp))
+        TimerHeader()
+        Spacer(Modifier.weight(0.5f))
 
         Box(
-            modifier = Modifier
-                .size(320.dp),
+            modifier = Modifier.size(340.dp),
             contentAlignment = Alignment.Center,
         ) {
             TimerRings(
@@ -102,21 +117,19 @@ public fun TimerScreen(
                 dailyGoal = dailyGoal,
             )
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TimerText(state, phaseColor, fallbackWorkSeconds)
-                Spacer(Modifier.height(8.dp))
+                TimerText(state, fallbackWorkSeconds)
+                Spacer(Modifier.height(10.dp))
                 Text(
-                    phaseLabel,
+                    text = phaseLabel.uppercase(Locale.US),
+                    style = MaterialTheme.typography.labelSmall,
                     color = phaseColor,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    letterSpacing = 1.6.sp,
                 )
             }
         }
 
-        Spacer(Modifier.height(24.dp))
-        StatsCard(stats, sessionsOverride = state?.completed)
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(28.dp))
+        StatsStrip(stats, sessionsOverride = state?.completed, onClick = onStatsClick)
+        Spacer(Modifier.weight(1f))
         ControlsRow(
             isRunning = state?.status == TimerState.STATUS_RUNNING,
             isPaused = state?.status == TimerState.STATUS_PAUSED,
@@ -129,65 +142,43 @@ public fun TimerScreen(
 }
 
 @Composable
-private fun ConnectionStatusPill() {
+private fun TimerHeader() {
     Row(
-        verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(StatusConnected),
-        )
-        Spacer(Modifier.width(8.dp))
         Text(
-            "Phone primary",
-            color = StatusConnected,
-            style = MaterialTheme.typography.bodyMedium,
+            text = "POMO",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
 
 @Composable
-private fun TimerText(state: TimerState?, color: Color, fallbackWorkSeconds: Int) {
+private fun TimerText(state: TimerState?, fallbackWorkSeconds: Int) {
     val now = remember { mutableStateOf(System.currentTimeMillis()) }
     val syncTime = remember(state) { System.currentTimeMillis() }
 
     LaunchedEffect(state) {
         while (state?.status == TimerState.STATUS_RUNNING) {
             now.value = System.currentTimeMillis()
-            delay(16)
+            delay(500)
         }
         now.value = System.currentTimeMillis()
     }
 
-    if (state == null) {
-        val mins = fallbackWorkSeconds / 60
-        val secs = fallbackWorkSeconds % 60
-        Text(
-            String.format(Locale.US, "%02d:%02d", mins, secs),
-            color = color,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 56.sp,
-        )
-        return
+    val seconds = if (state == null) {
+        fallbackWorkSeconds.toDouble()
+    } else {
+        computeRemaining(state, syncTime, now.value)
     }
 
-    val remaining = computeRemaining(state, syncTime, now.value)
-    val totalSeconds = remaining.toInt()
-    val mins = totalSeconds / 60
-    val secs = totalSeconds % 60
-    val cs = ((remaining - totalSeconds) * 100).toInt().coerceIn(0, 99)
-    val text = String.format(Locale.US, "%02d:%02d.%02d", mins, secs, cs)
     Text(
-        text,
-        color = color,
-        fontFamily = FontFamily.Monospace,
-        fontWeight = FontWeight.Bold,
-        fontSize = 56.sp,
+        text = formatClock(seconds),
+        color = MaterialTheme.colorScheme.onSurface,
+        style = TimerTextStyle,
+        textAlign = TextAlign.Center,
     )
 }
 
@@ -198,13 +189,14 @@ private fun TimerRings(
     completedSessions: Int,
     dailyGoal: Int,
 ) {
-    val track = MaterialTheme.colorScheme.surfaceVariant
+    val innerTrack = MaterialTheme.colorScheme.surfaceVariant
+    val goalTrack = MaterialTheme.colorScheme.outline
     val now = remember { mutableStateOf(System.currentTimeMillis()) }
     val syncTime = remember(state) { System.currentTimeMillis() }
     LaunchedEffect(state) {
         while (state?.status == TimerState.STATUS_RUNNING) {
             now.value = System.currentTimeMillis()
-            delay(16)
+            delay(250)
         }
         now.value = System.currentTimeMillis()
     }
@@ -212,52 +204,52 @@ private fun TimerRings(
     val timerProgress = computeProgress(state, syncTime, now.value)
     val animatedTimer by animateFloatAsState(
         targetValue = timerProgress,
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = tween(PomoMotion.DurationM, easing = PomoMotion.EaseStandard),
         label = "timer-progress",
     )
-
     val goalProgress = if (dailyGoal > 0) {
         (completedSessions.toFloat() / dailyGoal).coerceIn(0f, 1f)
-    } else 0f
+    } else {
+        0f
+    }
     val animatedGoal by animateFloatAsState(
         targetValue = goalProgress,
-        animationSpec = tween(durationMillis = 400),
+        animationSpec = tween(PomoMotion.DurationL, easing = PomoMotion.EaseOutExpo),
         label = "goal-progress",
     )
 
-    androidx.compose.foundation.Canvas(modifier = Modifier.fillMaxSize()) {
-        val sizeMin = minOf(size.width, size.height)
-        val outerStroke = 6.dp.toPx()
-        val innerStroke = 12.dp.toPx()
-        val outerInset = outerStroke / 2f
-        val innerInset = (sizeMin - 260.dp.toPx()) / 2f + innerStroke / 2f
-
-        // Outer (goal) ring track
-        drawArc(
-            color = track,
-            startAngle = -90f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = Offset(outerInset, outerInset),
-            size = Size(size.width - outerInset * 2, size.height - outerInset * 2),
-            style = Stroke(width = outerStroke, cap = StrokeCap.Round),
+    Canvas(modifier = Modifier.fillMaxSize()) {
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    phaseColor.copy(alpha = 0.32f),
+                    phaseColor.copy(alpha = 0.10f),
+                    Color.Transparent,
+                ),
+                center = center,
+                radius = size.minDimension * 0.58f,
+            ),
+            radius = size.minDimension * 0.58f,
+            center = center,
         )
-        // Outer (goal) ring arc
-        if (animatedGoal > 0f) {
-            drawArc(
-                color = Gold,
-                startAngle = -90f,
-                sweepAngle = 360f * animatedGoal,
-                useCenter = false,
-                topLeft = Offset(outerInset, outerInset),
-                size = Size(size.width - outerInset * 2, size.height - outerInset * 2),
-                style = Stroke(width = outerStroke, cap = StrokeCap.Round),
-            )
-        }
 
-        // Inner (timer) ring track
+        val outerStroke = 12.dp.toPx()
+        val innerStroke = 14.dp.toPx()
+        val outerInset = outerStroke / 2f + 6.dp.toPx()
+        val innerInset = outerInset + 42.dp.toPx()
+
+        drawSegmentedGoalRing(
+            track = goalTrack,
+            fill = Gold,
+            progress = animatedGoal,
+            segments = dailyGoal.coerceIn(1, 12),
+            inset = outerInset,
+            strokeWidth = outerStroke,
+            gapDegrees = 6f,
+        )
+
         drawArc(
-            color = track,
+            color = innerTrack,
             startAngle = -90f,
             sweepAngle = 360f,
             useCenter = false,
@@ -265,7 +257,6 @@ private fun TimerRings(
             size = Size(size.width - innerInset * 2, size.height - innerInset * 2),
             style = Stroke(width = innerStroke, cap = StrokeCap.Round),
         )
-        // Inner (timer) ring arc
         if (animatedTimer > 0f) {
             drawArc(
                 color = phaseColor,
@@ -280,57 +271,72 @@ private fun TimerRings(
     }
 }
 
-@Composable
-private fun StatsCard(stats: TimerStats, sessionsOverride: Int?) {
-    val hours = stats.todayMinutes / 60
-    val mins = stats.todayMinutes % 60
-    val focusText = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
-    val sessions = sessionsOverride ?: stats.todaySessions
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            StatCell(focusText, "Today", MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-            StatDivider()
-            StatCell(
-                "$sessions",
-                "Sessions",
-                MaterialTheme.colorScheme.secondary,
-                Modifier.weight(1f),
+private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSegmentedGoalRing(
+    track: Color,
+    fill: Color,
+    progress: Float,
+    segments: Int,
+    inset: Float,
+    strokeWidth: Float,
+    gapDegrees: Float = 4f,
+) {
+    val sweep = (360f / segments) - gapDegrees
+    val filledSegments = progress * segments
+    repeat(segments) { index ->
+        val start = -90f + index * (360f / segments) + gapDegrees / 2f
+        drawArc(
+            color = track,
+            startAngle = start,
+            sweepAngle = sweep,
+            useCenter = false,
+            topLeft = Offset(inset, inset),
+            size = Size(size.width - inset * 2, size.height - inset * 2),
+            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+        )
+        val fillAmount = (filledSegments - index).coerceIn(0f, 1f)
+        if (fillAmount > 0f) {
+            drawArc(
+                color = fill,
+                startAngle = start,
+                sweepAngle = sweep * fillAmount,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = Size(size.width - inset * 2, size.height - inset * 2),
+                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
             )
-            StatDivider()
-            StatCell("${stats.streak}🔥", "Streak", Gold, Modifier.weight(1f))
         }
     }
 }
 
 @Composable
-private fun StatCell(value: String, label: String, color: Color, modifier: Modifier = Modifier) {
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun StatsStrip(
+    stats: TimerStats,
+    sessionsOverride: Int?,
+    onClick: () -> Unit,
+) {
+    val hours = stats.todayMinutes / 60
+    val mins = stats.todayMinutes % 60
+    val focusText = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+    val sessions = sessionsOverride ?: stats.todaySessions
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 10.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            value,
-            color = color,
-            fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-        )
-        Spacer(Modifier.height(4.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+        StatTile(focusText, "Today", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
+        StatDivider()
+        StatTile("$sessions", "Sessions", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
+        StatDivider()
+        StatTile(
+            "${stats.streak}",
+            "Streak",
+            Modifier.weight(1f),
+            accentColor = if (stats.streak > 0) Gold else MaterialTheme.colorScheme.onSurface,
+            horizontalAlignment = Alignment.CenterHorizontally,
         )
     }
 }
@@ -340,11 +346,12 @@ private fun StatDivider() {
     Box(
         modifier = Modifier
             .width(1.dp)
-            .height(40.dp)
-            .background(MaterialTheme.colorScheme.surfaceVariant),
+            .height(42.dp)
+            .background(MaterialTheme.colorScheme.outline),
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ControlsRow(
     isRunning: Boolean,
@@ -354,43 +361,92 @@ private fun ControlsRow(
     onSkip: () -> Unit,
     onReset: () -> Unit,
 ) {
+    val haptics = LocalHapticFeedback.current
+    val resetInteractionSource = remember { MutableInteractionSource() }
+    val isResetPressed by resetInteractionSource.collectIsPressedAsState()
+    val resetFill by animateFloatAsState(
+        targetValue = if (isResetPressed) 1f else 0f,
+        animationSpec = tween(600),
+        label = "reset-hold",
+    )
+
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        OutlinedButton(
-            onClick = onSkip,
-            shape = RoundedCornerShape(50),
+        IconButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSkip()
+            },
+            modifier = Modifier.size(56.dp),
         ) {
-            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = phaseColor)
-            Spacer(Modifier.width(6.dp))
-            Text("Skip", color = phaseColor)
+            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Spacer(Modifier.width(24.dp))
+        Spacer(Modifier.width(26.dp))
         FloatingActionButton(
-            onClick = onToggle,
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onToggle()
+            },
             containerColor = phaseColor,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             shape = CircleShape,
-            modifier = Modifier.size(72.dp),
+            modifier = Modifier.size(80.dp),
         ) {
             Icon(
                 imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
                 contentDescription = if (isRunning) "Pause" else if (isPaused) "Resume" else "Start",
-                modifier = Modifier.size(32.dp),
+                modifier = Modifier.size(34.dp),
             )
         }
-        Spacer(Modifier.width(24.dp))
-        OutlinedButton(
-            onClick = onReset,
-            shape = RoundedCornerShape(50),
+        Spacer(Modifier.width(26.dp))
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(label = "Reset timer") {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReset()
+                            true
+                        },
+                    )
+                }
+                .combinedClickable(
+                    interactionSource = resetInteractionSource,
+                    indication = null,
+                    onClick = {},
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onReset()
+                    },
+                ),
+            contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = "Reset", tint = phaseColor)
-            Spacer(Modifier.width(6.dp))
-            Text("Reset", color = phaseColor)
+            Box(contentAlignment = Alignment.Center) {
+                Canvas(Modifier.size(34.dp)) {
+                    if (resetFill > 0f) {
+                        drawArc(
+                            color = phaseColor.copy(alpha = 0.24f),
+                            startAngle = -90f,
+                            sweepAngle = 360f * resetFill,
+                            useCenter = true,
+                        )
+                    }
+                }
+                Icon(Icons.Default.Refresh, contentDescription = "Hold to reset", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
     }
+}
+
+private fun formatClock(seconds: Double): String {
+    val totalSeconds = kotlin.math.ceil(seconds).toInt().coerceAtLeast(0)
+    val mins = totalSeconds / 60
+    val secs = totalSeconds % 60
+    return String.format(Locale.US, "%02d:%02d", mins, secs)
 }
 
 private fun computeRemaining(state: TimerState?, syncTime: Long, nowMs: Long): Double {
