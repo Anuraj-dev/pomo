@@ -12,6 +12,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import com.pomo.ui.theme.PomoTheme
+import java.util.Locale
 
 @Composable
 public fun PhaseChip(
@@ -25,7 +26,7 @@ public fun PhaseChip(
             .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(
-            text = label.uppercase(),
+            text = label.uppercase(Locale.ROOT),
             color = color,
             style = MaterialTheme.typography.labelSmall,
         )

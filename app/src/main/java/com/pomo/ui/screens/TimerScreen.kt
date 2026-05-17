@@ -49,8 +49,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.semantics.LiveRegionMode
-import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -177,7 +177,6 @@ private fun TimerText(state: TimerState?, fallbackWorkSeconds: Int) {
 
     Text(
         text = formatClock(seconds),
-        modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
         color = MaterialTheme.colorScheme.onSurface,
         style = TimerTextStyle,
         textAlign = TextAlign.Center,
@@ -406,14 +405,23 @@ private fun ControlsRow(
             onClick = {},
             modifier = Modifier
                 .size(56.dp)
+                .semantics {
+                    customActions = listOf(
+                        CustomAccessibilityAction(label = "Reset timer") {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            onReset()
+                            true
+                        },
+                    )
+                }
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         awaitFirstDown()
                         resetPressed = true
-                        val releasedEarly = withTimeoutOrNull(600) {
-                            waitForUpOrCancellation()
-                        } != null
-                        if (!releasedEarly) {
+                        val start = System.currentTimeMillis()
+                        withTimeoutOrNull(600) { waitForUpOrCancellation() }
+                        val heldFullDuration = System.currentTimeMillis() - start >= 600
+                        if (heldFullDuration) {
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             onReset()
                             waitForUpOrCancellation()

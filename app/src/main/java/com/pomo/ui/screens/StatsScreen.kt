@@ -328,7 +328,8 @@ private fun HourDistribution(buckets: IntArray) {
         }
         Spacer(Modifier.height(6.dp))
         Row(Modifier.fillMaxWidth()) {
-            HourLabel("6am", Modifier.weight(1f), TextAlign.Start, muted)
+            HourLabel("12am", Modifier.weight(1f), TextAlign.Start, muted)
+            HourLabel("6am", Modifier.weight(1f), TextAlign.Center, muted)
             HourLabel("12pm", Modifier.weight(1f), TextAlign.Center, muted)
             HourLabel("6pm", Modifier.weight(1f), TextAlign.Center, muted)
             HourLabel("12am", Modifier.weight(1f), TextAlign.End, muted)

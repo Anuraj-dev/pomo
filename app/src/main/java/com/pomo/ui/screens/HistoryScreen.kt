@@ -1,5 +1,6 @@
 package com.pomo.ui.screens
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,6 +38,7 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 public fun HistoryScreen(items: List<HistoryItem>) {
     val grouped = remember(items) { groupByMonth(items) }
@@ -71,8 +73,12 @@ public fun HistoryScreen(items: List<HistoryItem>) {
             verticalArrangement = Arrangement.spacedBy(0.dp),
         ) {
             grouped.forEach { (monthLabel, entries) ->
-                item(key = "header_$monthLabel") {
-                    Column {
+                stickyHeader(key = "header_$monthLabel") {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(MaterialTheme.colorScheme.background),
+                    ) {
                         Spacer(Modifier.height(20.dp))
                         SectionHeader(monthLabel)
                         Spacer(Modifier.height(8.dp))

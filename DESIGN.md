@@ -95,7 +95,7 @@ Elevation is implied through outline strength and surface lightness, not Materia
 
 Tokens (single `Motion.kt`):
 
-```
+```text
 durationXS  = 120 ms   ripple, hover, tap feedback
 durationS   = 180 ms   buttons, chips, selection
 durationM   = 240 ms   navigation, tab switches, sheets
@@ -134,7 +134,7 @@ Lives in `ui/components/`. Every interactive component defines: default, pressed
 - `PhaseChip` — capsule with phase color background at 0.18 opacity and phase color text. Used on history rows and the current phase label.
 - `StatTile` — value, label, optional delta. Used in stats summary and the timer footer strip. No card wrapper; sits directly on background with hairline divider.
 - `PomoButton` — three variants. `filled` (phase color background), `tonal` (phase color at 0.18 on neutral), `ghost` (icon only or text only). Built-in haptic on press. 48 dp min tap target.
-- `SegmentedToggle` — used in Stats for time-range selection (Today, Week, Month).
+- `SegmentedToggle` — used in Stats for time-range selection (Week, Month, All).
 - `SectionHeader` — caps label with 12 sp tracking, used in Settings and Stats.
 - `EmptyState` — icon, headline, body, optional action. One component, used on History, Stats empty days, About if offline.
 - `Sheet` — bottom sheet wrapper with consistent header (title left, close right) and content padding. Replaces inline modals.
@@ -158,7 +158,7 @@ Top to bottom:
 
 The current 648-line screen is the biggest UX win. Rebuilt as:
 
-1. **Range toggle**, sticky top. `SegmentedToggle` for Today, Week, Month, All time.
+1. **Range toggle**, sticky top. `SegmentedToggle` for Week, Month, All.
 2. **Hero line**. Total focus time for selected range in `display` size, delta vs previous period directly below in `bodySmall` with `success` or `warn` color and an arrow glyph. No card.
 3. **Heatmap**, 12 weeks for Week range, 26 for Month, 52 for All. GitHub-style grid, coral intensity by minutes focused. Tap a cell pushes History filtered to that day.
 4. **Hour-of-day**. Horizontal bar chart across 24 hours, bar height by total minutes at that hour. Coral. Reveals when the user actually focuses. No axis labels under 4 in a row; show 6am, 12pm, 6pm, 12am.
