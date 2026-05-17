@@ -83,7 +83,7 @@ public fun StatsScreen(
     val activeDates = remember(history) {
         history.entries.filter { it.value.completed > 0 }.map { it.key }.toSet()
     }
-    val currentStreak = remember(activeDates) {
+    val currentStreak = remember(activeDates, today) {
         DateLogic.currentStreak(activeDates, System.currentTimeMillis())
     }
     val bestStreak = remember(activeDates) { DateLogic.bestStreak(activeDates) }

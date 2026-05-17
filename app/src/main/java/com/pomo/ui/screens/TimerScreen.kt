@@ -4,11 +4,12 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,7 +48,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
@@ -60,7 +60,6 @@ import com.pomo.ui.theme.Gold
 import com.pomo.ui.theme.PomoMotion
 import com.pomo.ui.theme.TimerTextStyle
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import java.util.Locale
 
 public data class TimerStats(
@@ -352,6 +351,7 @@ private fun StatDivider() {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ControlsRow(
     isRunning: Boolean,
@@ -362,9 +362,10 @@ private fun ControlsRow(
     onReset: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
-    var resetPressed by remember { mutableStateOf(false) }
+    val resetInteractionSource = remember { MutableInteractionSource() }
+    val isResetPressed by resetInteractionSource.collectIsPressedAsState()
     val resetFill by animateFloatAsState(
-        targetValue = if (resetPressed) 1f else 0f,
+        targetValue = if (isResetPressed) 1f else 0f,
         animationSpec = tween(600),
         label = "reset-hold",
     )
@@ -401,8 +402,7 @@ private fun ControlsRow(
             )
         }
         Spacer(Modifier.width(26.dp))
-        IconButton(
-            onClick = {},
+        Box(
             modifier = Modifier
                 .size(56.dp)
                 .semantics {
@@ -414,21 +414,16 @@ private fun ControlsRow(
                         },
                     )
                 }
-                .pointerInput(Unit) {
-                    awaitEachGesture {
-                        awaitFirstDown()
-                        resetPressed = true
-                        val start = System.currentTimeMillis()
-                        withTimeoutOrNull(600) { waitForUpOrCancellation() }
-                        val heldFullDuration = System.currentTimeMillis() - start >= 600
-                        if (heldFullDuration) {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                            onReset()
-                            waitForUpOrCancellation()
-                        }
-                        resetPressed = false
-                    }
-                },
+                .combinedClickable(
+                    interactionSource = resetInteractionSource,
+                    indication = null,
+                    onClick = {},
+                    onLongClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onReset()
+                    },
+                ),
+            contentAlignment = Alignment.Center,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 Canvas(Modifier.size(34.dp)) {
