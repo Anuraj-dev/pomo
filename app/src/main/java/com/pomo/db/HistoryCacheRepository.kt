@@ -61,6 +61,8 @@ public class HistoryCacheRepository(context: Context) {
     public fun observeSessionsForDate(date: String): Flow<List<SessionEntity>> =
         dao.getSessionsForDateFlow(date)
 
+    public fun observeAllSessions(): Flow<List<SessionEntity>> = dao.getAllSessionsFlow()
+
     public suspend fun saveLocalSession(session: com.pomo.models.Session) {
         val segments = splitSessionByCalendarDay(session)
         segments.forEachIndexed { index, segment ->

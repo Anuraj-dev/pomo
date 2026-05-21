@@ -43,6 +43,9 @@ public interface HistoryDao {
     @Query("SELECT * FROM sessions WHERE date = :date ORDER BY start ASC")
     public fun getSessionsForDateFlow(date: String): Flow<List<SessionEntity>>
 
+    @Query("SELECT * FROM sessions ORDER BY start ASC")
+    public fun getAllSessionsFlow(): Flow<List<SessionEntity>>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     public suspend fun insertSession(session: SessionEntity)
 

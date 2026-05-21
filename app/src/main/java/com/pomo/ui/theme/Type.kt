@@ -33,6 +33,21 @@ public val TimerTextStyle: TextStyle = TextStyle(
 
 public val TimerTextStyleCompact: TextStyle = TimerTextStyle.copy(fontSize = 56.sp)
 
+/** Hero digits on the Timer screen — full instrument readout. */
+public val TimerHeroStyle: TextStyle = TimerTextStyle.copy(
+    fontSize = 96.sp,
+    letterSpacing = (-0.04f).em,
+)
+
+/** The fractional-second field beside the hero digits. */
+public val TimerMsStyle: TextStyle = TextStyle(
+    fontFamily = JetBrainsMono,
+    fontWeight = FontWeight.SemiBold,
+    fontSize = 32.sp,
+    letterSpacing = (-0.02f).em,
+    fontFeatureSettings = FEATURE_TNUM,
+)
+
 public val PomoTypography: Typography = Typography(
     displayLarge = TextStyle(
         fontFamily = Inter,

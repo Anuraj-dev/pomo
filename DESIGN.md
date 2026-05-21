@@ -1,213 +1,237 @@
 # DESIGN.md
 
-Design system for the Pomo Android app. Kotlin, Jetpack Compose, Material 3 as substrate. Values below are tokens; the implementation in `ui/theme/` is the source of truth once shipped.
+register: product
+
+Design system for the Pomo Android app. Kotlin, Jetpack Compose, Material 3 as substrate. Values here are tokens; `ui/theme/` is the source of truth once shipped.
+
+## Stance
+
+Pomo is an instrument, not a meditation companion. The reference set is F1 timing displays, Bloomberg terminals, Linear, Vercel, racing HUDs, aircraft instrument clusters. The screen should feel like it is *measuring you right now*. The product's job is legible numbers, sharp transitions, and a single signal color that means something.
+
+What that excludes: warm-gold accents, soft pastels, cozy off-whites, "calm-at-rest" reflexes, drop shadows pretending to be paper. Restraint, yes; warm restraint, no.
 
 ## Theme
 
-Scene sentence: a knowledge worker mid-afternoon in a sunlit office glancing at their phone for the next break, or a student late at night doing one more focus block in a dim dorm. The same person, different hours.
+Scene sentence: a knowledge worker glancing at their phone on a desk between Slack and the editor, mid-afternoon under office light, or the same person at 11pm under a single warm bulb running one more block. The phone is held the way you'd hold a stopwatch — not a candle.
 
-Conclusion: dark default for energy efficiency on OLED and for the late-night case, light theme as a real first-class option, follow system by default. Theme is a setting, not a flourish.
+Conclusion: dark default. Light theme exists as a real first-class option for direct-sun use, but dark is the canonical surface. Theme is a setting, not a flourish.
 
 ## Color
 
-Strategy: **Restrained** with one semantic accent axis. The phase color (coral or teal) carries state across the entire surface. Gold is reserved for goal and streak. Everything else is a tinted neutral.
+Strategy: **Restrained**. Cool-tinted slate neutrals carry the surface. One signal color — `signal` (a saturated red-orange) — marks live state, peak values, and urgency. Everything else is neutral. No second accent. No gold. No phase-color background washes.
 
-All values in OKLCH so lightness and chroma are predictable across themes. No `#000`, no `#fff`. Neutrals are tinted toward the coral hue (warm) so cold blue is never the residual feel.
+All values in OKLCH. No `#000`, no `#fff`. Neutrals are tinted toward blue (`hue 250`) so the residual feel is cold steel, not warm paper.
 
-### Dark (default)
+### Dark (default, canonical)
 
 | Token | OKLCH | Use |
 |---|---|---|
-| `bg` | `oklch(0.06 0.006 25)` | App background, near-black, warm tint |
-| `surface` | `oklch(0.13 0.008 25)` | Cards, inline panels |
-| `surfaceElevated` | `oklch(0.18 0.008 25)` | Sheets, modals, menus |
-| `outline` | `oklch(0.28 0.010 25)` | Hairlines, ring tracks, dividers |
-| `outlineStrong` | `oklch(0.42 0.012 25)` | Pressed states, focus rings |
-| `onSurface` | `oklch(0.96 0.006 25)` | Primary text |
-| `onSurfaceMuted` | `oklch(0.72 0.008 25)` | Secondary text, labels |
-| `onSurfaceFaint` | `oklch(0.52 0.008 25)` | Tertiary text, disabled |
-| `focus` | `oklch(0.72 0.17 25)` | Work phase color |
-| `focusGlow` | `oklch(0.72 0.17 25) / 0.18` | Ambient glow under timer |
-| `break` | `oklch(0.80 0.13 175)` | Break phase color |
-| `breakGlow` | `oklch(0.80 0.13 175) / 0.18` | Ambient glow under timer |
-| `accent` | `oklch(0.85 0.13 85)` | Streak, goal completion |
-| `success` | `oklch(0.78 0.16 145)` | Connection ok |
-| `warn` | `oklch(0.78 0.15 65)` | Offline, sync lag |
-| `danger` | `oklch(0.70 0.18 25)` | Destructive confirm only |
+| `bg` | `oklch(0.10 0.008 250)` | App background, cool slate, near-black |
+| `surface` | `oklch(0.14 0.010 250)` | Inline panels, sticky headers |
+| `surfaceElevated` | `oklch(0.18 0.010 250)` | Sheets, menus |
+| `outline` | `oklch(0.26 0.012 250)` | Hairlines, dividers, chart gridlines |
+| `outlineStrong` | `oklch(0.40 0.014 250)` | Focus rings, pressed states |
+| `onSurface` | `oklch(0.97 0.006 250)` | Primary text, timer digits |
+| `onSurfaceMuted` | `oklch(0.72 0.008 250)` | Secondary text, labels |
+| `onSurfaceFaint` | `oklch(0.50 0.008 250)` | Fractional-second digits, axis ticks |
+| `signal` | `oklch(0.66 0.22 27)` | Live state, peak bars, current-hour mark, danger |
+| `signalDim` | `oklch(0.66 0.22 27) / 0.20` | Tinted backgrounds for signal pills |
+| `success` | `oklch(0.78 0.14 145)` | Connection ok, streak alive — used sparingly |
+| `warn` | `oklch(0.78 0.13 80)` | Offline indicator only — never decorative |
 
 ### Light
 
 | Token | OKLCH | Use |
 |---|---|---|
-| `bg` | `oklch(0.985 0.004 85)` | Warm off-white, paper feel |
-| `surface` | `oklch(1.00 0.000 0)` minus 2 percent | Pure surface (still tinted via container) |
-| `surfaceElevated` | `oklch(0.97 0.005 85)` | Sheets |
-| `outline` | `oklch(0.88 0.008 85)` | Hairlines |
-| `onSurface` | `oklch(0.18 0.010 25)` | Primary text |
-| `onSurfaceMuted` | `oklch(0.42 0.010 25)` | Secondary |
-| `focus` | `oklch(0.58 0.18 25)` | Darker, denser coral for contrast |
-| `break` | `oklch(0.55 0.13 175)` | Darker mint for contrast |
-| `accent` | `oklch(0.70 0.13 85)` | Goal complete |
+| `bg` | `oklch(0.98 0.005 250)` | Cool off-white |
+| `surface` | `oklch(0.95 0.006 250)` | Inline panels |
+| `surfaceElevated` | `oklch(0.92 0.007 250)` | Sheets |
+| `outline` | `oklch(0.82 0.010 250)` | Hairlines |
+| `onSurface` | `oklch(0.18 0.010 250)` | Primary text |
+| `onSurfaceMuted` | `oklch(0.42 0.010 250)` | Secondary |
+| `signal` | `oklch(0.52 0.22 27)` | Denser red for contrast on bright surface |
 
-Contrast targets: every `onSurface*` pair passes WCAG AA against its surface. Phase colors are tested both as foreground (text on surface) and background (FAB fill, ring stroke).
+Phase has no color. The running phase is communicated by the digits and the caps label ("FOCUS" / "BREAK"), not by re-tinting the surface. The signal red is reserved for live state — currently-running, current-hour, peak bar — regardless of phase.
 
-### Dynamic color (Android 12+)
+Contrast: every `onSurface*` pair passes WCAG AA. Signal red is tested as foreground on `bg`, `surface`, and `surfaceElevated`.
 
-Off by default. The phase color carries semantic meaning that dynamic color would dilute. Offer a "match system color" toggle in Settings for users who prefer it; when enabled, only neutrals are remapped, phase colors remain canonical.
+### Dynamic color
+
+Off. Not offered. The signal red is semantic; remapping it would erase the only color rule the app has.
 
 ## Typography
 
-Two families, both bundled to remove OEM variance. System fonts are legitimate for product UI generally, but the timer is the product, so its numerals get fixed treatment.
+Two families, both bundled.
 
-- **JetBrains Mono** for timer digits and tabular numbers in stats. Feature flag `tnum` enabled so digits do not jitter as they tick. Weight 600.
-- **Inter** for everything else. Weights 400, 500, 600, 700.
+- **JetBrains Mono** for every digit, every label-as-data, every axis tick. `tnum` enabled so digits do not jitter.
+- **Inter** for prose and section headings only.
 
-Scale (fixed sp, no fluid clamps):
+The visual default leans monospace. If a piece of text *is data*, it's mono. If it's *language*, it's Inter. When in doubt, mono.
+
+Scale (fixed sp):
 
 | Role | Family | Weight | Size | Tracking |
 |---|---|---|---|---|
-| `timer` | JetBrains Mono | 600 | 72 sp | -0.02em |
-| `display` | Inter | 700 | 32 sp | -0.01em |
+| `timerHero` | JetBrains Mono | 600 | 124 sp | -0.04em |
+| `timerMs` | JetBrains Mono | 500 | 44 sp | -0.02em |
+| `display` | JetBrains Mono | 600 | 56 sp | -0.02em |
 | `headline` | Inter | 600 | 22 sp | -0.005em |
 | `title` | Inter | 600 | 17 sp | 0 |
 | `body` | Inter | 400 | 15 sp | 0 |
 | `bodySmall` | Inter | 400 | 13 sp | 0 |
+| `dataLg` | JetBrains Mono | 500 | 18 sp | 0 |
+| `data` | JetBrains Mono | 500 | 14 sp | 0 |
 | `label` | Inter | 500 | 12 sp | 0 |
-| `caps` | Inter | 600 | 11 sp | +0.12em, uppercase |
+| `caps` | Inter | 600 | 11 sp | +0.14em, uppercase |
 
-Step ratio between display, headline, title, body, label sits at 1.2 to 1.25. Tight enough to feel like one system, loose enough to read as hierarchy.
+Hero digits are huge on purpose. They are the product.
 
 ## Spacing and shape
 
-Single 4 sp grid. Used values: 4, 8, 12, 16, 20, 24, 32, 40, 56.
+4 sp grid. Used: 4, 8, 12, 16, 20, 24, 32, 40, 56, 72.
+
+Layout favors density. Sections sit on the bg directly, separated by hairline `outline`. Cards are the exception, not the default; nested cards are forbidden.
 
 Corner radii:
 
-- `radius.sm` 8 dp, chips and small controls.
-- `radius.md` 14 dp, buttons and inline surfaces.
-- `radius.lg` 20 dp, cards and sheets.
-- `radius.pill` 999 dp, status pills and capsule buttons.
-- `radius.circle` 50 percent, FAB and avatar.
+- `radius.xs` 4 dp — bars, pips, chart elements
+- `radius.sm` 8 dp — chips
+- `radius.md` 12 dp — buttons
+- `radius.lg` 16 dp — sheets, the rare card
+- `radius.pill` 999 dp — status pills
 
-Elevation is implied through outline strength and surface lightness, not Material shadow. Shadows on a true-black background look like grey smudges.
+No drop shadows. Elevation is implied by surface lightness shifts and outline strength.
 
 ## Motion
 
-Tokens (single `Motion.kt`):
+Snap, don't bounce. The only continuous motion in the app is (a) the running timer's sub-second tick and (b) the progress bar's fill. Everything else is an instant snap or a fast ease-out.
 
 ```text
-durationXS  = 120 ms   ripple, hover, tap feedback
-durationS   = 180 ms   buttons, chips, selection
-durationM   = 240 ms   navigation, tab switches, sheets
-durationL   = 360 ms   phase transition, goal celebrate
-easeStandard = CubicBezier(0.2, 0.0, 0.0, 1.0)   Material emphasized out
-easeOutQuint = CubicBezier(0.22, 1.0, 0.36, 1.0)
+durationXS  =  80 ms   tap feedback, ripple
+durationS   = 140 ms   buttons, segmented toggles
+durationM   = 220 ms   navigation, sheets
+durationL   = 320 ms   phase transition
+easeOutQuart = CubicBezier(0.25, 1.0, 0.5, 1.0)
 easeOutExpo  = CubicBezier(0.16, 1.0, 0.30, 1.0)
 ```
 
-No bounce, no elastic, no overshoot. Springs only as the underlying physics, not as a visual flourish.
+No bounce, no elastic, no overshoot. No spring physics as flourish.
 
-State motion (everything else is none):
+State motion:
 
-- **Timer start**: ring fills 0 to current progress in 360 ms ease-out-quint, then begins drain. FAB scales 0.94 to 1.0 in 180 ms, light haptic tick.
-- **Timer pause**: ring stroke opacity drops to 0.55 in 240 ms. Digits gently breathe (scale 1.0 to 1.015 and back over 1.6 s, infinite). Signals waiting.
-- **Phase transition**: ring color cross-fades over 360 ms; background glow cross-fades; medium haptic. A small caps label slides up from below the digits with the new phase name, holds 600 ms, fades out.
-- **Goal reached**: outer ring completes its last segment with a 360 ms ease-out-expo sweep, then a one-shot 480 ms gold bloom (radial expansion to 1.4x, opacity 0.4 to 0). Plays once per day.
-- **Session count tick**: number rolls upward with a 280 ms vertical translate of two digit slots, no easing past linear.
-- **Tab navigation**: shared X axis, 240 ms, ease-standard.
-- **List enter (History)**: stagger 30 ms per row, max 8 rows, then no animation on scroll.
+- **Timer tick**: digits update every animation frame (~16 ms). The ms field rolls continuously; ss field changes once a second. No fade between values — mono digits sit in their cells and just change.
+- **Progress bar**: linear fill from 0→1 over the phase duration. No easing; this is a readout, not an animation.
+- **Phase transition**: bg unchanged. The caps phase label crossfades in 220 ms. Medium haptic. No goal-bloom, no fireworks.
+- **Pause**: digits stay put. A small `[PAUSED]` caps label fades in below in 140 ms. No breathing animation. Paused is paused.
+- **Goal reached**: the last pip in the launch row fills with signal red and a single 80 ms haptic confirm. No bloom, no sweep.
+- **Tab navigation**: shared X axis, 220 ms, ease-out-quart.
 
-Reduced motion: when `Settings.Global.TRANSITION_ANIMATION_SCALE == 0`, every transition collapses to a 0 ms cross-fade. The pause breathing animation stops entirely.
+Reduced motion: every transition collapses to 0 ms crossfade. The timer tick still updates digits (the tick is the product, not decoration).
 
-Haptics:
-
-- Light tick: start, pause, tab switch, swipe action commit.
-- Medium impact: phase complete.
-- `HapticFeedbackConstants.CONFIRM`: goal reached.
-- No haptics during scroll, drag, or idle.
+Haptics: light tick on start/pause/tab; medium impact on phase complete; `CONFIRM` on goal. No haptics during scroll.
 
 ## Components
 
-Lives in `ui/components/`. Every interactive component defines: default, pressed, focused, disabled, loading. No half-spec components ship.
+In `ui/components/`. Every interactive component defines default, pressed, focused, disabled, loading.
 
-- `PhaseRing` — the dual concentric ring on the timer screen. Outer ring is the daily goal, rendered as N discrete arcs (one per goal session) with 4 dp gaps. Inner ring is the current phase progress, single smooth arc. Both 14 dp stroke, rounded caps.
-- `PhaseChip` — capsule with phase color background at 0.18 opacity and phase color text. Used on history rows and the current phase label.
-- `StatTile` — value, label, optional delta. Used in stats summary and the timer footer strip. No card wrapper; sits directly on background with hairline divider.
-- `PomoButton` — three variants. `filled` (phase color background), `tonal` (phase color at 0.18 on neutral), `ghost` (icon only or text only). Built-in haptic on press. 48 dp min tap target.
-- `SegmentedToggle` — used in Stats for time-range selection (Week, Month, All).
-- `SectionHeader` — caps label with 12 sp tracking, used in Settings and Stats.
-- `EmptyState` — icon, headline, body, optional action. One component, used on History, Stats empty days, About if offline.
-- `Sheet` — bottom sheet wrapper with consistent header (title left, close right) and content padding. Replaces inline modals.
-- `Snackbar` — single-line message, optional action, 4 second default, dismiss on swipe.
+- `TimerReadout` — the hero. Huge mono `MM:SS` digits with `.mmm` fractional field beside them at ~60% opacity and ~35% scale. Caps phase label above. No ring, no glow, no card.
+- `LinearProgress` — flat 4 dp horizontal bar with signal-red fill on outline track. Replaces the dual ring entirely.
+- `LaunchPips` — N small 6 dp squares (one per goal session). Filled `onSurfaceMuted` for completed, `outline` for upcoming, `signal` for the active one.
+- `Bar` — vertical/horizontal data bar with `radius.xs`, signal red for peak, `onSurfaceMuted` for everything else.
+- `BarChart24` — 24-bar horizontal hour-of-day chart. X labels at 6/12/18 only. Peak hour painted signal red.
+- `BarChart7` — 7-bar Mon..Sun day-of-week chart. Same coloring rule.
+- `Heatmap` — 12-week grid, 4 intensity steps from `outline` to `onSurface`. No signal red in the heatmap; intensity is monochrome.
+- `StatTile` — value in `dataLg`, label in `caps`. Sits on bg with hairline divider; never in a card.
+- `PomoButton` — three variants. `primary` (signal-red fill, only one per screen), `tonal` (onSurface at 0.10), `ghost` (icon or text only). 48 dp min target. Haptic on press.
+- `PhaseChip` — pill with mono label, `outline` border, no fill. Phase identified by text.
+- `SegmentedToggle` — for time-range selection.
+- `SectionHeader` — caps label, hairline above, 8 dp top padding.
+- `EmptyState` — caps headline, body, optional ghost action. No illustration.
+- `Sheet` — bottom sheet, drag handle in `outline`.
+- `Snackbar` — single line, optional ghost action, 4 s default.
 
-No `Card` wrapper as a default. Surfaces are formed by background lightness shifts and outlines, with cards reserved for genuinely grouped content (Settings section, About changelog entry). Never nested.
+No `Card` as default. Surfaces are formed by hairlines.
 
 ## Per-screen layout
 
 ### Timer (hero)
 
+The screen exists to make remaining time readable from a meter away and to make the readout feel alive.
+
 Top to bottom:
 
-1. **Header**, 48 dp tall. App wordmark in `display` weight on the left, connection chip plus overflow on the right. Connection chip uses `success` or `warn` dot plus label in `label` style.
-2. **Phase queue**, 24 dp tall. A horizontal row of N small dots (one per session in the current goal). Filled for completed, hollow for upcoming, current dot is the only one with a phase color stroke and slight scale (1.15).
-3. **Hero ring block**, 360 dp on phone, 420 dp on tablet. Outer segmented gold goal ring, inner phase ring, centered timer digits in `timer` style with `tnum`, caps phase label below in `caps`. Phase-tinted radial glow behind the ring at 0.18 opacity, fading to bg by 70 percent of radius.
-4. **Stats strip**, inline (no card). Three `StatTile`s separated by 1 dp hairlines: today focus time, today session count, current streak. Tapping the strip pushes the Stats screen.
-5. **Controls**, anchored 32 dp from bottom. Center is an 80 dp circular FAB in phase color, icon-only play or pause. Skip is a 56 dp ghost icon button at 64 dp from center on the left. Reset is the same on the right, requires long-press to confirm (the icon fills in over the 600 ms hold; release before full = cancel). No labels on icons; long-press tooltip provides them.
+1. **Header bar**, 44 dp. App wordmark left in `caps`. Right side: connection dot (`success`/`warn`) + overflow icon. No "Phone primary" badge — this is the phone.
+2. **Hero block**, occupies the upper 55% of the screen. Centered:
+   - Caps phase label (`FOCUS` or `BREAK`), 11 sp, `onSurfaceMuted`, 16 dp above digits.
+   - Hero digits `MM:SS` in `timerHero` (124 sp), `onSurface`, optical-center aligned.
+   - Beside the seconds digit (baseline-aligned to its lower third), the millisecond field `.mmm` in `timerMs` (44 sp), `onSurfaceFaint`. Updates every frame.
+   - Below digits, a thin signal-red live dot (4 dp) with `LIVE` caps label when running; `[PAUSED]` caps label when paused.
+3. **Progress bar**, 4 dp tall, full bleed with 24 dp horizontal padding. Fills linearly over the phase.
+4. **Launch pips**, centered horizontal row. One pip per session in the daily goal. Current pip is signal red.
+5. **Stats strip**, inline. Three `StatTile`s on bg separated by hairlines: today focus minutes, today sessions, current streak. Tapping pushes Stats.
+6. **Controls**, anchored 32 dp from bottom:
+   - Center: 72 dp signal-red `primary` button, icon-only play/pause.
+   - Left, 56 dp ghost icon: reset (long-press to confirm; icon fills over 600 ms hold).
+   - Right, 56 dp ghost icon: skip.
+   - No labels; long-press tooltip.
+
+Phase color is text, not surface. The bg never changes hue between focus and break.
 
 ### Stats
 
-The current 648-line screen is the biggest UX win. Rebuilt as:
+Built to answer three questions without scrolling: how long have I been doing this, when do I actually focus, am I on a streak.
 
-1. **Range toggle**, sticky top. `SegmentedToggle` for Week, Month, All.
-2. **Hero line**. Total focus time for selected range in `display` size, delta vs previous period directly below in `bodySmall` with `success` or `warn` color and an arrow glyph. No card.
-3. **Heatmap**, 12 weeks for Week range, 26 for Month, 52 for All. GitHub-style grid, coral intensity by minutes focused. Tap a cell pushes History filtered to that day.
-4. **Hour-of-day**. Horizontal bar chart across 24 hours, bar height by total minutes at that hour. Coral. Reveals when the user actually focuses. No axis labels under 4 in a row; show 6am, 12pm, 6pm, 12am.
-5. **Streak block**. Current and longest streak as two `StatTile`s side by side, gold accent on the current streak number if it equals or beats the longest.
-6. **Goal completion ring**, 80 dp, sits next to a 30-day completion percentage. Inline, not a card.
+1. **Lifetime hero**, top of screen. Single huge mono total ("142h 17m") in `display`, caps label `LIFETIME` above, subline "324 sessions · 47 days with Pomo" in `data muted` below. No card.
+2. **Hour-of-day** — `BarChart24`. Headline: "When you focus". Caption: "Peak: 10–11 AM · 42% of work happens 9 AM – 1 PM". Peak hour bar in signal red, rest in `onSurfaceMuted`.
+3. **Day-of-week** — `BarChart7`. Mon..Sun. Headline: "Which days you show up". Best day in signal red.
+4. **12-week heatmap** — monochrome grid. Headline: "Last 12 weeks". Legend bar below: faint → strong.
+5. **Records list** — three rows on bg, hairlines between:
+   - Longest streak — `42 days` · `Mar 4 – Apr 15`
+   - Best day — `8 sessions` · `Tue Apr 23`
+   - Best week — `34 sessions` · `Apr 22 – Apr 28`
+6. **Footer** — `Since Apr 3, 2025` in `data muted`, right-aligned. Export CSV as a ghost link.
 
-Empty state: if the range has zero sessions, the heatmap, hour chart, and streak block collapse into a single `EmptyState` with a "Start a session" action that returns to the timer tab.
+Empty state: if no sessions, all of the above collapse into a single centered caps line `NO SESSIONS YET` with a ghost "Start a session" action returning to Timer.
 
 ### History
 
-1. Day-grouped list with sticky day headers in `caps` style.
-2. Each row: phase chip, start time to end time in `body`, duration in `bodySmall` muted, optional tag chip.
-3. Swipe left to delete with undo snackbar (4 second window).
-4. Swipe right to edit tag in a bottom sheet.
-5. Pull to refresh uses a custom indicator: a small phase-colored ring that fills as the gesture progresses, no system spinner.
-6. Empty state on first run: "No sessions yet" with a call to action.
+1. Day-grouped list, sticky day header in `caps`.
+2. Row: phase chip · `HH:MM → HH:MM` in `data` · duration in `data muted` · optional tag chip.
+3. Swipe left to delete with 4 s undo snackbar.
+4. Swipe right to edit tag.
+5. Empty: caps "NO SESSIONS YET".
 
 ### Settings
 
-1. Sectioned by purpose, each section in a `Card` at `radius.lg` with 16 dp internal padding, 12 dp between cards.
-2. Sections: Timer (durations, long-break interval, autostart), Notifications (sound, vibration, do not disturb integration), Theme (system, light, dark, plus optional dynamic color toggle), Desktop client (LAN port, allowed origins, status), Advanced (export history, reset all).
-3. Duration controls are sliders snapped to 1 minute, value displayed in `timer` style at 24 sp on the right.
-4. Destructive actions in Advanced render in `danger` color and require a confirmation sheet.
+1. Sectioned with `SectionHeader` (no cards). Sections: Timer, Notifications, Theme, Desktop client, Advanced.
+2. Duration controls: stepper buttons (− / value / +) with the value in `dataLg`. No slider.
+3. Theme: System / Light / Dark as a `SegmentedToggle`.
+4. Destructive actions in Advanced render in `signal` and require a confirmation sheet.
 
 ### About
 
-1. App icon, 96 dp.
-2. App name in `display`, version chip below in `label`.
-3. One-line description.
-4. Icon row of links (GitHub, license, privacy) using `ghost` buttons.
-5. Changelog as an expandable list, latest version expanded by default, older versions collapsed.
+1. App icon 80 dp.
+2. App name in `display`, version chip in `caps`.
+3. One-line description in `body`.
+4. Ghost-icon row of links.
+5. Changelog list, latest expanded.
 
 ## Iconography
 
-Material Symbols Rounded, weight 400, optical size 24. Single family across the app. Filled variants used only for active tab and the FAB icon (play, pause).
+Material Symbols Rounded, weight 400, optical size 24. Filled variant only for the primary play/pause icon. Everything else is outlined.
 
 ## Accessibility
 
-- Every icon-only button has a `contentDescription`.
-- Tap targets 48 dp minimum.
-- Timer text marked `liveRegion = Polite` so TalkBack announces phase changes without spamming every second.
-- Color is never the only signal. Phase changes also announce a caps label, history rows show phase name in text, ring shape encodes progress independently of color.
-- Honor system font scale up to 200 percent. The 72 sp timer scales down gracefully and the surrounding chrome reflows to single column.
-- Honor reduced motion as specified in Motion section.
-- Both themes pass WCAG AA contrast on every text and meaningful non-text element.
+- Every icon-only button has `contentDescription`.
+- 48 dp min tap target.
+- Timer text is `liveRegion = Polite`. TalkBack reads `MM:SS` only — not the ms field.
+- Signal red is never the only cue. Live state also reads `LIVE` in text; peak bar is also tallest; current pip is also positioned.
+- System font scale honored to 200%. Hero digits scale down; ms field hides at >150%.
+- Reduced motion honored as specified.
 
 ## Widget
 
-- 2x2: ring, remaining time, phase label.
-- 4x2: ring, remaining time, phase label, play/pause and skip controls.
-- Colors match in-app theme. Light variant and dynamic-color variant available on Android 12+.
-- Updates throttle to once per minute when running, immediate on phase change.
+- 2×2: digits (no ms), phase label.
+- 4×2: digits (no ms), phase label, progress bar, play/pause + skip.
+- Updates throttle to once a minute when running; immediate on phase change.
+- Widget never shows the ms field — battery and update cadence don't justify it off-screen.

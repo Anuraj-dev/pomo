@@ -1,9 +1,7 @@
 package com.pomo.ui.screens
 
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -22,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -37,29 +36,29 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.customActions
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Modifier as ComposeModifier
 import com.pomo.timer.TimerState
 import com.pomo.ui.components.StatTile
-import com.pomo.ui.theme.Gold
-import com.pomo.ui.theme.PomoMotion
-import com.pomo.ui.theme.TimerTextStyle
-import kotlinx.coroutines.delay
+import com.pomo.ui.theme.PomoTokens
+import com.pomo.ui.theme.TimerHeroStyle
+import com.pomo.ui.theme.TimerMsStyle
+import kotlinx.coroutines.android.awaitFrame
 import java.util.Locale
 
 public data class TimerStats(
@@ -79,65 +78,73 @@ public fun TimerScreen(
     onReset: () -> Unit,
     onStatsClick: () -> Unit,
 ) {
-    val rawPhaseColor = when (state?.phase) {
-        TimerState.PHASE_WORK -> MaterialTheme.colorScheme.primary
-        TimerState.PHASE_SHORT, TimerState.PHASE_LONG -> MaterialTheme.colorScheme.secondary
-        else -> MaterialTheme.colorScheme.primary
-    }
-    val phaseColor by animateColorAsState(
-        targetValue = rawPhaseColor,
-        animationSpec = tween(PomoMotion.DurationL, easing = PomoMotion.EaseStandard),
-        label = "phase-color",
-    )
+    val colors = PomoTokens.colors
+    val isRunning = state?.status == TimerState.STATUS_RUNNING
+    val isPaused = state?.status == TimerState.STATUS_PAUSED
     val phaseLabel = when (state?.phase) {
-        TimerState.PHASE_WORK -> "Focus"
-        TimerState.PHASE_SHORT -> "Short break"
-        TimerState.PHASE_LONG -> "Long break"
-        else -> "Focus"
+        TimerState.PHASE_WORK -> "FOCUS"
+        TimerState.PHASE_SHORT -> "SHORT BREAK"
+        TimerState.PHASE_LONG -> "LONG BREAK"
+        else -> "FOCUS"
     }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 24.dp, vertical = 20.dp),
+            .background(colors.bg)
+            .padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         TimerHeader()
-        Spacer(Modifier.weight(0.5f))
 
-        Box(
-            modifier = Modifier.size(340.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            TimerRings(
-                state = state,
-                phaseColor = phaseColor,
-                completedSessions = state?.completed ?: 0,
-                dailyGoal = dailyGoal,
-            )
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TimerText(state, fallbackWorkSeconds)
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    text = phaseLabel.uppercase(Locale.US),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = phaseColor,
-                )
-            }
-        }
+        Spacer(Modifier.height(40.dp))
+
+        // Caps phase label.
+        Text(
+            text = phaseLabel,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.14.sp.value.sp),
+            color = colors.onSurfaceMuted,
+            fontWeight = FontWeight.SemiBold,
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        TimerReadout(state = state, fallbackWorkSeconds = fallbackWorkSeconds)
+
+        Spacer(Modifier.height(10.dp))
+
+        LiveStateIndicator(isRunning = isRunning, isPaused = isPaused)
 
         Spacer(Modifier.height(28.dp))
-        StatsStrip(stats, sessionsOverride = state?.completed, onClick = onStatsClick)
+
+        LinearProgress(
+            progress = derivedProgress(state, fallbackWorkSeconds),
+            modifier = Modifier.fillMaxWidth(),
+        )
+
+        Spacer(Modifier.height(24.dp))
+
+        LaunchPips(
+            completed = state?.completed ?: 0,
+            goal = dailyGoal.coerceAtLeast(1),
+            isRunning = isRunning,
+        )
+
         Spacer(Modifier.weight(1f))
+
+        StatsStrip(stats, sessionsOverride = state?.completed, onClick = onStatsClick)
+
+        Spacer(Modifier.height(20.dp))
+
         ControlsRow(
-            isRunning = state?.status == TimerState.STATUS_RUNNING,
-            isPaused = state?.status == TimerState.STATUS_PAUSED,
-            phaseColor = phaseColor,
+            isRunning = isRunning,
+            isPaused = isPaused,
             onToggle = onToggle,
             onSkip = onSkip,
             onReset = onReset,
         )
+
+        Spacer(Modifier.height(8.dp))
     }
 }
 
@@ -150,159 +157,146 @@ private fun TimerHeader() {
         Text(
             text = "POMO",
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            color = PomoTokens.colors.onSurfaceMuted,
         )
     }
 }
 
 @Composable
-private fun TimerText(state: TimerState?, fallbackWorkSeconds: Int) {
+private fun TimerReadout(state: TimerState?, fallbackWorkSeconds: Int) {
+    // ~60 fps tick loop while running, so the ms field rolls smoothly.
     val now = remember { mutableStateOf(System.currentTimeMillis()) }
     val syncTime = remember(state) { System.currentTimeMillis() }
-
     LaunchedEffect(state) {
         while (state?.status == TimerState.STATUS_RUNNING) {
+            awaitFrame()
             now.value = System.currentTimeMillis()
-            delay(500)
         }
         now.value = System.currentTimeMillis()
     }
-
     val seconds = if (state == null) {
         fallbackWorkSeconds.toDouble()
     } else {
         computeRemaining(state, syncTime, now.value)
     }
-
-    Text(
-        text = formatClock(seconds),
-        color = MaterialTheme.colorScheme.onSurface,
-        style = TimerTextStyle,
-        textAlign = TextAlign.Center,
-    )
+    Row(
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            text = formatClock(seconds),
+            color = PomoTokens.colors.onSurface,
+            style = TimerHeroStyle,
+        )
+        // Ms digits as a vertical telemetry column beside the hero — the instrument-panel
+        // detail the user asked for. Width-constrained so the hero stays optically centered.
+        if (state != null) {
+            Spacer(Modifier.width(6.dp))
+            Column(
+                modifier = Modifier
+                    .width(32.dp)
+                    .padding(top = 8.dp),
+                horizontalAlignment = Alignment.Start,
+            ) {
+                formatMs(seconds).forEach { ch ->
+                    Text(
+                        text = ch.toString(),
+                        color = PomoTokens.colors.onSurfaceFaint,
+                        style = TimerMsStyle,
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
-private fun TimerRings(
-    state: TimerState?,
-    phaseColor: Color,
-    completedSessions: Int,
-    dailyGoal: Int,
-) {
-    val innerTrack = MaterialTheme.colorScheme.surfaceVariant
-    val goalTrack = MaterialTheme.colorScheme.outline
-    val now = remember { mutableStateOf(System.currentTimeMillis()) }
-    val syncTime = remember(state) { System.currentTimeMillis() }
-    LaunchedEffect(state) {
-        while (state?.status == TimerState.STATUS_RUNNING) {
-            now.value = System.currentTimeMillis()
-            delay(250)
-        }
-        now.value = System.currentTimeMillis()
-    }
-
-    val timerProgress = computeProgress(state, syncTime, now.value)
-    val animatedTimer by animateFloatAsState(
-        targetValue = timerProgress,
-        animationSpec = tween(PomoMotion.DurationM, easing = PomoMotion.EaseStandard),
-        label = "timer-progress",
-    )
-    val goalProgress = if (dailyGoal > 0) {
-        (completedSessions.toFloat() / dailyGoal).coerceIn(0f, 1f)
-    } else {
-        0f
-    }
-    val animatedGoal by animateFloatAsState(
-        targetValue = goalProgress,
-        animationSpec = tween(PomoMotion.DurationL, easing = PomoMotion.EaseOutExpo),
-        label = "goal-progress",
-    )
-
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        drawCircle(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    phaseColor.copy(alpha = 0.32f),
-                    phaseColor.copy(alpha = 0.10f),
-                    Color.Transparent,
-                ),
-                center = center,
-                radius = size.minDimension * 0.58f,
-            ),
-            radius = size.minDimension * 0.58f,
-            center = center,
-        )
-
-        val outerStroke = 12.dp.toPx()
-        val innerStroke = 14.dp.toPx()
-        val outerInset = outerStroke / 2f + 6.dp.toPx()
-        val innerInset = outerInset + 42.dp.toPx()
-
-        drawSegmentedGoalRing(
-            track = goalTrack,
-            fill = Gold,
-            progress = animatedGoal,
-            segments = dailyGoal.coerceIn(1, 12),
-            inset = outerInset,
-            strokeWidth = outerStroke,
-            gapDegrees = 6f,
-        )
-
-        drawArc(
-            color = innerTrack,
-            startAngle = -90f,
-            sweepAngle = 360f,
-            useCenter = false,
-            topLeft = Offset(innerInset, innerInset),
-            size = Size(size.width - innerInset * 2, size.height - innerInset * 2),
-            style = Stroke(width = innerStroke, cap = StrokeCap.Round),
-        )
-        if (animatedTimer > 0f) {
-            drawArc(
-                color = phaseColor,
-                startAngle = -90f,
-                sweepAngle = 360f * animatedTimer,
-                useCenter = false,
-                topLeft = Offset(innerInset, innerInset),
-                size = Size(size.width - innerInset * 2, size.height - innerInset * 2),
-                style = Stroke(width = innerStroke, cap = StrokeCap.Round),
-            )
+private fun LiveStateIndicator(isRunning: Boolean, isPaused: Boolean) {
+    val signal = PomoTokens.colors.accent
+    val muted = PomoTokens.colors.onSurfaceMuted
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        when {
+            isRunning -> {
+                Box(
+                    modifier = Modifier
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(signal),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "LIVE",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = signal,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            isPaused -> {
+                Text(
+                    text = "[ PAUSED ]",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = muted,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
+            else -> {
+                Text(
+                    text = "READY",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = muted,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }
 
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawSegmentedGoalRing(
-    track: Color,
-    fill: Color,
-    progress: Float,
-    segments: Int,
-    inset: Float,
-    strokeWidth: Float,
-    gapDegrees: Float = 4f,
-) {
-    val sweep = (360f / segments) - gapDegrees
-    val filledSegments = progress * segments
-    repeat(segments) { index ->
-        val start = -90f + index * (360f / segments) + gapDegrees / 2f
-        drawArc(
-            color = track,
-            startAngle = start,
-            sweepAngle = sweep,
-            useCenter = false,
-            topLeft = Offset(inset, inset),
-            size = Size(size.width - inset * 2, size.height - inset * 2),
-            style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+@Composable
+private fun LinearProgress(progress: Float, modifier: Modifier = Modifier) {
+    val track = PomoTokens.colors.outline
+    val fill = PomoTokens.colors.accent
+    val animated by animateFloatAsState(
+        targetValue = progress.coerceIn(0f, 1f),
+        animationSpec = tween(120),
+        label = "linear-progress",
+    )
+    Box(
+        modifier = modifier
+            .height(4.dp)
+            .clip(RoundedCornerShape(2.dp))
+            .background(track),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(animated)
+                .height(4.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(fill),
         )
-        val fillAmount = (filledSegments - index).coerceIn(0f, 1f)
-        if (fillAmount > 0f) {
-            drawArc(
-                color = fill,
-                startAngle = start,
-                sweepAngle = sweep * fillAmount,
-                useCenter = false,
-                topLeft = Offset(inset, inset),
-                size = Size(size.width - inset * 2, size.height - inset * 2),
-                style = Stroke(width = strokeWidth, cap = StrokeCap.Round),
+    }
+}
+
+@Composable
+private fun LaunchPips(completed: Int, goal: Int, isRunning: Boolean) {
+    val signal = PomoTokens.colors.accent
+    val done = PomoTokens.colors.onSurfaceMuted
+    val empty = PomoTokens.colors.outline
+    val total = goal.coerceIn(1, 12)
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (i in 0 until total) {
+            val color = when {
+                i < completed -> done
+                i == completed && isRunning -> signal
+                else -> empty
+            }
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(RoundedCornerShape(1.dp))
+                    .background(color),
             )
         }
     }
@@ -318,6 +312,7 @@ private fun StatsStrip(
     val mins = stats.todayMinutes % 60
     val focusText = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
     val sessions = sessionsOverride ?: stats.todaySessions
+    val colors = PomoTokens.colors
 
     Row(
         modifier = Modifier
@@ -327,15 +322,15 @@ private fun StatsStrip(
         horizontalArrangement = Arrangement.SpaceEvenly,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        StatTile(focusText, "Today", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
+        StatTile(focusText, "TODAY", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
         StatDivider()
-        StatTile("$sessions", "Sessions", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
+        StatTile("$sessions", "SESSIONS", Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally)
         StatDivider()
         StatTile(
             "${stats.streak}",
-            "Streak",
+            "STREAK",
             Modifier.weight(1f),
-            accentColor = if (stats.streak > 0) Gold else MaterialTheme.colorScheme.onSurface,
+            accentColor = if (stats.streak > 0) colors.accent else colors.onSurface,
             horizontalAlignment = Alignment.CenterHorizontally,
         )
     }
@@ -346,8 +341,8 @@ private fun StatDivider() {
     Box(
         modifier = Modifier
             .width(1.dp)
-            .height(42.dp)
-            .background(MaterialTheme.colorScheme.outline),
+            .height(36.dp)
+            .background(PomoTokens.colors.outline),
     )
 }
 
@@ -356,12 +351,12 @@ private fun StatDivider() {
 private fun ControlsRow(
     isRunning: Boolean,
     isPaused: Boolean,
-    phaseColor: Color,
     onToggle: () -> Unit,
     onSkip: () -> Unit,
     onReset: () -> Unit,
 ) {
     val haptics = LocalHapticFeedback.current
+    val colors = PomoTokens.colors
     val resetInteractionSource = remember { MutableInteractionSource() }
     val isResetPressed by resetInteractionSource.collectIsPressedAsState()
     val resetFill by animateFloatAsState(
@@ -378,31 +373,8 @@ private fun ControlsRow(
         IconButton(
             onClick = {
                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onSkip()
+                onReset()
             },
-            modifier = Modifier.size(56.dp),
-        ) {
-            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Spacer(Modifier.width(26.dp))
-        FloatingActionButton(
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onToggle()
-            },
-            containerColor = phaseColor,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            shape = CircleShape,
-            modifier = Modifier.size(80.dp),
-        ) {
-            Icon(
-                imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
-                contentDescription = if (isRunning) "Pause" else if (isPaused) "Resume" else "Start",
-                modifier = Modifier.size(34.dp),
-            )
-        }
-        Spacer(Modifier.width(26.dp))
-        Box(
             modifier = Modifier
                 .size(56.dp)
                 .semantics {
@@ -423,30 +395,75 @@ private fun ControlsRow(
                         onReset()
                     },
                 ),
-            contentAlignment = Alignment.Center,
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Canvas(Modifier.size(34.dp)) {
-                    if (resetFill > 0f) {
-                        drawArc(
-                            color = phaseColor.copy(alpha = 0.24f),
-                            startAngle = -90f,
-                            sweepAngle = 360f * resetFill,
-                            useCenter = true,
-                        )
-                    }
+                if (resetFill > 0f) {
+                    Box(
+                        modifier = Modifier
+                            .size((24 + 18 * resetFill).dp)
+                            .clip(CircleShape)
+                            .background(colors.accent.copy(alpha = 0.18f * resetFill)),
+                    )
                 }
-                Icon(Icons.Default.Refresh, contentDescription = "Hold to reset", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = "Hold to reset",
+                    tint = colors.onSurfaceMuted,
+                )
             }
+        }
+        Spacer(Modifier.width(26.dp))
+        FloatingActionButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onToggle()
+            },
+            containerColor = colors.accent,
+            contentColor = Color.White,
+            shape = CircleShape,
+            modifier = Modifier.size(72.dp),
+        ) {
+            Icon(
+                imageVector = if (isRunning) Icons.Default.Pause else Icons.Default.PlayArrow,
+                contentDescription = if (isRunning) "Pause" else if (isPaused) "Resume" else "Start",
+                modifier = Modifier.size(32.dp),
+            )
+        }
+        Spacer(Modifier.width(26.dp))
+        IconButton(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onSkip()
+            },
+            modifier = Modifier.size(56.dp),
+        ) {
+            Icon(Icons.Default.SkipNext, contentDescription = "Skip", tint = colors.onSurfaceMuted)
         }
     }
 }
 
 private fun formatClock(seconds: Double): String {
-    val totalSeconds = kotlin.math.ceil(seconds).toInt().coerceAtLeast(0)
-    val mins = totalSeconds / 60
-    val secs = totalSeconds % 60
+    val total = seconds.coerceAtLeast(0.0)
+    val whole = total.toInt()
+    val mins = whole / 60
+    val secs = whole % 60
     return String.format(Locale.US, "%02d:%02d", mins, secs)
+}
+
+private fun formatMs(seconds: Double): String {
+    val total = seconds.coerceAtLeast(0.0)
+    val frac = total - total.toInt()
+    val ms = (frac * 1000).toInt().coerceIn(0, 999)
+    return String.format(Locale.US, "%03d", ms)
+}
+
+private fun derivedProgress(state: TimerState?, fallbackWorkSeconds: Int): Float {
+    if (state == null) return 0f
+    val total = if (state.duration > 0) state.duration else fallbackWorkSeconds.toDouble()
+    if (total <= 0) return 0f
+    val remaining = state.remaining
+    val elapsed = (total - remaining).coerceAtLeast(0.0)
+    return (elapsed / total).toFloat().coerceIn(0f, 1f)
 }
 
 private fun computeRemaining(state: TimerState?, syncTime: Long, nowMs: Long): Double {
@@ -454,16 +471,4 @@ private fun computeRemaining(state: TimerState?, syncTime: Long, nowMs: Long): D
     if (state.status != TimerState.STATUS_RUNNING) return state.remaining
     val elapsed = (nowMs - syncTime) / 1000.0
     return (state.remaining - elapsed).coerceAtLeast(0.0)
-}
-
-private fun computeProgress(state: TimerState?, syncTime: Long, nowMs: Long): Float {
-    if (state == null) return 0f
-    val total = if (state.duration > 0) state.duration else when (state.phase) {
-        TimerState.PHASE_WORK -> 1500.0
-        TimerState.PHASE_SHORT -> 300.0
-        TimerState.PHASE_LONG -> 900.0
-        else -> 1500.0
-    }
-    val remaining = computeRemaining(state, syncTime, nowMs)
-    return (remaining / total).toFloat().coerceIn(0f, 1f)
 }
