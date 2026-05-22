@@ -8,6 +8,7 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.util.TreeMap
 
 public object StatsAggregator {
 
@@ -50,6 +51,7 @@ public object StatsAggregator {
         val habit = computeHabitWindow(dayByDate, today, nowMs, tz)
         val goal = computeGoalSummary(dayByDate, today, dailyGoal, tz)
         val records = computeRecords(days, habit.bestStreak)
+        val chartTrend = computeChartTrend(days, sessions, dayByDate, today, tz)
 
         return StatsSnapshot(
             lifetime = lifetime,
@@ -58,6 +60,7 @@ public object StatsAggregator {
             habit = habit,
             goal = goal,
             records = records,
+            chartTrend = chartTrend,
         )
     }
 
@@ -243,6 +246,73 @@ public object StatsAggregator {
         val to = df.parse(toDate) ?: return 0
         val days = (to.time - from.time) / (1000L * 60 * 60 * 24)
         return (days.toInt() + 1).coerceAtLeast(1)
+    }
+
+    private fun computeChartTrend(
+        days: List<DayStatsEntity>,
+        sessions: List<SessionEntity>,
+        dayByDate: Map<String, DayStatsEntity>,
+        today: String,
+        tz: TimeZone,
+    ): ChartTrend {
+        val df = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { timeZone = tz }
+        val cal = Calendar.getInstance(tz)
+        val todayDate = df.parse(today) ?: return ChartTrend.Empty
+
+        // 1D — hourly buckets for today (minutes per hour)
+        val hourlyBuckets = IntArray(24)
+        for (s in sessions) {
+            if (s.type != WORK_TYPE || !s.completed) continue
+            cal.time = Date(s.start * 1000L)
+            if (df.format(cal.time) != today) continue
+            val h = cal.get(Calendar.HOUR_OF_DAY)
+            hourlyBuckets[h] += ((s.duration + 59) / 60).coerceAtLeast(1)
+        }
+        val todaySeries = TrendSeries((0..23).map { h ->
+            TrendPoint(label = h.toString(), value = hourlyBuckets[h].toFloat())
+        })
+
+        // 7D — one data point per day, last 7 days oldest→newest
+        val dowLabels = listOf("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+        val weekPoints: List<TrendPoint> = (6 downTo 0).map { daysAgo ->
+            val c = Calendar.getInstance(tz).apply { time = todayDate; add(Calendar.DAY_OF_YEAR, -daysAgo) }
+            val key = df.format(c.time)
+            val mins = dayByDate[key]?.workMinutes ?: 0
+            val dow = c.get(Calendar.DAY_OF_WEEK) // Sun=1
+            TrendPoint(label = dowLabels[(dow + 5) % 7], value = mins.toFloat())
+        }
+        val weekSeries = TrendSeries(weekPoints)
+
+        // 28D — 4 weekly totals, oldest week first
+        val monthPoints: List<TrendPoint> = (3 downTo 0).map { weeksAgo ->
+            var weekMins = 0
+            var weekLabel = ""
+            for (dayInWeek in 6 downTo 0) {
+                val offset = -(weeksAgo * 7 + dayInWeek)
+                val c = Calendar.getInstance(tz).apply { time = todayDate; add(Calendar.DAY_OF_YEAR, offset) }
+                val key = df.format(c.time)
+                weekMins += dayByDate[key]?.workMinutes ?: 0
+                if (dayInWeek == 6) weekLabel = "Wk${4 - weeksAgo}"
+            }
+            TrendPoint(label = weekLabel, value = weekMins.toFloat())
+        }
+        val monthSeries = TrendSeries(monthPoints)
+
+        // ALL TIME — aggregate by calendar month, oldest→newest
+        val monthlyMap = TreeMap<String, Int>()
+        for (d in days) {
+            val key = d.date.substring(0, 7) // "YYYY-MM"
+            monthlyMap[key] = (monthlyMap[key] ?: 0) + d.workMinutes
+        }
+        val monthFmt = SimpleDateFormat("MMM", Locale.US).apply { timeZone = tz }
+        val parseFmt = SimpleDateFormat("yyyy-MM", Locale.US).apply { timeZone = tz }
+        val allTimePoints: List<TrendPoint> = monthlyMap.entries.map { (key, mins) ->
+            val label = parseFmt.parse(key)?.let { monthFmt.format(it) } ?: key.substring(5)
+            TrendPoint(label = label, value = mins.toFloat())
+        }
+        val allTimeSeries = TrendSeries(allTimePoints.ifEmpty { listOf(TrendPoint("—", 0f)) })
+
+        return ChartTrend(today = todaySeries, week = weekSeries, month = monthSeries, allTime = allTimeSeries)
     }
 
     private fun buildEmptyHabitCells(today: String, weeks: Int, tz: TimeZone): List<HeatCell> {

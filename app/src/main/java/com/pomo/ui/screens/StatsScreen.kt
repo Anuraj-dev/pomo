@@ -48,10 +48,14 @@ import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.line.lineChart
 import com.patrykandpatrick.vico.compose.chart.line.lineSpec
 import com.patrykandpatrick.vico.compose.component.shape.shader.verticalGradient
+import com.patrykandpatrick.vico.core.axis.AxisPosition
+import com.patrykandpatrick.vico.core.axis.formatter.AxisValueFormatter
+import com.patrykandpatrick.vico.core.chart.values.ChartValues
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.pomo.stats.BestDay
 import com.pomo.stats.BestWeek
+import com.pomo.stats.ChartTrend
 import com.pomo.stats.HabitWindow
 import com.pomo.stats.HeatCell
 import com.pomo.stats.Lifetime
@@ -110,9 +114,9 @@ public fun StatsScreen(
         }
 
         Spacer(Modifier.height(12.dp))
-        SectionHeader("Per day trend")
+        SectionHeader("Trend")
         Spacer(Modifier.height(14.dp))
-        PerDayLineChart(snapshot.habit)
+        PerDayLineChart(snapshot.chartTrend)
 
         Spacer(Modifier.height(24.dp))
         TodayWeekStrip(snapshot.habit)
@@ -430,8 +434,8 @@ private fun formatSinceDate(iso: String): String = try {
     iso
 }
 
-private enum class TrendRange(val label: String, val days: Int?) {
-    Days7("7D", 7), Days30("30D", 30), Days90("90D", 90), All("ALL", null),
+private enum class TrendRange(val label: String) {
+    Today("1D"), Days7("7D"), Days28("28D"), AllTime("ALL"),
 }
 
 @Composable
@@ -459,51 +463,60 @@ private fun TrendRangePills(selected: TrendRange, onSelect: (TrendRange) -> Unit
 }
 
 @Composable
-private fun PerDayLineChart(habit: HabitWindow) {
-    var range by remember { mutableStateOf(TrendRange.Days30) }
-    val allPoints = habit.cells
-    val points = when (range) {
-        TrendRange.Days7 -> allPoints.takeLast(7)
-        TrendRange.Days30 -> allPoints.takeLast(30)
-        TrendRange.Days90 -> allPoints.takeLast(90)
-        TrendRange.All -> allPoints
+private fun PerDayLineChart(trend: ChartTrend) {
+    var range by remember { mutableStateOf(TrendRange.Days7) }
+    val series = when (range) {
+        TrendRange.Today -> trend.today
+        TrendRange.Days7 -> trend.week
+        TrendRange.Days28 -> trend.month
+        TrendRange.AllTime -> trend.allTime
     }
+    val points = series.points
     if (points.isEmpty()) return
 
     val accent = PomoTokens.colors.accent
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
-    val maxMinutes = points.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
     val modelProducer = remember { ChartEntryModelProducer() }
 
     LaunchedEffect(points) {
-        modelProducer.setEntries(points.mapIndexed { i, c -> FloatEntry(i.toFloat(), c.minutes.toFloat()) })
+        modelProducer.setEntries(points.mapIndexed { i, p -> FloatEntry(i.toFloat(), p.value) })
     }
 
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
         TrendRangePills(selected = range, onSelect = { range = it })
     }
-
     Spacer(Modifier.height(10.dp))
 
     val areaShader = verticalGradient(arrayOf(accent.copy(alpha = 0.25f), Color.Transparent))
     val spec = lineSpec(lineColor = accent, lineThickness = 2.dp, lineBackgroundShader = areaShader)
+
+    val labels = points.map { it.label }
+    val labelFormatter = remember(labels) {
+        object : AxisValueFormatter<AxisPosition.Horizontal.Bottom> {
+            override fun formatValue(value: Float, chartValues: ChartValues): CharSequence =
+                labels.getOrElse(value.toInt()) { "" }
+        }
+    }
 
     Chart(
         modifier = Modifier.fillMaxWidth().height(160.dp),
         chart = lineChart(lines = listOf(spec)),
         chartModelProducer = modelProducer,
         startAxis = rememberStartAxis(),
-        bottomAxis = rememberBottomAxis(),
+        bottomAxis = rememberBottomAxis(valueFormatter = labelFormatter),
     )
 
     Spacer(Modifier.height(8.dp))
+    val maxVal = points.maxOfOrNull { it.value.toInt() }?.coerceAtLeast(1) ?: 1
+    val rangeDesc = when (range) {
+        TrendRange.Today -> "today by hour"
+        TrendRange.Days7 -> "last 7 days"
+        TrendRange.Days28 -> "last 4 weeks"
+        TrendRange.AllTime -> "all time by month"
+    }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(formatPrettyDate(points.first().date), style = MaterialTheme.typography.labelSmall, color = muted)
-        Text("max ${maxMinutes}m/day", style = MaterialTheme.typography.labelSmall, color = muted)
-        Text(formatPrettyDate(points.last().date), style = MaterialTheme.typography.labelSmall, color = muted)
+        Text(rangeDesc, style = MaterialTheme.typography.labelSmall, color = muted)
+        Text("max ${maxVal}m", style = MaterialTheme.typography.labelSmall, color = muted)
     }
 }
 

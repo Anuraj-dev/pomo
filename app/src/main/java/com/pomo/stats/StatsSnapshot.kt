@@ -1,5 +1,25 @@
 package com.pomo.stats
 
+public data class TrendPoint(val label: String, val value: Float)
+
+public data class TrendSeries(val points: List<TrendPoint>)
+
+public data class ChartTrend(
+    val today: TrendSeries,
+    val week: TrendSeries,
+    val month: TrendSeries,
+    val allTime: TrendSeries,
+) {
+    public companion object {
+        public val Empty: ChartTrend = ChartTrend(
+            today = TrendSeries(emptyList()),
+            week = TrendSeries(emptyList()),
+            month = TrendSeries(emptyList()),
+            allTime = TrendSeries(emptyList()),
+        )
+    }
+}
+
 public data class StatsSnapshot(
     val lifetime: Lifetime,
     val rhythm: HourRhythm,
@@ -7,6 +27,7 @@ public data class StatsSnapshot(
     val habit: HabitWindow,
     val goal: GoalSummary,
     val records: Records,
+    val chartTrend: ChartTrend,
 ) {
     public val isEmpty: Boolean get() = lifetime.sessions == 0
 
@@ -18,6 +39,7 @@ public data class StatsSnapshot(
             habit = HabitWindow(weeks = 12, cells = emptyList(), currentStreak = 0, bestStreak = 0),
             goal = GoalSummary(dailyGoal = 0, daysHit = 0, totalDays = 0),
             records = Records(bestDay = null, bestWeek = null, longestStreak = 0),
+            chartTrend = ChartTrend.Empty,
         )
     }
 }
