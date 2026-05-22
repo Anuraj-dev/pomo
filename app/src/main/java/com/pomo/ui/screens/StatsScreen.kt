@@ -23,6 +23,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -31,10 +33,17 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
+import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.chart.Chart
+import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
+import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.pomo.stats.BestDay
 import com.pomo.stats.BestWeek
 import com.pomo.stats.HabitWindow
+import com.pomo.stats.HeatCell
 import com.pomo.stats.Lifetime
 import com.pomo.stats.Records
 import com.pomo.stats.StatsSnapshot
@@ -90,7 +99,15 @@ public fun StatsScreen(
             return@Column
         }
 
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(12.dp))
+        SectionHeader("Per day trend")
+        Spacer(Modifier.height(14.dp))
+        PerDayLineChart(snapshot.habit)
+
+        Spacer(Modifier.height(24.dp))
+        TodayWeekStrip(snapshot.habit)
+
+        Spacer(Modifier.height(24.dp))
         LifetimeHeroBlock(snapshot.lifetime)
 
         Spacer(Modifier.height(32.dp))
@@ -403,6 +420,112 @@ private fun formatSinceDate(iso: String): String = try {
     iso
 }
 
-@Suppress("unused")
+@Composable
+private fun PerDayLineChart(habit: HabitWindow) {
+    val points = habit.cells.takeLast(30)
+    if (points.isEmpty()) return
+
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val maxMinutes = points.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
+    val modelProducer = remember { ChartEntryModelProducer() }
+
+    LaunchedEffect(points) {
+        val entries = points.mapIndexed { index, cell -> FloatEntry(index.toFloat(), cell.minutes.toFloat()) }
+        modelProducer.setEntries(entries)
+    }
+
+    Chart(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        chart = lineChart(),
+        chartModelProducer = modelProducer,
+        bottomAxis = rememberBottomAxis(),
+    )
+
+    Spacer(Modifier.height(8.dp))
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(
+            text = formatPrettyDate(points.first().date),
+            style = MaterialTheme.typography.labelSmall,
+            color = muted,
+        )
+        Text(
+            text = "max ${maxMinutes}m/day",
+            style = MaterialTheme.typography.labelSmall,
+            color = muted,
+        )
+        Text(
+            text = formatPrettyDate(points.last().date),
+            style = MaterialTheme.typography.labelSmall,
+            color = muted,
+        )
+    }
+}
+
 private fun nowFormatted(): String =
     SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+private data class Kpi(val minutes: Int, val sessions: Int)
+
+private fun computeKpis(habit: HabitWindow): Pair<Kpi, Kpi> {
+    val today = nowFormatted()
+    val cells: List<HeatCell> = habit.cells
+    val todayCell = cells.lastOrNull { it.date == today }
+    val todayKpi = Kpi(todayCell?.minutes ?: 0, todayCell?.sessions ?: 0)
+
+    val todayIdx = cells.indexOfLast { it.date == today }
+    val weekSlice = if (todayIdx >= 0) {
+        cells.subList((todayIdx - 6).coerceAtLeast(0), todayIdx + 1)
+    } else {
+        cells.takeLast(7)
+    }
+    val weekKpi = Kpi(
+        minutes = weekSlice.sumOf { it.minutes },
+        sessions = weekSlice.sumOf { it.sessions },
+    )
+    return todayKpi to weekKpi
+}
+
+@Composable
+private fun TodayWeekStrip(habit: HabitWindow) {
+    val (today, week) = computeKpis(habit)
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(24.dp),
+    ) {
+        KpiCell(label = "TODAY", kpi = today, modifier = Modifier.weight(1f))
+        KpiCell(label = "THIS WEEK", kpi = week, modifier = Modifier.weight(1f))
+    }
+}
+
+@Composable
+private fun KpiCell(label: String, kpi: Kpi, modifier: Modifier = Modifier) {
+    val hours = kpi.minutes / 60
+    val mins = kpi.minutes % 60
+    val value = when {
+        kpi.minutes == 0 -> "0m"
+        hours > 0 -> "${hours}h ${mins}m"
+        else -> "${mins}m"
+    }
+    val sessionSub = "${kpi.sessions} " + if (kpi.sessions == 1) "session" else "sessions"
+    Column(modifier = modifier) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp, letterSpacing = 0.18f.em),
+            color = PomoTokens.colors.onSurfaceMuted,
+        )
+        Spacer(Modifier.height(6.dp))
+        Text(
+            text = value,
+            style = TimerTextStyle.copy(fontSize = 28.sp),
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            text = sessionSub,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

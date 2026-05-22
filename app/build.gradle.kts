@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.pomo"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.pomo"
@@ -96,6 +96,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.2")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.2")
     debugImplementation("androidx.compose.ui:ui-tooling")
+    implementation("com.patrykandpatrick.vico:compose:1.13.1")
+    implementation("com.patrykandpatrick.vico:compose-m3:1.13.1")
 
     // Networking
     implementation("com.google.code.gson:gson:2.10.1")

@@ -1,0 +1,11 @@
+{
+  "name": "pomo-android-runner",
+  "private": true,
+  "scripts": {
+    "android:build": "JAVA_HOME=/usr/lib/jvm/jdk-17.0.12-oracle-x64 PATH=/usr/lib/jvm/jdk-17.0.12-oracle-x64/bin:$PATH ./gradlew assembleDevDebug",
+    "android:install": "adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk",
+    "android:start": "adb shell am start -n com.pomo/.MainActivity",
+    "android:logs": "adb logcat -s PomodoroService PhoneServer",
+    "android": "bun run android:build && bun run android:install && bun run android:start"
+  }
+}
