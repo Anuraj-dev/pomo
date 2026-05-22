@@ -2,6 +2,8 @@ package com.pomo.ui.screens
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
@@ -24,9 +27,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -36,8 +43,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.patrykandpatrick.vico.compose.axis.horizontal.rememberBottomAxis
+import com.patrykandpatrick.vico.compose.axis.vertical.rememberStartAxis
 import com.patrykandpatrick.vico.compose.chart.Chart
 import com.patrykandpatrick.vico.compose.chart.line.lineChart
+import com.patrykandpatrick.vico.compose.chart.line.lineSpec
+import com.patrykandpatrick.vico.compose.component.shape.shader.verticalGradient
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.pomo.stats.BestDay
@@ -420,46 +430,80 @@ private fun formatSinceDate(iso: String): String = try {
     iso
 }
 
+private enum class TrendRange(val label: String, val days: Int?) {
+    Days7("7D", 7), Days30("30D", 30), Days90("90D", 90), All("ALL", null),
+}
+
+@Composable
+private fun TrendRangePills(selected: TrendRange, onSelect: (TrendRange) -> Unit) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        TrendRange.entries.forEach { r ->
+            val active = r == selected
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(4.dp))
+                    .background(if (active) PomoTokens.colors.accent else Color.Transparent)
+                    .border(1.dp, if (active) PomoTokens.colors.accent else PomoTokens.colors.outline, RoundedCornerShape(4.dp))
+                    .clickable { onSelect(r) }
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = r.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = if (active) MaterialTheme.colorScheme.background else PomoTokens.colors.onSurfaceMuted,
+                )
+            }
+        }
+    }
+}
+
 @Composable
 private fun PerDayLineChart(habit: HabitWindow) {
-    val points = habit.cells.takeLast(30)
+    var range by remember { mutableStateOf(TrendRange.Days30) }
+    val allPoints = habit.cells
+    val points = when (range) {
+        TrendRange.Days7 -> allPoints.takeLast(7)
+        TrendRange.Days30 -> allPoints.takeLast(30)
+        TrendRange.Days90 -> allPoints.takeLast(90)
+        TrendRange.All -> allPoints
+    }
     if (points.isEmpty()) return
 
+    val accent = PomoTokens.colors.accent
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val maxMinutes = points.maxOfOrNull { it.minutes }?.coerceAtLeast(1) ?: 1
     val modelProducer = remember { ChartEntryModelProducer() }
 
     LaunchedEffect(points) {
-        val entries = points.mapIndexed { index, cell -> FloatEntry(index.toFloat(), cell.minutes.toFloat()) }
-        modelProducer.setEntries(entries)
+        modelProducer.setEntries(points.mapIndexed { i, c -> FloatEntry(i.toFloat(), c.minutes.toFloat()) })
     }
 
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        TrendRangePills(selected = range, onSelect = { range = it })
+    }
+
+    Spacer(Modifier.height(10.dp))
+
+    val areaShader = verticalGradient(arrayOf(accent.copy(alpha = 0.25f), Color.Transparent))
+    val spec = lineSpec(lineColor = accent, lineThickness = 2.dp, lineBackgroundShader = areaShader)
+
     Chart(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(160.dp),
-        chart = lineChart(),
+        modifier = Modifier.fillMaxWidth().height(160.dp),
+        chart = lineChart(lines = listOf(spec)),
         chartModelProducer = modelProducer,
+        startAxis = rememberStartAxis(),
         bottomAxis = rememberBottomAxis(),
     )
 
     Spacer(Modifier.height(8.dp))
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(
-            text = formatPrettyDate(points.first().date),
-            style = MaterialTheme.typography.labelSmall,
-            color = muted,
-        )
-        Text(
-            text = "max ${maxMinutes}m/day",
-            style = MaterialTheme.typography.labelSmall,
-            color = muted,
-        )
-        Text(
-            text = formatPrettyDate(points.last().date),
-            style = MaterialTheme.typography.labelSmall,
-            color = muted,
-        )
+        Text(formatPrettyDate(points.first().date), style = MaterialTheme.typography.labelSmall, color = muted)
+        Text("max ${maxMinutes}m/day", style = MaterialTheme.typography.labelSmall, color = muted)
+        Text(formatPrettyDate(points.last().date), style = MaterialTheme.typography.labelSmall, color = muted)
     }
 }
 
@@ -468,8 +512,9 @@ private fun nowFormatted(): String =
 
 private data class Kpi(val minutes: Int, val sessions: Int)
 
-private fun computeKpis(habit: HabitWindow): Pair<Kpi, Kpi> {
+private fun computeKpis(habit: HabitWindow): Triple<Kpi, Kpi, Kpi> {
     val today = nowFormatted()
+    val thisMonthPrefix = today.substring(0, 7)
     val cells: List<HeatCell> = habit.cells
     val todayCell = cells.lastOrNull { it.date == today }
     val todayKpi = Kpi(todayCell?.minutes ?: 0, todayCell?.sessions ?: 0)
@@ -480,27 +525,41 @@ private fun computeKpis(habit: HabitWindow): Pair<Kpi, Kpi> {
     } else {
         cells.takeLast(7)
     }
-    val weekKpi = Kpi(
-        minutes = weekSlice.sumOf { it.minutes },
-        sessions = weekSlice.sumOf { it.sessions },
-    )
-    return todayKpi to weekKpi
+    val weekKpi = Kpi(minutes = weekSlice.sumOf { it.minutes }, sessions = weekSlice.sumOf { it.sessions })
+
+    val monthCells = cells.filter { it.date.startsWith(thisMonthPrefix) }
+    val monthKpi = Kpi(minutes = monthCells.sumOf { it.minutes }, sessions = monthCells.sumOf { it.sessions })
+
+    return Triple(todayKpi, weekKpi, monthKpi)
+}
+
+private fun computeWeekDelta(habit: HabitWindow): Int? {
+    val today = nowFormatted()
+    val cells = habit.cells
+    val todayIdx = cells.indexOfLast { it.date == today }
+    if (todayIdx < 13) return null
+    val thisWeek = cells.subList((todayIdx - 6).coerceAtLeast(0), todayIdx + 1).sumOf { it.sessions }
+    val lastWeek = cells.subList((todayIdx - 13).coerceAtLeast(0), (todayIdx - 6).coerceAtLeast(0)).sumOf { it.sessions }
+    if (lastWeek == 0) return null
+    return ((thisWeek - lastWeek) * 100 / lastWeek)
 }
 
 @Composable
 private fun TodayWeekStrip(habit: HabitWindow) {
-    val (today, week) = computeKpis(habit)
+    val (today, week, month) = computeKpis(habit)
+    val weekDelta = computeWeekDelta(habit)
     Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(24.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         KpiCell(label = "TODAY", kpi = today, modifier = Modifier.weight(1f))
-        KpiCell(label = "THIS WEEK", kpi = week, modifier = Modifier.weight(1f))
+        KpiCell(label = "THIS WEEK", kpi = week, delta = weekDelta, modifier = Modifier.weight(1f))
+        KpiCell(label = "THIS MONTH", kpi = month, modifier = Modifier.weight(1f))
     }
 }
 
 @Composable
-private fun KpiCell(label: String, kpi: Kpi, modifier: Modifier = Modifier) {
+private fun KpiCell(label: String, kpi: Kpi, modifier: Modifier = Modifier, delta: Int? = null) {
     val hours = kpi.minutes / 60
     val mins = kpi.minutes % 60
     val value = when {
@@ -527,5 +586,15 @@ private fun KpiCell(label: String, kpi: Kpi, modifier: Modifier = Modifier) {
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        if (delta != null) {
+            val sign = if (delta >= 0) "↑" else "↓"
+            val deltaColor = if (delta >= 0) PomoTokens.colors.accent else PomoTokens.colors.onSurfaceMuted
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = "$sign ${kotlin.math.abs(delta)}% vs last wk",
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                color = deltaColor,
+            )
+        }
     }
 }
