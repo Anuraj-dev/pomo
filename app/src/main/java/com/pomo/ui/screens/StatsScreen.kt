@@ -477,9 +477,12 @@ private fun PerDayLineChart(trend: ChartTrend) {
     val accent = PomoTokens.colors.accent
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val modelProducer = remember { ChartEntryModelProducer() }
+    var chartReady by remember(points) { mutableStateOf(false) }
 
     LaunchedEffect(points) {
+        chartReady = false
         modelProducer.setEntries(points.mapIndexed { i, p -> FloatEntry(i.toFloat(), p.value) })
+        chartReady = true
     }
 
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -498,13 +501,17 @@ private fun PerDayLineChart(trend: ChartTrend) {
         }
     }
 
-    Chart(
-        modifier = Modifier.fillMaxWidth().height(160.dp),
-        chart = lineChart(lines = listOf(spec)),
-        chartModelProducer = modelProducer,
-        startAxis = rememberStartAxis(),
-        bottomAxis = rememberBottomAxis(valueFormatter = labelFormatter),
-    )
+    if (chartReady) {
+        Chart(
+            modifier = Modifier.fillMaxWidth().height(160.dp),
+            chart = lineChart(lines = listOf(spec)),
+            chartModelProducer = modelProducer,
+            startAxis = rememberStartAxis(),
+            bottomAxis = rememberBottomAxis(valueFormatter = labelFormatter),
+        )
+    } else {
+        Spacer(Modifier.fillMaxWidth().height(160.dp))
+    }
 
     Spacer(Modifier.height(8.dp))
     val maxVal = points.maxOfOrNull { it.value.toInt() }?.coerceAtLeast(1) ?: 1
