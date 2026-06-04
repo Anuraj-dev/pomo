@@ -14,18 +14,19 @@ import androidx.core.content.FileProvider
 import androidx.fragment.app.Fragment
 import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
+import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.db.SessionEntity
+import com.pomo.stats.StatsAggregator
+import com.pomo.stats.StatsSnapshot
 import com.pomo.ui.screens.StatsScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.util.DateLogic
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.map
 import java.io.File
 
 public class StatsFragment : Fragment() {
@@ -39,7 +40,6 @@ public class StatsFragment : Fragment() {
     private val mainActivity: MainActivity?
         get() = activity as? MainActivity
 
-    @OptIn(ExperimentalCoroutinesApi::class)
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -47,37 +47,32 @@ public class StatsFragment : Fragment() {
     ): View {
         val ctx = requireContext()
         val repo = HistoryCacheRepository(ctx)
-        val historyFlow: Flow<Map<String, DayEntry>> = repo.observeDayStats().map { entities ->
-            entities.associate {
-                it.date to DayEntry(
-                    completed = it.completed,
-                    work_minutes = it.workMinutes,
-                    break_minutes = it.breakMinutes,
+
+        val daysFlow: Flow<List<DayStatsEntity>> = repo.observeDayStats()
+        val sessionsFlow: Flow<List<SessionEntity>> = repo.observeAllSessions()
+        val todayFlow: Flow<String> = currentDateFlow()
+
+        val snapshotFlow: Flow<StatsSnapshot> =
+            combine(daysFlow, sessionsFlow, todayFlow) { days, sessions, today ->
+                val goal = mainActivity?.prefs?.dailyGoal ?: 8
+                StatsAggregator.aggregate(
+                    days = days,
+                    sessions = sessions,
+                    dailyGoal = goal,
+                    today = today,
+                    nowMs = System.currentTimeMillis(),
                 )
             }
-        }
-        val todayFlow = currentDateFlow()
-        val sessionsFlow: Flow<List<SessionEntity>> = todayFlow.flatMapLatest { date ->
-            repo.observeSessionsForDate(date)
-        }
 
         return ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: com.pomo.ui.theme.ThemeMode.System) {
-                    val history by historyFlow.collectAsState(initial = emptyMap())
-                    val today by todayFlow.collectAsState(initial = DateLogic.effectiveDate(System.currentTimeMillis()))
-                    val sessions by sessionsFlow.collectAsState(initial = emptyList())
-                    val act = mainActivity
-                    val goal = act?.prefs?.dailyGoal ?: 8
-                    val sessionMins = act?.prefs?.pomodoroDuration ?: 25
+                    val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
+                    val days by daysFlow.collectAsState(initial = emptyList())
                     StatsScreen(
-                        history = history,
-                        today = today,
-                        todaySessions = sessions,
-                        dailyGoal = goal,
-                        sessionMinutes = sessionMins,
-                        onExport = { exportStats(history) },
+                        snapshot = snapshot,
+                        onExport = { exportStats(days) },
                     )
                 }
             }
@@ -91,17 +86,17 @@ public class StatsFragment : Fragment() {
         }
     }.distinctUntilChanged()
 
-    private fun exportStats(history: Map<String, DayEntry>) {
+    private fun exportStats(days: List<DayStatsEntity>) {
         val ctx = context ?: return
-        if (history.isEmpty()) {
+        if (days.isEmpty()) {
             Toast.makeText(ctx, "No data to export", Toast.LENGTH_SHORT).show()
             return
         }
         try {
             val csv = buildString {
                 append("Date,WorkMinutes,Completed\n")
-                history.entries.sortedByDescending { it.key }.forEach { (date, entry) ->
-                    append("$date,${entry.work_minutes},${entry.completed}\n")
+                days.sortedByDescending { it.date }.forEach { d ->
+                    append("${d.date},${d.workMinutes},${d.completed}\n")
                 }
             }
             val file = File(ctx.cacheDir, "pomo_stats.csv").apply { writeText(csv) }

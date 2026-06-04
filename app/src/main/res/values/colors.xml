@@ -8,25 +8,25 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
 
-    <!-- Material 3 Palette -->
-    <color name="md_theme_primary">#D64A3F</color> <!-- Focus Coral -->
+    <!-- Cool slate + signal red palette (light) -->
+    <color name="md_theme_primary">#E84A36</color>
     <color name="md_theme_onPrimary">#FFFFFF</color>
-    <color name="md_theme_primaryContainer">#24D64A3F</color>
-    <color name="md_theme_secondary">#1E9A8A</color> <!-- Break Teal -->
+    <color name="md_theme_primaryContainer">#1FE84A36</color>
+    <color name="md_theme_secondary">#5C6478</color>
     <color name="md_theme_onSecondary">#FFFFFF</color>
-    <color name="md_theme_background">#FBF8F2</color>
+    <color name="md_theme_background">#F2F3F6</color>
     <color name="md_theme_surface">#FFFFFF</color>
-    <color name="md_theme_onSurface">#1B1718</color>
-    <color name="md_theme_surfaceVariant">#F5F1E8</color>
-    <color name="md_theme_onSurfaceVariant">#5D585A</color>
+    <color name="md_theme_onSurface">#131418</color>
+    <color name="md_theme_surfaceVariant">#E1E3EA</color>
+    <color name="md_theme_onSurfaceVariant">#6C7080</color>
 
-    <color name="md_theme_onPrimaryContainer">#FFD8D8</color>
-    <color name="md_theme_secondaryContainer">#1F4E4B</color>
-    <color name="md_theme_onSecondaryContainer">#A0EFE7</color>
-    <color name="md_theme_tertiaryContainer">#4A4458</color>
-    <color name="md_theme_onTertiaryContainer">#E8DEF8</color>
+    <color name="md_theme_onPrimaryContainer">#E84A36</color>
+    <color name="md_theme_secondaryContainer">#E1E4ED</color>
+    <color name="md_theme_onSecondaryContainer">#2A2D36</color>
+    <color name="md_theme_tertiaryContainer">#E1E4ED</color>
+    <color name="md_theme_onTertiaryContainer">#2A2D36</color>
 
     <color name="status_connected">#2C8F4E</color>
     <color name="status_offline">#B8721F</color>
-    <color name="gold">#C79320</color>
+    <color name="gold">#E84A36</color>
 </resources>

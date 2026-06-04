@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import com.pomo.ui.theme.PomoTheme
+import com.pomo.ui.theme.PomoTokens
 
 @Composable
 public fun SectionHeader(
@@ -16,7 +17,7 @@ public fun SectionHeader(
         text = title.uppercase(),
         modifier = modifier,
         style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.primary,
+        color = PomoTokens.colors.onSurfaceMuted,
     )
 }
 
