@@ -1,38 +1,52 @@
 # Pomo
 
-Pomo is a mobile-first Pomodoro timer for Android. The phone is the
-canonical app: it owns the timer, settings, session history, notifications, and
-widgets. Desktop integrations can pair with the phone and act as thin remote
-clients.
+Pomo is a local-first Pomodoro timer for Android. It treats the phone as the
+source of truth for timer state, settings, session history, notifications,
+widgets, and the optional LAN desktop API.
 
-This branch intentionally stops treating a laptop/server process as the source
-of truth. Existing laptop history is not imported or merged.
+The app is built like a focus instrument: large live time, dense stats, local
+history, and direct controls. Desktop integrations are thin clients; they can
+display or command the phone, but they do not own state.
 
-## What It Does
+<p>
+  <img src="artifacts/screenshots/pomo-timer.jpg" alt="Pomo timer screen" width="240">
+  <img src="artifacts/screenshots/pomo-stats.jpg" alt="Pomo stats screen" width="240">
+  <img src="artifacts/screenshots/pomo-settings.jpg" alt="Pomo settings screen" width="240">
+</p>
 
-- Runs a Pomodoro timer locally in an Android foreground service.
-- Persists timer state across app restarts.
-- Stores completed sessions and daily stats in Room.
-- Splits sessions that cross midnight across local calendar days.
-- Updates the Timer, Stats, History, notification, and home-screen widget from
-  phone-owned state.
-- Hosts a local HTTP/WebSocket API for desktop clients.
-- Protects remote control with a pairing token.
-- Includes a thin TypeScript desktop client for laptop display/control.
+## Features
+
+- Phone-owned Pomodoro, short break, and long break timer state.
+- Foreground service for resilient timing across app restarts.
+- Room-backed completed session history and daily stats.
+- Local-calendar history handling, including sessions that cross midnight.
+- Timer, Stats, History, Settings, notification, and home-screen widget updates
+  from the same phone-owned state.
+- Optional local HTTP/WebSocket API for desktop display and control.
+- Pairing-token protection for remote commands.
+- Thin TypeScript desktop client for terminal, Waybar, QR, and service flows.
+
+## Requirements
+
+- JDK 17+
+- Android SDK, preferably at `~/Android/Sdk`
+- A connected Android device or emulator for install/run checks
+
+Set `ANDROID_HOME` if your shell does not already provide it:
+
+```bash
+export ANDROID_HOME="$HOME/Android/Sdk"
+```
 
 ## Build
 
-Requires JDK 17+.
-
-Use the Gradle wrapper when the Android SDK is already configured. The dev
-variant is unminified and is the fast local build:
+Fast dev build:
 
 ```bash
 ./gradlew assembleDevDebug
 ```
 
-Or use the lightweight builder, which bootstraps the local Android SDK in this
-checkout before calling the wrapper:
+Builder script, useful when this checkout needs to prepare its local SDK first:
 
 ```bash
 ./build_apk.sh
@@ -44,7 +58,7 @@ Debug APK:
 app/build/outputs/apk/dev/debug/app-dev-debug.apk
 ```
 
-Production release APKs run R8 minification and resource shrinking:
+Production release build:
 
 ```bash
 ./gradlew assembleProdRelease
@@ -56,7 +70,9 @@ Production APK:
 app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk
 ```
 
-## Run On A Device
+## Run
+
+Install and launch the dev build:
 
 ```bash
 adb install -r -g app/build/outputs/apk/dev/debug/app-dev-debug.apk
@@ -69,10 +85,10 @@ Useful logs:
 adb logcat -s PomodoroService PhoneServer
 ```
 
-## Pair A Desktop Client
+## Desktop Pairing
 
-1. Open the Android app.
-2. Go to Settings.
+1. Open Pomo on the phone.
+2. Open Settings.
 3. Tap "Pair desktop client".
 4. Use the displayed JSON payload or QR code in the desktop client.
 
@@ -83,18 +99,13 @@ adb logcat -s PomodoroService PhoneServer
 }
 ```
 
-The phone must be reachable on the same network. The default API port is
+The phone and desktop must be on the same network. The default API port is
 `9876`, configurable in Settings.
-
-Android Settings can copy/share the pairing payload, show it as a QR code, and
-scan another Pomo pairing QR when an external ZXing-compatible scanner app
-is installed.
 
 ## Desktop Client
 
-The TypeScript desktop client stores pairing details, sends commands to the
-phone API, and keeps a local stale cache for offline display. The cache is
-best-effort: cache write failures do not make successful phone commands fail.
+The desktop client stores pairing details, sends commands to the phone API, and
+keeps a best-effort stale cache for offline display.
 
 ```bash
 npm --prefix desktop-client install
@@ -105,7 +116,7 @@ node desktop-client/dist/cli.js toggle
 node desktop-client/dist/cli.js qr
 ```
 
-The background service only refreshes the stale display cache:
+Background cache refresh service:
 
 ```bash
 node desktop-client/dist/cli.js service install
@@ -113,46 +124,27 @@ node desktop-client/dist/cli.js service start
 node desktop-client/dist/cli.js service status
 ```
 
-See [docs/desktop-client.md](docs/desktop-client.md) for service paths,
-Waybar output, QR commands, and failure behavior.
+See [docs/desktop-client.md](docs/desktop-client.md) for service paths, Waybar
+output, QR commands, and failure behavior.
 
 ## Architecture
 
 ```text
 app/src/main/java/com/pomo/
 ├── MainActivity.kt
-├── service/
-│   ├── PomodoroService.kt        # Canonical timer owner
-│   ├── NotificationHelper.kt
-│   └── NotificationActionReceiver.kt
-├── timer/
-│   ├── TimerState.kt             # JSON-compatible state model
-│   └── OfflineTimer.kt           # Local countdown engine
-├── db/
-│   ├── AppDatabase.kt
-│   ├── HistoryDao.kt
-│   ├── HistoryCacheRepository.kt # Room-backed canonical history access
-│   ├── SessionEntity.kt
-│   └── DayStatsEntity.kt
-├── network/
-│   └── PhoneServer.kt            # Embedded Ktor REST/WebSocket API
-├── ui/
-│   ├── TimerFragment.kt
-│   ├── StatsFragment.kt
-│   ├── HistoryFragment.kt
-│   ├── SettingsFragment.kt
-│   └── AboutFragment.kt
-├── util/
-│   ├── UtilPreferenceManager.kt
-│   └── SoundManager.kt
-└── widget/
-    └── TimerWidgetProvider.kt
+├── service/       # PomodoroService, notifications, command receivers
+├── timer/         # TimerState and OfflineTimer
+├── db/            # Room database, sessions, daily stats
+├── network/       # Embedded Ktor HTTP/WebSocket API
+├── ui/            # Timer, Stats, History, Settings, About
+├── util/          # Preferences, date logic, sound helpers
+└── widget/        # Home-screen widget
 ```
 
-### State Flow
+State flow:
 
 ```text
-User/notification/widget/API command
+User, notification, widget, or API command
         ↓
 PomodoroService
         ↓
@@ -160,40 +152,39 @@ OfflineTimer + Room history
         ↓
 State broadcast
         ↓
-Timer UI, Stats UI, History UI, notification, widget, WebSocket clients
+UI, notification, widget, and WebSocket clients
 ```
 
-`PomodoroService` is the write boundary. UI, notification buttons, widgets, and
-remote clients all go through service methods. Room is the canonical history
-store. The embedded API exposes the phone state; it does not merge state from a
-desktop process.
+`PomodoroService` is the write boundary. Read-only status paths must not mutate
+timer state. Room is the canonical history store. The embedded API exposes phone
+state over the local network; it does not merge state from a desktop process.
 
-## Remote API
+## Documentation
 
-See [docs/protocol.md](docs/protocol.md) for endpoint details, authentication,
-payload shapes, and WebSocket behavior.
-
-For a deeper implementation map, see [docs/architecture.md](docs/architecture.md).
-
-For the thin TypeScript laptop client, see [docs/desktop-client.md](docs/desktop-client.md).
+- [docs/architecture.md](docs/architecture.md): deeper implementation map.
+- [docs/protocol.md](docs/protocol.md): HTTP/WebSocket API, authentication, and
+  payloads.
+- [docs/desktop-client.md](docs/desktop-client.md): CLI, service, cache, and
+  Waybar behavior.
 
 ## Validation
 
-Build check:
+Run the unit and build checks:
 
 ```bash
+./run_tests.sh
 ./gradlew assembleDevDebug
 ```
 
 Manual checks worth doing on device:
 
-- App starts and can run with no laptop/server process.
-- Start, pause, resume, skip, reset, and extend all mutate phone state.
+- App launches without any laptop/server process.
+- Start, pause, resume, skip, reset, and extend mutate phone state.
 - Completed focus sessions appear in Today, Stats, History, notification, and
   widget.
-- A focus session that crosses midnight is split across the two local calendar
-  days, with seconds rounded up to minutes per day.
-- Restarting the app restores stopped/paused/running timer state sensibly.
+- A session crossing midnight is split across local calendar days, with seconds
+  rounded up to minutes per day segment.
+- Restarting the app restores stopped, paused, and running timer state sensibly.
 - `GET /api/status` rejects missing tokens and returns state with a valid token.
 - `/ws` accepts a valid hello token and streams state updates.
 - Desktop `status --waybar` shows fresh phone state when reachable and stale
@@ -206,14 +197,14 @@ Releases are automated from `main`.
 When a PR is merged, `.github/workflows/version-bump.yml` inspects the commit
 messages in that push, bumps `versionCode` and `versionName` in
 `app/build.gradle.kts`, commits the version bump back to `main`, and creates a
-tag like `v1.5.1`.
+tag like `v1.12.0`.
 
 The bump type follows Conventional Commits:
 
 - `feat:` creates a minor release.
 - `fix:` or `perf:` creates a patch release.
 - `!` or `BREAKING CHANGE:` creates a major release.
-- Anything else defaults to a patch release, so every merged PR can still ship.
+- Anything else defaults to a patch release.
 
 When a `v*` tag is pushed, `.github/workflows/release.yml` builds the dev debug
 and unsigned prod release APKs, uploads them as workflow artifacts, and
@@ -221,8 +212,10 @@ publishes a GitHub Release with generated release notes.
 
 ## Notes
 
-- The embedded phone API is local-network HTTP protected by the pairing token;
-  Android app-initiated cleartext traffic remains disabled in
-  `network_security_config.xml`.
-- The pairing token is stored in dedicated non-backed-up shared preferences.
-- Legacy laptop/server sync classes were removed from the Android app.
+- Android app package: `com.pomo`
+- Minimum SDK: 26
+- Target SDK: 34
+- Current app version in this checkout: `1.12.0`
+- App-initiated cleartext traffic remains disabled; the embedded phone API is
+  local-network HTTP protected by the pairing token.
+- Pairing tokens are stored in dedicated non-backed-up shared preferences.
