@@ -9,9 +9,9 @@ history, and direct controls. Desktop integrations are thin clients; they can
 display or command the phone, but they do not own state.
 
 <p>
-  <img src="artifacts/screenshots/pomo-timer.jpg" alt="Pomo timer screen" width="240">
-  <img src="artifacts/screenshots/pomo-stats.jpg" alt="Pomo stats screen" width="240">
-  <img src="artifacts/screenshots/pomo-settings.jpg" alt="Pomo settings screen" width="240">
+  <img src="artifacts/screenshots/pomo-readme-01-timer.jpg" alt="Pomo timer screen" width="240">
+  <img src="artifacts/screenshots/pomo-readme-02-stats.jpg" alt="Pomo stats screen" width="240">
+  <img src="artifacts/screenshots/pomo-readme-03-settings.jpg" alt="Pomo settings screen" width="240">
 </p>
 
 ## Features
