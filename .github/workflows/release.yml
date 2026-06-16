@@ -160,7 +160,7 @@ jobs:
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
       - name: Build debug APK
-        run: ./gradlew assembleDevDebug
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug
 
       - name: Commit and tag version
         shell: bash
