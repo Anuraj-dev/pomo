@@ -371,10 +371,7 @@ private fun ControlsRow(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         IconButton(
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onReset()
-            },
+            onClick = {},
             modifier = Modifier
                 .size(56.dp)
                 .semantics {
@@ -410,7 +407,7 @@ private fun ControlsRow(
                 }
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Hold to reset",
+                    contentDescription = "Reset timer",
                     tint = colors.onSurfaceMuted,
                 )
             }
