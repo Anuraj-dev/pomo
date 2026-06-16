@@ -39,7 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: main
+          ref: ${{ github.event_name == 'push' && github.sha || 'main' }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -47,7 +47,12 @@ jobs:
         run: |
           set -euo pipefail
           git fetch origin main
-          if [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/main)" ]; then
+          if [ "${{ github.event_name }}" = "push" ]; then
+            EXPECTED_SHA="${{ github.sha }}"
+          else
+            EXPECTED_SHA="$(git rev-parse origin/main)"
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
             echo "Release workflow must run from the current origin/main commit" >&2
             exit 1
           fi
@@ -191,7 +196,8 @@ jobs:
 
       - name: Push version commit and tag
         run: |
-          git push --atomic origin main "${{ steps.version.outputs.tag }}"
+          set -euo pipefail
+          git push --atomic origin HEAD:main "${{ steps.version.outputs.tag }}"
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
