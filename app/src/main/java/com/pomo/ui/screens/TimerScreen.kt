@@ -370,11 +370,7 @@ private fun ControlsRow(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
-            onClick = {
-                haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                onReset()
-            },
+        Box(
             modifier = Modifier
                 .size(56.dp)
                 .semantics {
@@ -386,15 +382,20 @@ private fun ControlsRow(
                         },
                     )
                 }
+                .clip(CircleShape)
                 .combinedClickable(
                     interactionSource = resetInteractionSource,
                     indication = null,
-                    onClick = {},
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onReset()
+                    },
                     onLongClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onReset()
                     },
                 ),
+            contentAlignment = Alignment.Center,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (resetFill > 0f) {
@@ -407,7 +408,7 @@ private fun ControlsRow(
                 }
                 Icon(
                     Icons.Default.Refresh,
-                    contentDescription = "Hold to reset",
+                    contentDescription = "Reset timer",
                     tint = colors.onSurfaceMuted,
                 )
             }

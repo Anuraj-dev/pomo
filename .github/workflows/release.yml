@@ -1,74 +1,208 @@
-name: Release
+name: Release Debug APK
 
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Existing tag to release, for example v1.5.1"
-        required: true
-        type: string
+      bump:
+        description: "Version bump type"
+        required: false
+        default: "patch"
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-debug-apk-main
   cancel-in-progress: false
 
 jobs:
   android:
-    name: Build Android Release
+    name: Bump Version And Publish Debug APK
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: >-
+      github.event_name != 'push' ||
+      (
+        github.actor != 'github-actions[bot]' &&
+        !startsWith(github.event.head_commit.message, 'chore(release):')
+      )
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ github.event_name == 'push' && github.sha || 'main' }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify release branch
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          if [ "${{ github.event_name }}" = "push" ]; then
+            EXPECTED_SHA="${{ github.sha }}"
+          else
+            EXPECTED_SHA="$(git rev-parse origin/main)"
+          fi
+          if [ "$(git rev-parse HEAD)" != "$EXPECTED_SHA" ]; then
+            echo "Release workflow must run from the current origin/main commit" >&2
+            exit 1
+          fi
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Determine bump type
+        id: bump
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "type=${{ inputs.bump || 'patch' }}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ]; then
+            RANGE="${{ github.sha }}"
+          else
+            RANGE="${{ github.event.before }}..${{ github.sha }}"
+          fi
+
+          git log --format=%B "$RANGE" > /tmp/commit-messages.txt
+
+          if grep -qE '(^[a-zA-Z]+(\([^)]+\))?!:|BREAKING CHANGE:)' /tmp/commit-messages.txt; then
+            echo "type=major" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^feat(\([^)]+\))?:' /tmp/commit-messages.txt; then
+            echo "type=minor" >> "$GITHUB_OUTPUT"
+          elif grep -qE '^(fix|perf)(\([^)]+\))?:' /tmp/commit-messages.txt; then
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          else
+            echo "type=patch" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Update Gradle version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BUILD_FILE="app/build.gradle.kts"
+          BUMP_TYPE="${{ steps.bump.outputs.type }}"
+
+          CURRENT_CODE="$(grep -oE 'versionCode = [0-9]+' "$BUILD_FILE" | awk '{print $3}')"
+          CURRENT_NAME="$(grep -oE 'versionName = "[^"]+"' "$BUILD_FILE" | sed -E 's/versionName = "([^"]+)"/\1/')"
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$CURRENT_NAME"
+          MAJOR="${MAJOR:-0}"
+          MINOR="${MINOR:-0}"
+          PATCH="${PATCH:-0}"
+
+          case "$BUMP_TYPE" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+            *)
+              echo "Unsupported bump type: $BUMP_TYPE" >&2
+              exit 1
+              ;;
+          esac
+
+          NEW_CODE=$((CURRENT_CODE + 1))
+          NEW_NAME="$MAJOR.$MINOR.$PATCH"
+
+          perl -0pi -e "s/versionCode = \\d+/versionCode = $NEW_CODE/" "$BUILD_FILE"
+          perl -0pi -e "s/versionName = \"[^\"]+\"/versionName = \"$NEW_NAME\"/" "$BUILD_FILE"
+
+          CHANGED_FILES="$(git diff --name-only)"
+          if [ "$CHANGED_FILES" != "$BUILD_FILE" ]; then
+            echo "Unexpected changed files after version bump:" >&2
+            git status --short >&2
+            exit 1
+          fi
+
+          echo "new_code=$NEW_CODE" >> "$GITHUB_OUTPUT"
+          echo "new_name=$NEW_NAME" >> "$GITHUB_OUTPUT"
+          echo "tag=v$NEW_NAME" >> "$GITHUB_OUTPUT"
+          echo "apk_name=pomo-$NEW_NAME-dev-debug.apk" >> "$GITHUB_OUTPUT"
+          echo "Bumped $CURRENT_NAME ($CURRENT_CODE) -> $NEW_NAME ($NEW_CODE)"
 
       - name: Setup JDK
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Setup Android SDK
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
 
       - name: Setup Gradle
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d
         with:
           gradle-version: "9.2.1"
 
       - name: Install Android SDK packages
         run: |
-          sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+          sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Build APKs
-        run: ./gradlew assembleDevDebug assembleProdRelease
+      - name: Build debug APK
+        run: ./gradlew assembleDevDebug
+
+      - name: Commit and tag version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="${{ steps.version.outputs.new_name }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          git add app/build.gradle.kts
+          git commit -m "chore(release): bump version to $VERSION"
+          git tag -a "$TAG" -m "Release $TAG"
 
       - name: Collect artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-artifacts
-          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk release-artifacts/pomo-remote-dev-debug.apk
-          cp app/build/outputs/apk/prod/release/app-prod-release-unsigned.apk release-artifacts/pomo-remote-prod-release-unsigned.apk
+          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk "release-artifacts/${{ steps.version.outputs.apk_name }}"
+          sha256sum "release-artifacts/${{ steps.version.outputs.apk_name }}" > "release-artifacts/${{ steps.version.outputs.apk_name }}.sha256"
 
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: android-apks
-          path: release-artifacts/*.apk
+          name: pomo-${{ steps.version.outputs.new_name }}-dev-debug
+          path: release-artifacts/*
           if-no-files-found: error
 
+      - name: Push version commit and tag
+        run: |
+          set -euo pipefail
+          git push --atomic origin HEAD:main "${{ steps.version.outputs.tag }}"
+
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Pomo ${{ steps.version.outputs.new_name }}
           generate_release_notes: true
-          files: release-artifacts/*.apk
+          files: release-artifacts/*
