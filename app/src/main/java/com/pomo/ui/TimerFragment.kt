@@ -1,6 +1,7 @@
 package com.pomo.ui
 
 import android.os.Bundle
+import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -61,11 +62,25 @@ public class TimerFragment : Fragment() {
                     stats = stats,
                     dailyGoal = effectiveGoal,
                     fallbackWorkSeconds = workMinutes * 60,
-                    onToggle = { mainActivity?.toggleTimer() },
-                    onSkip = { mainActivity?.skipTimer() },
-                    onReset = { mainActivity?.resetTimer() },
+                    onToggle = {
+                        Log.i(TAG, "TimerScreen toggle tap delivered to fragment")
+                        mainActivity?.toggleTimer()
+                            ?: Log.w(TAG, "Toggle tap ignored because MainActivity is unavailable")
+                    },
+                    onSkip = {
+                        Log.i(TAG, "TimerScreen skip tap delivered to fragment")
+                        mainActivity?.skipTimer()
+                            ?: Log.w(TAG, "Skip tap ignored because MainActivity is unavailable")
+                    },
+                    onReset = {
+                        Log.i(TAG, "TimerScreen reset tap delivered to fragment")
+                        mainActivity?.resetTimer()
+                            ?: Log.w(TAG, "Reset tap ignored because MainActivity is unavailable")
+                    },
                     onStatsClick = {
+                        Log.i(TAG, "TimerScreen stats tap delivered to fragment")
                         runCatching { findNavController().navigate(R.id.navigation_stats) }
+                            .onFailure { Log.w(TAG, "Could not navigate to stats", it) }
                     },
                 )
             }
@@ -118,6 +133,10 @@ public class TimerFragment : Fragment() {
             delay(DATE_REFRESH_INTERVAL_MS)
         }
     }.distinctUntilChanged()
+
+    private companion object {
+        private const val TAG: String = "PomoTimerFragment"
+    }
 
 }
 

@@ -311,19 +311,19 @@ public class PomodoroService : Service(), TimerObserver {
 
     public suspend fun toggleTimerBlocking(): TimerState = runTimerCommand {
         offlineTimer.toggle()
-    }
+    }.also { Log.i(TAG, "Timer command executed: toggle status=${it.status} remaining=${it.remaining}") }
 
     public suspend fun skipTimerBlocking(): TimerState = runTimerCommand {
         offlineTimer.skip()
-    }
+    }.also { Log.i(TAG, "Timer command executed: skip status=${it.status} phase=${it.phase}") }
 
     public suspend fun resetTimerBlocking(): TimerState = runTimerCommand {
         offlineTimer.reset()
-    }
+    }.also { Log.i(TAG, "Timer command executed: reset status=${it.status} remaining=${it.remaining}") }
 
     public suspend fun extendTimerBlocking(minutes: Int): TimerState = runTimerCommand {
         offlineTimer.extend(minutes)
-    }
+    }.also { Log.i(TAG, "Timer command executed: extend minutes=$minutes remaining=${it.remaining}") }
 
     private suspend fun runTimerCommand(action: () -> Unit): TimerState = commandMutex.withLock {
         withContext(Dispatchers.Main) {

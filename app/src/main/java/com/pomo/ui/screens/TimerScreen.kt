@@ -389,7 +389,10 @@ private fun ControlsRow(
                 .combinedClickable(
                     interactionSource = resetInteractionSource,
                     indication = null,
-                    onClick = {},
+                    onClick = {
+                        haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onReset()
+                    },
                     onLongClick = {
                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                         onReset()

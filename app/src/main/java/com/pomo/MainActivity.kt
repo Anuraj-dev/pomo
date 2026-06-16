@@ -6,6 +6,8 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
+import android.util.Log
+import android.view.MotionEvent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -30,6 +32,7 @@ public class MainActivity : AppCompatActivity() {
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
+            Log.i(TAG, "PomodoroService connected: ${name.flattenToShortString()}")
             val localBinder = binder as PomodoroService.LocalBinder
             service = localBinder.service
             isBound = true
@@ -37,6 +40,7 @@ public class MainActivity : AppCompatActivity() {
         }
 
         override fun onServiceDisconnected(name: ComponentName) {
+            Log.w(TAG, "PomodoroService disconnected: ${name.flattenToShortString()}")
             isBound = false
             service = null
         }
@@ -50,6 +54,11 @@ public class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        Log.i(
+            TAG,
+            "MainActivity created. sdk=${Build.VERSION.SDK_INT}, release=${Build.VERSION.RELEASE}, " +
+                "manufacturer=${Build.MANUFACTURER}, model=${Build.MODEL}, version=${BuildConfig.VERSION_NAME}",
+        )
         setContentView(R.layout.activity_main)
 
         prefs = UtilPreferenceManager(this)
@@ -66,27 +75,49 @@ public class MainActivity : AppCompatActivity() {
     }
 
     private fun updateCurrentFragment() {
+        val service = service ?: return
+        lifecycleScope.launch {
+            updateCurrentFragment(service.stateSnapshot())
+        }
+    }
+
+    private fun updateCurrentFragment(state: com.pomo.timer.TimerState) {
         val navHostFragment = supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
         val currentFragment = navHostFragment?.childFragmentManager?.primaryNavigationFragment
 
         if (currentFragment is TimerFragment) {
-            val service = service ?: return
-            lifecycleScope.launch {
-                currentFragment.updateUI(service.stateSnapshot())
-            }
+            currentFragment.updateUI(state)
         }
     }
 
     public fun toggleTimer() {
-        if (isBound) service?.toggleTimer()
+        dispatchTimerCommand("toggle") { toggleTimerBlocking() }
     }
 
     public fun skipTimer() {
-        if (isBound) service?.skipTimer()
+        dispatchTimerCommand("skip") { skipTimerBlocking() }
     }
 
     public fun resetTimer() {
-        if (isBound) service?.resetTimer()
+        dispatchTimerCommand("reset") { resetTimerBlocking() }
+    }
+
+    private fun dispatchTimerCommand(name: String, command: suspend PomodoroService.() -> com.pomo.timer.TimerState) {
+        val boundService = service
+        Log.i(TAG, "Timer command requested: $name. isBound=$isBound serviceReady=${boundService != null}")
+        if (!isBound || boundService == null) {
+            Log.w(TAG, "Ignoring timer command '$name' because PomodoroService is not bound")
+            return
+        }
+
+        lifecycleScope.launch {
+            runCatching { boundService.command() }
+                .onSuccess { state ->
+                    Log.i(TAG, "Timer command completed in activity: $name status=${state.status}")
+                    updateCurrentFragment(state)
+                }
+                .onFailure { Log.e(TAG, "Timer command failed in activity: $name", it) }
+        }
     }
 
     private fun requestNotificationPermission() {
@@ -113,9 +144,21 @@ public class MainActivity : AppCompatActivity() {
 
     private fun startService() {
         val intent = Intent(this, PomodoroService::class.java)
-        if (PomodoroServiceStarter.start(this, intent)) {
-            bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        val started = PomodoroServiceStarter.start(this, intent)
+        Log.i(TAG, "PomodoroService start requested. started=$started")
+
+        val bound = bindService(intent, connection, Context.BIND_AUTO_CREATE)
+        Log.i(TAG, "PomodoroService bind requested. bound=$bound")
+        if (!bound) {
+            Log.e(TAG, "PomodoroService bind failed; timer controls will not be available")
         }
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (ev.actionMasked == MotionEvent.ACTION_UP) {
+            Log.d(TAG, "Touch up at x=${ev.x.toInt()} y=${ev.y.toInt()}")
+        }
+        return super.dispatchTouchEvent(ev)
     }
 
     override fun onResume() {
@@ -145,6 +188,7 @@ public class MainActivity : AppCompatActivity() {
     }
 
     public companion object {
+        private const val TAG: String = "PomoMainActivity"
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE: Int = 1
     }
 }
