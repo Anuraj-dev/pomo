@@ -111,3 +111,6 @@ android-sdk/
 screen_*.png
 icon_*.png
 *.png
+
+# local recovery reference APK (do not commit)
+base.apk

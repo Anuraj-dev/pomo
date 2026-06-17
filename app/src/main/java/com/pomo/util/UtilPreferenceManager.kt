@@ -74,6 +74,9 @@ public class UtilPreferenceManager(context: Context) {
     public val isSoundEnabled: Boolean
         get() = prefs.getBoolean("sound_enabled", true)
 
+    public val isStrongerCompletionCues: Boolean
+        get() = prefs.getBoolean("stronger_completion_cues", false)
+
     public val themeMode: ThemeMode
         get() = prefs.themeMode()
 

@@ -37,6 +37,8 @@ import com.google.zxing.MultiFormatWriter
 import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
+import com.pomo.cues.CompletionCueFamily
+import com.pomo.cues.StateCueEvent
 import com.pomo.ui.screens.SettingsItem
 import com.pomo.ui.screens.SettingsScreen
 import com.pomo.ui.theme.PomoTheme
@@ -159,7 +161,8 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             default = 8,
         ))
 
-        add(SettingsItem.Section(getString(R.string.category_notifications)))
+        add(SettingsItem.Section(getString(R.string.category_state_cues)))
+        add(SettingsItem.Note(getString(R.string.state_cues_note)))
         add(SettingsItem.BoolPref(
             key = "vibrate_enabled",
             title = getString(R.string.vibrate_title),
@@ -172,6 +175,16 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             summary = getString(R.string.sound_summary),
             default = true,
         ))
+        add(SettingsItem.BoolPref(
+            key = "stronger_completion_cues",
+            title = getString(R.string.state_cues_stronger_title),
+            summary = getString(R.string.state_cues_stronger_summary),
+            default = false,
+        ))
+        add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
+        addCompletionCueItems()
+        add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
+        addManualHapticItems()
 
         add(SettingsItem.Section(getString(R.string.category_theme)))
         add(SettingsItem.ChoicePref(
@@ -204,6 +217,75 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 runCatching { findNavController().navigate(R.id.navigation_about) }
             },
         ))
+    }
+
+    private fun MutableList<SettingsItem>.addCompletionCueItems() {
+        add(
+            SettingsItem.CompletionCuePreview(
+                family = CompletionCueFamily.FocusComplete,
+                title = getString(R.string.state_cues_focus_complete_title),
+                summary = getString(R.string.state_cues_focus_complete_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+        add(
+            SettingsItem.CompletionCuePreview(
+                family = CompletionCueFamily.ShortBreakComplete,
+                title = getString(R.string.state_cues_short_break_complete_title),
+                summary = getString(R.string.state_cues_short_break_complete_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+        add(
+            SettingsItem.CompletionCuePreview(
+                family = CompletionCueFamily.LongBreakComplete,
+                title = getString(R.string.state_cues_long_break_complete_title),
+                summary = getString(R.string.state_cues_long_break_complete_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+    }
+
+    private fun MutableList<SettingsItem>.addManualHapticItems() {
+        add(
+            SettingsItem.ManualHapticPreview(
+                event = StateCueEvent.StartOrResumeTapped,
+                title = getString(R.string.state_cues_start_resume_title),
+                summary = getString(R.string.state_cues_start_resume_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+        add(
+            SettingsItem.ManualHapticPreview(
+                event = StateCueEvent.PauseTapped,
+                title = getString(R.string.state_cues_pause_title),
+                summary = getString(R.string.state_cues_pause_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+        add(
+            SettingsItem.ManualHapticPreview(
+                event = StateCueEvent.SkipTapped,
+                title = getString(R.string.state_cues_skip_title),
+                summary = getString(R.string.state_cues_skip_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
+        add(
+            SettingsItem.ManualHapticPreview(
+                event = StateCueEvent.ResetTapped,
+                title = getString(R.string.state_cues_reset_title),
+                summary = getString(R.string.state_cues_reset_summary),
+                serviceProvider = { (activity as? MainActivity)?.service },
+                onFeedback = ::showMessage,
+            ),
+        )
     }
 
     override fun onResume() {
