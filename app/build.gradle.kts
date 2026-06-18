@@ -12,8 +12,8 @@ android {
         applicationId = "com.pomo"
         minSdk = 26
         targetSdk = 34
-        versionCode = 31
-        versionName = "1.21.0"
+        versionCode = 32
+        versionName = "1.22.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
