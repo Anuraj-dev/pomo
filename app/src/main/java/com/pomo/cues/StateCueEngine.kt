@@ -1,6 +1,7 @@
 package com.pomo.cues
 
 import android.content.Context
+import android.util.Log
 import com.pomo.R
 import com.pomo.util.UtilPreferenceManager
 
@@ -8,6 +9,10 @@ public class StateCueEngine(
     context: Context,
     private val prefs: UtilPreferenceManager,
 ) {
+    private companion object {
+        private const val TAG = "StateCueEngine"
+    }
+
     private val audioPlayer = CueAudioPlayer(context)
     private val hapticPlayer = CueHapticPlayer(context)
     private val rotationStore = CueRotationStore(context)
@@ -36,6 +41,8 @@ public class StateCueEngine(
         ).played
         if (played) {
             rotationStore.advance(family)
+        } else {
+            Log.d(TAG, "Completion cue skipped: no enabled or available channel for $family")
         }
     }
 

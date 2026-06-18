@@ -26,10 +26,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -429,9 +429,21 @@ private fun CompletionCuePreviewRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            AssistChip(onClick = { selectedVariant = CueVariant.Variant1 }, label = { Text("Variant 1") })
-            AssistChip(onClick = { selectedVariant = CueVariant.Variant2 }, label = { Text("Variant 2") })
-            AssistChip(onClick = { selectedVariant = CueVariant.Variant3 }, label = { Text("Variant 3") })
+            FilterChip(
+                selected = selectedVariant == CueVariant.Variant1,
+                onClick = { selectedVariant = CueVariant.Variant1 },
+                label = { Text("Variant 1") },
+            )
+            FilterChip(
+                selected = selectedVariant == CueVariant.Variant2,
+                onClick = { selectedVariant = CueVariant.Variant2 },
+                label = { Text("Variant 2") },
+            )
+            FilterChip(
+                selected = selectedVariant == CueVariant.Variant3,
+                onClick = { selectedVariant = CueVariant.Variant3 },
+                label = { Text("Variant 3") },
+            )
         }
         Spacer(Modifier.height(10.dp))
         Text(

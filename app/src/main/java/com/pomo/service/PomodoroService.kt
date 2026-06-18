@@ -30,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -367,10 +368,13 @@ public class PomodoroService : Service(), TimerObserver {
     private fun didStateChange(before: TimerState, after: TimerState): Boolean {
         return before.status != after.status ||
             before.phase != after.phase ||
-            before.remaining != after.remaining ||
-            before.start_time != after.start_time ||
+            doublesDiffer(before.remaining, after.remaining) ||
+            doublesDiffer(before.start_time, after.start_time) ||
             before.last_action_time != after.last_action_time
     }
+
+    private fun doublesDiffer(before: Double, after: Double, tolerance: Double = 0.001): Boolean =
+        abs(before - after) > tolerance
 
     private suspend fun reconcileDayTransitionIfNeeded(notify: Boolean) {
         val today = historyCacheRepository.getEffectiveDateString()
