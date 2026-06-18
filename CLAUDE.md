@@ -73,7 +73,8 @@ PomodoroService -> OfflineTimer/Room -> UI, notification, widget, PhoneServer
 - Treat Room as canonical history.
 - History uses the phone's local calendar day. Sessions that cross midnight are
   split across dates; seconds are rounded up to minutes per date segment.
-- Update `versionCode` and `versionName` for significant app changes.
+- Do not bump `versionCode`/`versionName` by hand; the `release.yml` workflow
+  owns versioning (it rewrites them and commits `chore(release): bump version`).
 - Run the narrowest relevant build/check before finishing.
 
 ## State Management Constraints

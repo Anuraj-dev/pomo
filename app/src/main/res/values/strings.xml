@@ -18,10 +18,12 @@
     <string name="pref_phone_server_port">phone_server_port</string>
     <string name="pref_vibrate">vibrate_enabled</string>
     <string name="pref_sound">sound_enabled</string>
+    <string name="pref_stronger_completion_cues">stronger_completion_cues</string>
     
     <string name="settings_title">Settings</string>
     <string name="category_connection">Connection</string>
     <string name="category_notifications">Notifications</string>
+    <string name="category_state_cues">State Cues</string>
     <string name="category_theme">Theme</string>
     <string name="category_info">Info</string>
     
@@ -56,11 +58,37 @@
     <string name="scan_pairing_qr_other">This QR is for a different Pomo phone.</string>
     <string name="scan_pairing_qr_service_unavailable">Start the timer service before comparing pairing tokens.</string>
     
-    <string name="vibrate_title">Vibrate</string>
-    <string name="vibrate_summary">Vibrate when timer completes</string>
+    <string name="vibrate_title">Vibration</string>
+    <string name="vibrate_summary">Deliver state cues through vibration</string>
     
     <string name="sound_title">Sound</string>
-    <string name="sound_summary">Play notification sound when timer completes</string>
+    <string name="sound_summary">Deliver completion cues through app-owned sounds</string>
+    <string name="state_cues_note">State cues mark timer transitions without reward or alarm cues.</string>
+    <string name="state_cues_stronger_title">Stronger completion cues</string>
+    <string name="state_cues_stronger_summary">Use stronger completion cue delivery for easier detection</string>
+    <string name="state_cues_completion_section">Completion cues</string>
+    <string name="state_cues_manual_section">Manual haptics</string>
+    <string name="state_cues_focus_complete_title">Focus complete</string>
+    <string name="state_cues_focus_complete_summary">Release into break</string>
+    <string name="state_cues_short_break_complete_title">Short break complete</string>
+    <string name="state_cues_short_break_complete_summary">Gentle return to focus</string>
+    <string name="state_cues_long_break_complete_title">Long break complete</string>
+    <string name="state_cues_long_break_complete_summary">Fresh reset into focus</string>
+    <string name="state_cues_start_resume_title">Start/Resume</string>
+    <string name="state_cues_start_resume_summary">Subtle confirmation</string>
+    <string name="state_cues_pause_title">Pause</string>
+    <string name="state_cues_pause_summary">Neutral hold</string>
+    <string name="state_cues_skip_title">Skip</string>
+    <string name="state_cues_skip_summary">Firmer transition</string>
+    <string name="state_cues_reset_title">Reset</string>
+    <string name="state_cues_reset_summary">Firmest manual reset</string>
+    <string name="state_cues_preview_service_unavailable">Start the timer service before previewing state cues.</string>
+    <string name="state_cues_preview_sound_off">Sound is turned off.</string>
+    <string name="state_cues_preview_sound_unavailable">Sound is unavailable under current system interruption settings.</string>
+    <string name="state_cues_preview_vibration_off">Vibration is turned off.</string>
+    <string name="state_cues_preview_vibration_unavailable">This device cannot play vibration previews.</string>
+    <string name="state_cues_preview_no_channels">No cue channels are available.</string>
+    <string name="state_cues_preview_unavailable">That cue could not be played.</string>
 
     <!-- Timer Settings -->
     <string name="category_timer">Timer</string>

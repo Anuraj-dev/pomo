@@ -69,7 +69,7 @@
             android:inputType="number" />
     </PreferenceCategory>
 
-    <PreferenceCategory app:title="@string/category_notifications">
+    <PreferenceCategory app:title="@string/category_state_cues">
         <SwitchPreferenceCompat
             app:key="vibrate_enabled"
             app:title="@string/vibrate_title"
@@ -81,6 +81,12 @@
             app:title="@string/sound_title"
             app:summary="@string/sound_summary"
             app:defaultValue="true" />
+
+        <SwitchPreferenceCompat
+            app:key="stronger_completion_cues"
+            app:title="@string/state_cues_stronger_title"
+            app:summary="@string/state_cues_stronger_summary"
+            app:defaultValue="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/category_theme">

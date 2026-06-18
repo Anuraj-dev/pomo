@@ -7,11 +7,15 @@ import android.net.NetworkCapabilities
 import android.net.NetworkRequest
 import android.content.Context
 import android.content.Intent
-import android.media.Ringtone
-import android.media.RingtoneManager
 import android.os.*
 import android.util.Log
 import com.google.gson.Gson
+import com.pomo.cues.CompletionCueFamily
+import com.pomo.cues.CuePreviewChannel
+import com.pomo.cues.CuePreviewOutcome
+import com.pomo.cues.CueVariant
+import com.pomo.cues.StateCueEngine
+import com.pomo.cues.StateCueEvent
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneServer
 import com.pomo.timer.OfflineTimer
@@ -26,6 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.math.abs
 import java.net.Inet4Address
 import java.net.NetworkInterface
 
@@ -39,7 +44,7 @@ public class PomodoroService : Service(), TimerObserver {
     private var currentState: TimerState = TimerState()
     private lateinit var phoneServer: PhoneServer
     private var activePhoneServerPort: Int = PhoneServer.DEFAULT_PORT
-    private var currentRingtone: Ringtone? = null
+    private lateinit var cueEngine: StateCueEngine
     private val gson = Gson()
 
     private var lastSavedState: TimerState? = null
@@ -79,6 +84,7 @@ public class PomodoroService : Service(), TimerObserver {
     override fun onCreate() {
         super.onCreate()
         prefs = UtilPreferenceManager(this)
+        cueEngine = StateCueEngine(this, prefs)
         currentState.goal = prefs.dailyGoal
         notificationHelper = NotificationHelper(this)
         historyCacheRepository = HistoryCacheRepository(this)
@@ -196,6 +202,7 @@ public class PomodoroService : Service(), TimerObserver {
         }
         serviceScope.cancel()
         phoneServer.stop()
+        cueEngine.release()
     }
 
     private fun sanitizeState(state: TimerState) {
@@ -272,12 +279,12 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     override fun onTimerComplete(state: TimerState) {
+        val completedPhase = currentState.phase
         this.currentState = state
         saveCurrentState()
         updateNotification()
         broadcastStateUpdate()
-        vibrate()
-        playSound()
+        StateCueEvent.forCompletedPhase(completedPhase)?.let { cueEngine.playCompletion(it) }
     }
 
     private fun broadcastStateUpdate() {
@@ -310,28 +317,64 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     public suspend fun toggleTimerBlocking(): TimerState = runTimerCommand {
-        offlineTimer.toggle()
+        if (currentState.status == TimerState.STATUS_RUNNING) {
+            StateCueEvent.PauseTapped
+        } else {
+            StateCueEvent.StartOrResumeTapped
+        }
     }.also { Log.i(TAG, "Timer command executed: toggle status=${it.status} remaining=${it.remaining}") }
 
     public suspend fun skipTimerBlocking(): TimerState = runTimerCommand {
-        offlineTimer.skip()
+        StateCueEvent.SkipTapped
     }.also { Log.i(TAG, "Timer command executed: skip status=${it.status} phase=${it.phase}") }
 
     public suspend fun resetTimerBlocking(): TimerState = runTimerCommand {
-        offlineTimer.reset()
+        StateCueEvent.ResetTapped
     }.also { Log.i(TAG, "Timer command executed: reset status=${it.status} remaining=${it.remaining}") }
 
     public suspend fun extendTimerBlocking(minutes: Int): TimerState = runTimerCommand {
         offlineTimer.extend(minutes)
+        null
     }.also { Log.i(TAG, "Timer command executed: extend minutes=$minutes remaining=${it.remaining}") }
 
-    private suspend fun runTimerCommand(action: () -> Unit): TimerState = commandMutex.withLock {
+    public fun nextCompletionCueVariant(family: CompletionCueFamily): CueVariant = cueEngine.nextVariant(family)
+
+    public fun previewCompletionCue(
+        family: CompletionCueFamily,
+        variant: CueVariant,
+        channel: CuePreviewChannel,
+    ): CuePreviewOutcome = cueEngine.previewCompletion(family, variant, channel)
+
+    public fun previewManualCue(event: StateCueEvent): CuePreviewOutcome = cueEngine.previewManual(event)
+
+    private suspend fun runTimerCommand(eventForAction: () -> StateCueEvent?): TimerState = commandMutex.withLock {
         withContext(Dispatchers.Main) {
             reconcileDayTransitionIfNeeded(notify = false)
-            action()
+            val before = currentState.copy()
+            val event = eventForAction()
+            when (event) {
+                StateCueEvent.StartOrResumeTapped, StateCueEvent.PauseTapped -> offlineTimer.toggle()
+                StateCueEvent.SkipTapped -> offlineTimer.skip()
+                StateCueEvent.ResetTapped -> offlineTimer.reset()
+                else -> Unit
+            }
+            if (event != null && didStateChange(before, currentState)) {
+                cueEngine.playManual(event)
+            }
             currentState.copy()
         }
     }
+
+    private fun didStateChange(before: TimerState, after: TimerState): Boolean {
+        return before.status != after.status ||
+            before.phase != after.phase ||
+            doublesDiffer(before.remaining, after.remaining) ||
+            doublesDiffer(before.start_time, after.start_time) ||
+            before.last_action_time != after.last_action_time
+    }
+
+    private fun doublesDiffer(before: Double, after: Double, tolerance: Double = 0.001): Boolean =
+        abs(before - after) > tolerance
 
     private suspend fun reconcileDayTransitionIfNeeded(notify: Boolean) {
         val today = historyCacheRepository.getEffectiveDateString()
@@ -521,45 +564,6 @@ public class PomodoroService : Service(), TimerObserver {
             }
         } catch (e: Exception) {
             false
-        }
-    }
-
-    private fun vibrate() {
-        if (!prefs.isVibrateEnabled) return
-
-        val v = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            val vibratorManager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-            vibratorManager.defaultVibrator
-        } else {
-            @Suppress("DEPRECATION")
-            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-        }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            v.vibrate(VibrationEffect.createOneShot(500, VibrationEffect.DEFAULT_AMPLITUDE))
-        } else {
-            @Suppress("DEPRECATION")
-            v.vibrate(500)
-        }
-    }
-
-    private fun playSound() {
-        if (!prefs.isSoundEnabled) return
-
-        try {
-            if (currentRingtone != null && currentRingtone!!.isPlaying) {
-                currentRingtone!!.stop()
-            }
-
-            val notification = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION)
-            currentRingtone = RingtoneManager.getRingtone(applicationContext, notification)
-
-            if (currentRingtone != null) {
-                currentRingtone!!.play()
-            } else {
-                Log.w(TAG, "Could not get ringtone")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to play sound", e)
         }
     }
 
