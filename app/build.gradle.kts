@@ -32,6 +32,22 @@ android {
         }
     }
 
+    signingConfigs {
+        // Released devDebug APKs must always be signed with the same key so that
+        // installs update in place instead of forcing an uninstall (data loss).
+        // CI provides the stable keystore via env; local builds fall back to the
+        // developer's default ~/.android/debug.keystore (env unset = unchanged).
+        getByName("debug") {
+            val keystorePath = System.getenv("POMO_KEYSTORE_FILE")
+            if (!keystorePath.isNullOrBlank()) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("POMO_KEYSTORE_PASSWORD") ?: "android"
+                keyAlias = System.getenv("POMO_KEY_ALIAS") ?: "androiddebugkey"
+                keyPassword = System.getenv("POMO_KEY_PASSWORD") ?: "android"
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true

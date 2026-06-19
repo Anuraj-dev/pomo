@@ -159,6 +159,25 @@ jobs:
         run: |
           sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0"
 
+      - name: Decode signing keystore
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${DEBUG_KEYSTORE_BASE64:-}" ]; then
+            echo "DEBUG_KEYSTORE_BASE64 secret is not set; releases would be signed" \
+                 "with an ephemeral key and break in-place updates." >&2
+            exit 1
+          fi
+          echo "$DEBUG_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/pomo-debug.keystore"
+          {
+            echo "POMO_KEYSTORE_FILE=$RUNNER_TEMP/pomo-debug.keystore"
+            echo "POMO_KEYSTORE_PASSWORD=android"
+            echo "POMO_KEY_ALIAS=androiddebugkey"
+            echo "POMO_KEY_PASSWORD=android"
+          } >> "$GITHUB_ENV"
+
       - name: Build debug APK
         run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug
 
