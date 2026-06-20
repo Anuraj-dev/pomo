@@ -12,6 +12,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
+import com.pomo.crew.CrewRankingMode
 import com.pomo.crew.CrewRepository
 import com.pomo.ui.screens.CrewScreen
 import com.pomo.ui.screens.CrewScreenState
@@ -23,6 +24,8 @@ import kotlinx.coroutines.launch
 
 public class CrewFragment : Fragment() {
     private val screenState = MutableStateFlow(CrewScreenState(isLoading = true))
+    private val rankingMode = MutableStateFlow(CrewRankingMode.Today)
+    private val initialJoinCode = MutableStateFlow<String?>(null)
     private lateinit var repository: CrewRepository
     private var liveBoardJob: Job? = null
 
@@ -34,6 +37,8 @@ public class CrewFragment : Fragment() {
         enterTransition = MaterialFadeThrough()
         exitTransition = MaterialFadeThrough()
         repository = CrewRepository(requireContext())
+        initialJoinCode.value = arguments?.getString("crewJoinPayload")
+            ?.let { payload -> "pomo://crew/join/v2/$payload" }
     }
 
     override fun onCreateView(
@@ -45,13 +50,20 @@ public class CrewFragment : Fragment() {
         setContent {
             PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                 val currentState by screenState.collectAsState()
+                val currentInitialJoinCode by initialJoinCode.collectAsState()
                 CrewScreen(
                     state = currentState,
-                    onCreateCrew = { displayName -> createCrew(displayName) },
+                    onCreateCrew = { crewName, displayName -> createCrew(crewName, displayName) },
                     onJoinCrew = { joinCode, displayName -> joinCrew(joinCode, displayName) },
                     onSwitchCrew = { crewId -> switchCrew(crewId) },
                     onLeaveCrew = { crewId -> leaveCrew(crewId) },
                     onDisplayNameChange = { displayName -> updateDisplayName(displayName) },
+                    onRankingModeChange = { mode -> rankingMode.value = mode },
+                    onMemberHiddenChange = { identityPublicKey, hidden ->
+                        setMemberHidden(identityPublicKey, hidden)
+                    },
+                    initialJoinCode = currentInitialJoinCode,
+                    onInitialJoinCodeConsumed = { initialJoinCode.value = null },
                 )
             }
         }
@@ -74,17 +86,17 @@ public class CrewFragment : Fragment() {
             screenState.value = screenState.value.copy(isLoading = true)
             screenState.value = CrewScreenState(
                 isLoading = false,
-                board = repository.currentBoard(),
+                board = repository.currentBoard(rankingMode.value),
             )
         }
     }
 
-    private fun createCrew(displayName: String) {
+    private fun createCrew(crewName: String, displayName: String) {
         viewLifecycleOwner.lifecycleScope.launch {
             screenState.value = screenState.value.copy(isLoading = true)
             screenState.value = CrewScreenState(
                 isLoading = false,
-                board = repository.createSoloCrew(displayName),
+                board = repository.createSoloCrew(displayName, crewName),
             )
             startLiveBoard()
         }
@@ -138,10 +150,22 @@ public class CrewFragment : Fragment() {
         }
     }
 
+    private fun setMemberHidden(identityPublicKey: String, hidden: Boolean) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            repository.setMemberHidden(identityPublicKey, hidden)
+        }
+    }
+
     private fun startLiveBoard() {
         liveBoardJob?.cancel()
         liveBoardJob = viewLifecycleOwner.lifecycleScope.launch {
-            repository.observeCurrentBoard().collect { board ->
+            launch {
+                repository.refreshCurrentCrew().collect { }
+            }
+            launch {
+                repository.observeLiveSnapshots().collect { }
+            }
+            repository.observeCurrentBoard(rankingMode).collect { board ->
                 screenState.value = CrewScreenState(
                     isLoading = false,
                     board = board,
