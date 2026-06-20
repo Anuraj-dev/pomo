@@ -270,7 +270,6 @@ public class PomodoroService : Service(), TimerObserver {
             saveCurrentState()
             updateNotification()
             broadcastStateUpdate()
-            publishCrewSnapshot("restored day transition")
         }
     }
 
@@ -290,7 +289,9 @@ public class PomodoroService : Service(), TimerObserver {
         updateNotification()
         broadcastStateUpdate()
         StateCueEvent.forCompletedPhase(completedPhase)?.let { cueEngine.playCompletion(it) }
-        publishCrewSnapshot("timer block complete")
+        if (completedPhase == TimerState.PHASE_WORK) {
+            publishCrewSnapshot("work block complete")
+        }
     }
 
     private fun broadcastStateUpdate() {
@@ -371,9 +372,6 @@ public class PomodoroService : Service(), TimerObserver {
             }
             if (event != null && didStateChange(before, currentState)) {
                 cueEngine.playManual(event)
-                if (event == StateCueEvent.StartOrResumeTapped || event == StateCueEvent.PauseTapped) {
-                    publishCrewSnapshot("timer ${event.name}")
-                }
             }
             currentState.copy()
         }
@@ -422,7 +420,6 @@ public class PomodoroService : Service(), TimerObserver {
             updateNotification()
             broadcastStateUpdate()
         }
-        publishCrewSnapshot("day rollover")
     }
 
     private fun publishCrewSnapshot(reason: String) {

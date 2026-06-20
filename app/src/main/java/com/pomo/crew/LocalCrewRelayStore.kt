@@ -1,65 +1,66 @@
 package com.pomo.crew
 
 import android.content.Context
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import com.pomo.util.UtilPreferenceManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.toList
 
 public class LocalCrewRelayStore(context: Context) {
-    private val prefs = context.getSharedPreferences("crew_relay_echo", Context.MODE_PRIVATE)
-    private val gson = Gson()
-    private val transport = CrewRelayTransport(UtilPreferenceManager(context).crewNostrPrivateKey)
+    private val appContext = context.applicationContext
+    private val identityStore = CrewIdentityStore(appContext)
+    private val transport: CrewRelayTransport by lazy {
+        CrewRelayTransport(identityStore.identity().privateKey)
+    }
+    private val projectionStore = CrewProjectionStore(appContext)
 
     public suspend fun publish(
-        crewId: String,
-        identityPublicKey: String,
+        snapshot: CrewSnapshot,
         payload: String,
         relays: List<String>,
-    ) {
-        val current = loadAll().toMutableMap()
-        val key = eventKey(crewId, identityPublicKey)
-        current[key] = StoredSnapshot(
-            relays = relays,
-            payload = payload,
-        )
-        prefs.edit().putString(SNAPSHOTS_KEY, gson.toJson(current)).apply()
-        transport.publish(crewId, payload, relays)
+    ): Boolean {
+        projectionStore.upsertLatest(snapshot)
+        return transport.publish(snapshot.crewId, payload, relays)
     }
 
     public suspend fun pull(crewId: String, crewKey: String, relays: List<String>): List<CrewSnapshot> {
-        val remoteSnapshots = transport.pull(crewId, relays)
-            .mapNotNull { CrewSnapshotCodec.decodeEncrypted(it, crewKey) }
-        val localSnapshots = loadAll()
-            .filterKeys { it.startsWith("$crewId:") }
-            .values
-            .mapNotNull { CrewSnapshotCodec.decodeEncrypted(it.payload, crewKey) }
-        return remoteSnapshots + localSnapshots
+        refresh(crewId, crewKey, relays).toList()
+        return projectionStore.load(crewId).snapshots
     }
+
+    public fun refresh(crewId: String, crewKey: String, relays: List<String>): Flow<CrewRelayResult> =
+        transport.pullIncrementally(crewId, relays)
+            .onEach { result ->
+                result.events.forEach { event -> acceptEvent(event, crewKey) }
+                projectionStore.recordRelayResult(crewId, result.relayUrl, result.error)
+            }
 
     public fun observe(crewId: String, crewKey: String, relays: List<String>): Flow<CrewSnapshot> =
         transport.observe(crewId, relays)
-            .mapNotNull { CrewSnapshotCodec.decodeEncrypted(it, crewKey) }
+            .mapNotNull { event -> acceptEvent(event, crewKey) }
 
-    private fun loadAll(): Map<String, StoredSnapshot> {
-        val json = prefs.getString(SNAPSHOTS_KEY, null) ?: return emptyMap()
-        return try {
-            val type = object : TypeToken<Map<String, StoredSnapshot>>() {}.type
-            gson.fromJson<Map<String, StoredSnapshot>>(json, type) ?: emptyMap()
-        } catch (_: Exception) {
-            emptyMap()
-        }
+    public fun observeProjection(crewId: String): Flow<CrewProjection> =
+        projectionStore.observe(crewId)
+
+    public suspend fun loadProjection(crewId: String): CrewProjection = projectionStore.load(crewId)
+
+    public suspend fun setHidden(crewId: String, identityPublicKey: String, hidden: Boolean) {
+        projectionStore.setHidden(crewId, identityPublicKey, hidden)
     }
 
-    private fun eventKey(crewId: String, identityPublicKey: String): String = "$crewId:$identityPublicKey"
+    public suspend fun deleteProjection(crewId: String) {
+        projectionStore.delete(crewId)
+    }
 
-    private data class StoredSnapshot(
-        val relays: List<String> = emptyList(),
-        val payload: String = "",
-    )
+    private suspend fun acceptEvent(event: CrewRelayEvent, crewKey: String): CrewSnapshot? {
+        val snapshot = CrewSnapshotCodec.decodeEncrypted(event.content, crewKey) ?: return null
+        if (snapshot.identityPublicKey != event.authorPublicKey) return null
+        if (snapshot.publishedAtEpochSeconds > event.createdAtEpochSeconds + MAX_CLOCK_SKEW_SECONDS) return null
+        projectionStore.upsertLatest(snapshot)
+        return snapshot
+    }
 
     private companion object {
-        private const val SNAPSHOTS_KEY: String = "snapshots"
+        private const val MAX_CLOCK_SKEW_SECONDS: Long = 5 * 60L
     }
 }

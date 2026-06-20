@@ -5,52 +5,87 @@ import java.security.SecureRandom
 import java.util.Base64
 
 public object CrewJoinCodeCodec {
-    private const val PREFIX: String = "pomo-crew."
-    private const val VERSION: Int = 1
+    private const val RAW_PREFIX: String = "pomo-crew.v2."
+    private const val LEGACY_PREFIX: String = "pomo-crew."
+    private const val URI_PREFIX: String = "pomo://crew/join/v2/"
+    private const val MAX_ENCODED_LENGTH: Int = 16 * 1024
     private val gson = Gson()
 
     public fun newPayload(
+        crewName: String,
         crewId: String = randomHex(16),
         relays: List<String> = CrewDefaults.DEFAULT_RELAYS,
         key: String = randomHex(32),
-    ): CrewJoinPayload = CrewJoinPayload(
-        crewId = crewId,
-        relays = relays.filter { it.isNotBlank() },
-        key = key,
-    )
+    ): CrewJoinPayload {
+        val normalizedName = requireNotNull(CrewValidation.normalizeCrewName(crewName)) {
+            "Crew name is invalid"
+        }
+        return CrewJoinPayload(
+            crewId = crewId,
+            crewName = normalizedName,
+            relays = normalizeRelays(relays),
+            key = key,
+        ).also(::requireValid)
+    }
 
-    public fun encode(payload: CrewJoinPayload): String {
-        require(payload.crewId.isNotBlank())
-        require(payload.relays.isNotEmpty())
-        require(payload.key.isNotBlank())
+    public fun encode(payload: CrewJoinPayload): String = RAW_PREFIX + encodePayload(payload)
+
+    public fun encodeUri(payload: CrewJoinPayload): String = URI_PREFIX + encodePayload(payload)
+
+    public fun decode(value: String): CrewJoinPayload? {
+        val encoded = when {
+            value.startsWith(URI_PREFIX) -> value.removePrefix(URI_PREFIX)
+            value.startsWith(RAW_PREFIX) -> value.removePrefix(RAW_PREFIX)
+            else -> return null
+        }
+        if (encoded.isBlank() || encoded.length > MAX_ENCODED_LENGTH) return null
+        return runCatching {
+            val json = String(Base64.getUrlDecoder().decode(encoded), Charsets.UTF_8)
+            val decoded = gson.fromJson(json, EncodedJoinPayload::class.java)
+            CrewJoinPayload(
+                crewId = decoded.crewId,
+                crewName = CrewValidation.normalizeCrewName(decoded.crewName) ?: return null,
+                relays = normalizeRelays(decoded.relays.orEmpty()),
+                key = decoded.key,
+                version = decoded.version,
+            ).also(::requireValid)
+        }.getOrNull()
+    }
+
+    public fun isLegacy(value: String): Boolean =
+        value.startsWith(LEGACY_PREFIX) && !value.startsWith(RAW_PREFIX)
+
+    private fun encodePayload(payload: CrewJoinPayload): String {
+        requireValid(payload)
         val encoded = EncodedJoinPayload(
-            version = VERSION,
+            version = CrewDefaults.PROTOCOL_VERSION,
             crewId = payload.crewId,
-            relays = payload.relays,
+            crewName = requireNotNull(CrewValidation.normalizeCrewName(payload.crewName)),
+            relays = normalizeRelays(payload.relays),
             key = payload.key,
         )
         val bytes = gson.toJson(encoded).toByteArray(Charsets.UTF_8)
-        return PREFIX + Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
     }
 
-    public fun decode(code: String): CrewJoinPayload? {
-        if (!code.startsWith(PREFIX)) return null
-        return try {
-            val raw = code.removePrefix(PREFIX)
-            val json = String(Base64.getUrlDecoder().decode(raw), Charsets.UTF_8)
-            val decoded = gson.fromJson(json, EncodedJoinPayload::class.java)
-            if (decoded.version != VERSION) return null
-            val relays = decoded.relays.orEmpty().filter { it.isNotBlank() }.ifEmpty { CrewDefaults.DEFAULT_RELAYS }
-            if (decoded.crewId.isBlank() || decoded.key.isBlank()) return null
-            CrewJoinPayload(decoded.crewId, relays, decoded.key)
-        } catch (_: Exception) {
-            null
-        }
+    private fun requireValid(payload: CrewJoinPayload) {
+        require(payload.version == CrewDefaults.PROTOCOL_VERSION)
+        require(CrewValidation.isLowerHex(payload.crewId, expectedLength = 32))
+        require(CrewValidation.normalizeCrewName(payload.crewName) == payload.crewName)
+        require(normalizeRelays(payload.relays).isNotEmpty())
+        require(CrewValidation.isLowerHex(payload.key, expectedLength = 64))
+    }
+
+    private fun normalizeRelays(relays: List<String>): List<String> {
+        val normalized = CrewRelayTransport.filterValidRelayUrls(relays)
+            .take(CrewValidation.MAX_RELAYS)
+        return normalized.ifEmpty { CrewDefaults.DEFAULT_RELAYS }
     }
 
     private data class EncodedJoinPayload(
-        val version: Int = VERSION,
+        val version: Int = CrewDefaults.PROTOCOL_VERSION,
         val crewId: String = "",
+        val crewName: String = "",
         val relays: List<String>? = emptyList(),
         val key: String = "",
     )

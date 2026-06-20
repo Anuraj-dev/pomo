@@ -9,13 +9,21 @@ import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Database(
-    entities = [DayStatsEntity::class, SessionEntity::class],
-    version = 3,
+    entities = [
+        DayStatsEntity::class,
+        SessionEntity::class,
+        CrewSnapshotEntity::class,
+        CrewDailyAggregateEntity::class,
+        CrewHiddenMemberEntity::class,
+        CrewRelayStateEntity::class,
+    ],
+    version = 4,
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
 
     public abstract fun historyDao(): HistoryDao
+    public abstract fun crewDao(): CrewDao
 
     public companion object {
         @Volatile
@@ -33,7 +41,7 @@ public abstract class AppDatabase : RoomDatabase() {
                 AppDatabase::class.java,
                 "pomo.db",
             )
-                .addMigrations(MIGRATION_1_3, MIGRATION_2_3)
+                .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4)
                 .build()
         }
 
@@ -47,6 +55,84 @@ public abstract class AppDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 migrateSessionsToStartPrimaryKey(db)
             }
+        }
+
+        public val MIGRATION_3_4: Migration = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                createCrewTables(db)
+            }
+        }
+
+        private fun createCrewTables(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `crew_snapshots` (
+                    `crewId` TEXT NOT NULL,
+                    `identityPublicKey` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `allTimeFocusMinutes` INTEGER NOT NULL,
+                    `publishedAtEpochSeconds` INTEGER NOT NULL,
+                    `localDate` TEXT NOT NULL,
+                    `utcOffsetMinutes` INTEGER NOT NULL,
+                    `currentStreak` INTEGER NOT NULL,
+                    `lastFocusedAtEpochSeconds` INTEGER NOT NULL,
+                    `protocolVersion` INTEGER NOT NULL,
+                    PRIMARY KEY(`crewId`, `identityPublicKey`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_crew_snapshots_crewId` ON `crew_snapshots` (`crewId`)")
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_crew_snapshots_crewId_publishedAtEpochSeconds` " +
+                    "ON `crew_snapshots` (`crewId`, `publishedAtEpochSeconds`)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `crew_daily_aggregates` (
+                    `crewId` TEXT NOT NULL,
+                    `identityPublicKey` TEXT NOT NULL,
+                    `localDate` TEXT NOT NULL,
+                    `focusMinutes` INTEGER NOT NULL,
+                    `completedWorkBlocks` INTEGER NOT NULL,
+                    PRIMARY KEY(`crewId`, `identityPublicKey`, `localDate`),
+                    FOREIGN KEY(`crewId`, `identityPublicKey`)
+                        REFERENCES `crew_snapshots`(`crewId`, `identityPublicKey`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_crew_daily_aggregates_crewId_identityPublicKey` " +
+                    "ON `crew_daily_aggregates` (`crewId`, `identityPublicKey`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_crew_daily_aggregates_crewId_localDate` " +
+                    "ON `crew_daily_aggregates` (`crewId`, `localDate`)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `crew_hidden_members` (
+                    `crewId` TEXT NOT NULL,
+                    `identityPublicKey` TEXT NOT NULL,
+                    `hiddenAtEpochSeconds` INTEGER NOT NULL,
+                    PRIMARY KEY(`crewId`, `identityPublicKey`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_crew_hidden_members_crewId` ON `crew_hidden_members` (`crewId`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `crew_relay_state` (
+                    `crewId` TEXT NOT NULL,
+                    `relayUrl` TEXT NOT NULL,
+                    `lastAttemptEpochSeconds` INTEGER NOT NULL,
+                    `lastSuccessEpochSeconds` INTEGER,
+                    `lastError` TEXT,
+                    PRIMARY KEY(`crewId`, `relayUrl`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_crew_relay_state_crewId` ON `crew_relay_state` (`crewId`)")
         }
 
         private fun migrateSessionsToStartPrimaryKey(db: SupportSQLiteDatabase) {

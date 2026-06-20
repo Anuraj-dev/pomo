@@ -1,147 +1,118 @@
 package com.pomo.crew
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.LocalDate
+import java.time.ZoneOffset
 
 public class CrewLeaderboardAggregatorTest {
+    private val nowDate: LocalDate = LocalDate.of(2026, 6, 20)
+    private val now: Long = nowDate.atStartOfDay().toEpochSecond(ZoneOffset.UTC) + 12 * 60 * 60
+
     @Test
-    public fun rank_sortsByAllTimeFocusMinutesAndMarksSelf() {
-        val now = 10_000_000L
+    public fun rankUsesCompetitionRanksAndLeavesZeroTotalsUnranked() {
         val rows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "self",
+            crewId = CREW_ID,
+            selfIdentityPublicKey = identity(1),
             snapshots = listOf(
-                snapshot("crew-1", "self", "Me", 50, publishedAt = now),
-                snapshot("crew-1", "friend", "Friend", 125, publishedAt = now),
-                snapshot("other", "other", "Other", 500, publishedAt = now),
+                snapshot(identity(1), "Me", allTime = 90),
+                snapshot(identity(2), "Asha", allTime = 120),
+                snapshot(identity(3), "Bo", allTime = 120),
+                snapshot(identity(4), "Zero", allTime = 0),
             ),
             nowEpochSeconds = now,
         )
 
-        assertEquals(2, rows.size)
-        assertEquals("Friend", rows[0].displayName)
-        assertEquals(125, rows[0].allTimeFocusMinutes)
-        assertEquals("Me", rows[1].displayName)
-        assertTrue(rows[1].isSelf)
+        assertEquals(listOf("Asha", "Bo", "Me", "Zero"), rows.map { it.displayName })
+        assertEquals(listOf(1, 1, 3, null), rows.map { it.rank })
+        assertTrue(rows.first { it.displayName == "Me" }.isSelf)
     }
 
     @Test
-    public fun rank_keepsLatestSnapshotPerIdentity() {
-        val now = 10_000_000L
-        val rows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "self",
+    public fun rankingWindowsUseMemberLocalDatedAggregates() {
+        val rowsToday = CrewLeaderboardAggregator.rank(
+            crewId = CREW_ID,
+            selfIdentityPublicKey = identity(1),
             snapshots = listOf(
-                snapshot("crew-1", "friend", "Old Friend", 300, publishedAt = now - 1),
-                snapshot("crew-1", "friend", "Friend", 25, publishedAt = now),
-                snapshot("crew-1", "self", "Me", 50, publishedAt = now - 1),
+                snapshot(identity(1), "Me", allTime = 500, dailyMinutes = (0..29).associate { it to 1 }),
+                snapshot(identity(2), "Friend", allTime = 50, dailyMinutes = mapOf(0 to 90, 7 to 200)),
             ),
-            nowEpochSeconds = now,
-        )
-
-        assertEquals(2, rows.size)
-        assertEquals("Me", rows[0].displayName)
-        assertEquals("Friend", rows[1].displayName)
-        assertEquals(25, rows[1].allTimeFocusMinutes)
-    }
-
-    @Test
-    public fun rank_ordersMultipleMembersByAllTimeFocusMinutes() {
-        val now = 10_000_000L
-        val rows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "self",
-            snapshots = listOf(
-                snapshot("crew-1", "self", "Me", 90, publishedAt = now),
-                snapshot("crew-1", "friend-a", "Asha", 120, publishedAt = now),
-                snapshot("crew-1", "friend-b", "Bo", 15, publishedAt = now),
-            ),
-            nowEpochSeconds = now,
-        )
-
-        assertEquals(listOf("Asha", "Me", "Bo"), rows.map { it.displayName })
-        assertEquals(listOf(1, 2, 3), rows.map { it.rank })
-    }
-
-    @Test
-    public fun rank_todayModeOrdersByTodayFocusMinutes() {
-        val now = 10_000_000L
-        val snapshots = listOf(
-            snapshot("crew-1", "self", "Me", minutes = 500, publishedAt = now, todayMinutes = 10),
-            snapshot("crew-1", "friend", "Friend", minutes = 50, publishedAt = now, todayMinutes = 90),
-        )
-
-        val allTimeRows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "self",
-            snapshots = snapshots,
-            mode = CrewRankingMode.AllTime,
-            nowEpochSeconds = now,
-        )
-        val todayRows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "self",
-            snapshots = snapshots,
             mode = CrewRankingMode.Today,
             nowEpochSeconds = now,
         )
+        val rowsSevenDays = CrewLeaderboardAggregator.rank(
+            crewId = CREW_ID,
+            selfIdentityPublicKey = identity(1),
+            snapshots = rowsToday.mapNotNull { row ->
+                listOf(
+                    snapshot(identity(1), "Me", allTime = 500, dailyMinutes = (0..29).associate { it to 1 }),
+                    snapshot(identity(2), "Friend", allTime = 50, dailyMinutes = mapOf(0 to 90, 7 to 200)),
+                ).firstOrNull { it.identityPublicKey == row.identityPublicKey }
+            },
+            mode = CrewRankingMode.SevenDays,
+            nowEpochSeconds = now,
+        )
 
-        assertEquals(listOf("Me", "Friend"), allTimeRows.map { it.displayName })
-        assertEquals(listOf("Friend", "Me"), todayRows.map { it.displayName })
+        assertEquals(listOf("Friend", "Me"), rowsToday.map { it.displayName })
+        assertEquals(90, rowsToday.first().todayFocusMinutes)
+        assertEquals(90, rowsSevenDays.first().sevenDayFocusMinutes)
+        assertEquals(7, rowsSevenDays.last().sevenDayFocusMinutes)
     }
 
     @Test
-    public fun rank_marksSevenDaySilentMembersStaleAndDropsThirtyDaySilentMembersFromAllTime() {
-        val now = 10_000_000L
+    public fun rankKeepsLatestSnapshotAndSeparatesStaleFromInactive() {
         val snapshots = listOf(
-            snapshot("crew-1", "fresh", "Fresh", minutes = 10, publishedAt = now),
-            snapshot("crew-1", "stale", "Stale", minutes = 90, publishedAt = now - (8 * DAY_SECONDS)),
-            snapshot("crew-1", "gone", "Gone", minutes = 500, publishedAt = now - (31 * DAY_SECONDS)),
+            snapshot(identity(1), "Old", allTime = 500, publishedAt = now - 1),
+            snapshot(identity(1), "Fresh", allTime = 10, publishedAt = now),
+            snapshot(identity(2), "Stale", allTime = 90, lastFocusedAt = now - 8 * DAY_SECONDS),
+            snapshot(identity(3), "Inactive", allTime = 900, lastFocusedAt = now - 31 * DAY_SECONDS),
         )
 
-        val allTimeRows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "fresh",
+        val rows = CrewLeaderboardAggregator.rank(
+            crewId = CREW_ID,
+            selfIdentityPublicKey = identity(1),
             snapshots = snapshots,
-            mode = CrewRankingMode.AllTime,
-            nowEpochSeconds = now,
-        )
-        val todayRows = CrewLeaderboardAggregator.rank(
-            crewId = "crew-1",
-            selfIdentityPublicKey = "fresh",
-            snapshots = snapshots,
-            mode = CrewRankingMode.Today,
             nowEpochSeconds = now,
         )
 
-        assertEquals(listOf("Stale", "Fresh"), allTimeRows.map { it.displayName })
-        assertTrue(requireNotNull(allTimeRows.firstOrNull { it.displayName == "Stale" }).isStale)
-        assertEquals(listOf("Fresh", "Gone", "Stale"), todayRows.map { it.displayName })
-        assertTrue(requireNotNull(todayRows.firstOrNull { it.displayName == "Gone" }).isDroppedFromAllTime)
+        assertEquals(listOf("Stale", "Fresh", "Inactive"), rows.map { it.displayName })
+        assertTrue(rows.first().isStale)
+        assertFalse(rows.first().isInactive)
+        assertTrue(rows.last().isInactive)
+        assertNull(rows.last().rank)
     }
 
     private fun snapshot(
-        crewId: String,
         identity: String,
         name: String,
-        minutes: Int,
-        publishedAt: Long = 1,
-        todayMinutes: Int = 0,
-    ): CrewSnapshot =
-        CrewSnapshot(
-            crewId = crewId,
-            identityPublicKey = identity,
-            displayName = name,
-            allTimeFocusMinutes = minutes,
-            publishedAtEpochSeconds = publishedAt,
-            todayFocusMinutes = todayMinutes,
-            currentStreak = 1,
-            todaySessionCount = 1,
-            lastActiveEpochSeconds = publishedAt,
-        )
+        allTime: Int,
+        dailyMinutes: Map<Int, Int> = mapOf(0 to allTime),
+        publishedAt: Long = now,
+        lastFocusedAt: Long = now,
+    ): CrewSnapshot = CrewSnapshot(
+        crewId = CREW_ID,
+        identityPublicKey = identity,
+        displayName = name,
+        allTimeFocusMinutes = allTime,
+        publishedAtEpochSeconds = publishedAt,
+        localDate = nowDate.toString(),
+        utcOffsetMinutes = 0,
+        dailyAggregates = dailyMinutes.entries
+            .map { (daysAgo, minutes) ->
+                CrewDailyAggregate(nowDate.minusDays(daysAgo.toLong()).toString(), minutes, minutes / 25)
+            }
+            .sortedByDescending { it.localDate },
+        currentStreak = 1,
+        lastFocusedAtEpochSeconds = lastFocusedAt,
+    )
+
+    private fun identity(index: Int): String = index.toString(16).padStart(64, '0')
 
     private companion object {
+        private val CREW_ID: String = "11".repeat(16)
         private const val DAY_SECONDS: Long = 24L * 60L * 60L
     }
 }
