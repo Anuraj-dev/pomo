@@ -61,7 +61,16 @@ db/
 
 Room database, DAO, session entities, daily stats entities, and the repository
 used by service and UI. Completed sessions are recorded locally and reflected in
-Stats and History screens.
+Stats and History screens. Room also holds the durable Crew read model, keyed by
+Crew and member Identity key; Crew aggregates never become canonical history.
+
+```text
+crew/
+```
+
+Builds this phone's aggregate Snapshot from canonical Room history, exchanges
+encrypted Snapshots through relays, incrementally upserts valid member Snapshots
+into the Room-backed Crew read model, and derives rankings locally.
 
 ```text
 network/PhoneServer.kt
@@ -104,6 +113,31 @@ History dates use the phone's local calendar day. When a session crosses
 midnight, the repository splits it into per-date segments, rounds each segment's
 seconds up to minutes, and counts a completed work session only on the final
 segment.
+
+## Crew Read Model
+
+Crew data is a non-authoritative local projection of members' latest valid
+Snapshots. Each row is keyed by `(crewId, identityPublicKey)` and upserted only
+when the incoming Snapshot is newer. The UI observes this projection immediately;
+concurrent relay refreshes improve it incrementally in the background.
+
+Ranking-window projections are computed outside composition and exposed as
+immutable UI state. The Crew screen renders member rows through a stable-keyed
+virtualized lazy list; it does not sort or compose the complete board during each
+row recomposition.
+
+Performance verification uses deterministic 500-member Snapshots and fake relay
+timelines for incremental/partial/offline states. Ranking and window calculation
+have a focused benchmark; cached board presentation has an Android
+Macrobenchmark. Public relays are excluded from pass/fail CI timing.
+
+Crew storage is separate from private session history. A remote aggregate must
+never create, edit, or reconcile a local History row.
+
+Identity private keys and Crew shared keys are stored only as ciphertext wrapped
+by a non-exportable Android Keystore AES key. Public metadata and aggregate Room
+projections remain readable without unwrapping private material. Signing,
+decryption, and explicit Recovery export unwrap only the required secret.
 
 ## Pairing And Remote Clients
 

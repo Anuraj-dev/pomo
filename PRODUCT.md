@@ -30,6 +30,9 @@ Own a focus session from start to finish as a live performance readout. The phon
 - Reduce time from app open to running timer to one tap, no setup, no modal.
 - Make the current phase unmistakable in under a second of looking.
 - Make Stats feel like a telemetry readout of real work, not a dashboard of vanity metrics.
+- Make Crew feel like privacy-preserving competitive telemetry: fast rankings
+  and shared focus stats without accounts, public profiles, or a Pomo-owned
+  backend.
 - Land a real light theme so the app is usable in direct sun — but dark is the canonical experience for this product.
 
 ## Success criteria
@@ -38,13 +41,128 @@ Own a focus session from start to finish as a live performance readout. The phon
 - A returning user can identify current phase, remaining time, and today's session count in a single glance under 1 second.
 - The running timer visibly shows fractional seconds updating; the user perceives the screen as "live."
 - Stats screen answers three questions without scrolling: how long have I been doing this, when do I actually focus, am I on streak.
+- Crew opens on the last-known leaderboard without waiting for relays. Relay
+  refresh happens in the background and the UI exposes freshness explicitly.
+- Crew shows its cached leaderboard within 100 ms. Ranking-window changes fit
+  within one 16 ms frame for up to 500 members. A healthy relay produces the
+  first incremental update within 1 second on normal connectivity; refresh
+  settles or exposes partial/offline state within 3 seconds. Crew work never
+  delays timer frames or service commands.
+- Performance acceptance uses a deterministic 500-member fixture, fake-relay
+  timing tests, ranking/window benchmarks, and an Android Macrobenchmark for
+  cached Crew rendering. CI does not depend on live public-relay latency.
+- Crew refreshes all configured relays concurrently and improves the cached board
+  as responses arrive. Relay publication is concurrent and never delays timer
+  or service work.
+- Relay subscriptions live only while Crew is visible. Pomo performs no periodic
+  background Crew pulls; the Room cache provides instant startup and refresh
+  occurs when Crew opens.
+- This phone publishes after canonical aggregate changes, display-identity
+  changes, and Crew creation/join. Opening Crew republishes unchanged data only
+  when the last successful publish is more than 24 hours old. Start, pause,
+  reset, and skip do not publish unless they commit an aggregate change.
+- Valid Snapshot writes persist immediately, but visible leaderboard emissions
+  are coalesced to at most one per 100 ms during relay bursts. Reordered rows snap
+  to position without bounce or decorative movement.
+- Once a cached board exists, synchronization never replaces it with a loading or
+  error screen. Crew remains usable and reports `SYNCING`, last-updated age,
+  partial relay coverage, or offline state compactly.
+- Crew rankings support exactly four comparable windows: Today, rolling 7 days,
+  rolling 30 days, and All-time.
+- Rolling 7 days means each member's current phone-local date plus the previous
+  6 local dates; rolling 30 days means current plus the previous 29. They are not
+  elapsed 168-hour or 720-hour windows.
+- Today uses each member's phone-local calendar day, consistent with local
+  History and Stats. A Snapshot identifies that local date so an old daily total
+  cannot carry across midnight.
+- Snapshot day-boundary metadata contains the member's local date and numeric UTC
+  offset at publication, not a named timezone. This is the accepted minimum
+  privacy trade-off for cross-time-zone local-day ranking.
+- Crew shares only compact daily aggregates for the latest 30 local dates—Focus
+  minutes and completed Work blocks—plus lifetime Focus minutes and current
+  streak. Raw Work block timestamps never leave the member's phone for Crew.
+- Members with equal Focus minutes share a rank. Stable row ordering may resolve
+  display order but must not resolve the competitive tie.
+- Members with zero Focus minutes in the selected window remain visible below
+  ranked members with a `—` rank; non-participation is not a placement.
+- Crew leads with ranking controls and the leaderboard. Join codes, identity
+  editing, Crew switching, creation, and leaving live behind a secondary Manage
+  Crew action.
+- A Crew has a human-readable name chosen at creation and embedded immutably in
+  its Join code. UI uses that name; the protocol Crew id appears only in
+  diagnostics. Decentralized mutable renames are not supported.
+- Manage Crew presents Share Crew through Android's share sheet and an on-screen
+  QR code. Copying the raw Join code remains a secondary compatibility action.
+- The canonical shared representation is a versioned
+  `pomo://crew/join/v2/<payload>` URI handled by Pomo. Raw-code decoding remains
+  supported, and a deep link never saves membership without explicit confirmation.
+- Join confirmation shows the Crew name, relay domains, and the membership
+  warning: anyone holding the link can read aggregate Crew stats and publish
+  self-reported scores.
+- Manage Crew supports explicit passphrase-encrypted identity backup and restore,
+  preserving the secp256k1 Identity and Crew memberships across reinstall or
+  device migration. Identity private keys never appear in Join links or
+  unencrypted QR codes.
+- Restoring over an existing different Identity is an explicit destructive
+  replacement, never a merge. Pomo offers to export the current Identity first,
+  then atomically replaces Identity and memberships and rebuilds the Crew read
+  model.
+- Identity private keys and Crew shared keys are encrypted at rest using an
+  Android Keystore-backed wrapping key. Keystore loss requires Recovery-file
+  restore; private material is unwrapped only for Crew cryptographic operations
+  or explicit export.
+- Recovery export requires biometric or device-credential authentication. Normal
+  Snapshot signing and publication remain non-interactive.
+- Display names are non-unique. When visible members share the same normalized
+  Display name, UI appends a short public Identity-key fingerprint for
+  disambiguation; otherwise fingerprints remain hidden.
+- Display names allow ordinary Unicode and emoji, collapse surrounding/repeated
+  whitespace, and are limited to 24 grapheme clusters. Crew names use the same
+  rules with a 40-grapheme limit. Blank values, line breaks, control characters,
+  and bidirectional overrides are rejected.
+- A leaderboard search field appears only above 20 active members. It filters by
+  Display name or visible Identity fingerprint while preserving canonical ranks;
+  the filtered subset is never re-ranked.
+- Snapshot v1 and v2 do not mix. Existing v1 memberships become local read-only
+  archives behind a one-time migration notice; active ranking requires creating
+  or joining a v2 Crew.
+- Crew v2 ships atomically. Protocol, Room projection, concurrent transport,
+  migration, joining/sharing, recovery, ranking, and leaderboard UI must all be
+  release-ready before v1 is archived in a production build.
+- A leaderboard row exposes rank, display name, the selected window's Focus
+  minutes, streak, and a compact seven-bar daily trend. Selecting a member opens aggregate
+  details: 30-day trend, active days, average per active day, best day, completed
+  Work blocks, and comparison with the current member.
+- A compact Your Standing strip remains above the leaderboard and shows the
+  current member's rank, selected-window Focus minutes, and gap to the next rank.
+  The canonical list remains complete; Crew does not use decorative podium cards.
+- Your Standing compares distinct ranks: a lower member sees the gap to the next
+  distinct rank, a tie shows how many share it, a sole leader sees the lead over
+  second, and a zero-window member is explicitly unranked.
+- A phone may hide or unhide a member Identity locally. Crew has no kick or ban;
+  if a join code is compromised, members create a new Crew.
+- A member is marked stale after 7 days without activity and inactive after 30
+  days. Inactive members are excluded from active ranks but remain available in
+  a collapsed Inactive section with their last aggregate stats.
+- Stale and inactive status use the member's last completed Focus Work block,
+  not Snapshot publication time or app activity. Snapshot freshness is reported
+  separately and cannot keep a member competitively active.
+- Each Ranking window includes a compact Crew summary: total Crew Focus minutes,
+  members active in that window, and median member Focus minutes. Median is the
+  baseline; an outlier-resistant aggregate is preferred over average.
+- Rank movement is not shown until the Snapshot protocol provides a reliable
+  comparison baseline for every Ranking window. Crew must not infer historical
+  rank from whichever relay data happened to be cached on one phone.
 - No screen ships without empty, loading, and error states defined.
 - App scores at least WCAG AA on every text surface in both themes, and works correctly at 200 percent system font scale.
 
 ## Non-goals
 
-- Gamification beyond the existing streak and daily goal. No XP, no levels, no badges, no leaderboards.
-- Social, sharing, or account features. The app is single-user and local-first.
+- Gamification beyond the existing streak, daily goal, and Crew rankings. No XP,
+  levels, badges, public profiles, or coaching mechanics.
+- Social networking or account features. Crew is limited to private,
+  join-code-based comparison of focus telemetry; the app remains local-first
+  and has no login or Pomo-owned social backend.
 - An AI coach or recommendation surface.
 - Cross-device sync beyond the existing LAN desktop client. Phone remains the source of truth.
 - Custom illustration sets or mascots. Visual identity rests on type, color, motion.
