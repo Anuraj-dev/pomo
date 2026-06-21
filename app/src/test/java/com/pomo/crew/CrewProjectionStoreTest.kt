@@ -39,6 +39,23 @@ public class CrewProjectionStoreTest {
         assertEquals("timeout", second?.lastError)
     }
 
+    @Test
+    public fun recordPublishResultTracksPublishFreshnessSeparatelyFromPulls(): Unit = runBlocking {
+        store.recordRelayResult(CREW_ID, RELAY_URL, error = null)
+
+        store.recordPublishResult(
+            crewId = CREW_ID,
+            result = CrewRelayPublishResult(
+                relayUrl = RELAY_URL,
+                accepted = true,
+                error = null,
+            ),
+            nowEpochSeconds = 1234L,
+        )
+
+        assertEquals(1234L, store.lastPublishSuccessEpochSeconds(CREW_ID))
+    }
+
     private companion object {
         private val CREW_ID: String = "ab".repeat(16)
         private const val RELAY_URL: String = "wss://relay.example"

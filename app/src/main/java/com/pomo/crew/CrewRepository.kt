@@ -73,10 +73,7 @@ public class CrewRepository(context: Context) {
 
     public suspend fun republishCurrentCrewIfStale(maxAgeSeconds: Long = REPUBLISH_MAX_AGE_SECONDS): Boolean {
         val membership = crewStore.loadMembership() ?: return false
-        val projection = relayStore.loadProjection(membership.crewId)
-        val lastSuccessfulPublish = projection.relayStates
-            .mapNotNull { it.lastSuccessEpochSeconds }
-            .maxOrNull()
+        val lastSuccessfulPublish = relayStore.lastPublishSuccessEpochSeconds(membership.crewId)
         val now = System.currentTimeMillis() / 1000L
         if (lastSuccessfulPublish != null && now - lastSuccessfulPublish < maxAgeSeconds) return false
         publishSelfSnapshot(membership)

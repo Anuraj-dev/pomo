@@ -17,7 +17,15 @@ public class LocalCrewRelayStore(context: Context) {
         relays: List<String>,
     ): Boolean {
         projectionStore.upsertLatest(snapshot)
-        return transport().publish(snapshot.crewId, payload, relays)
+        val results = transport().publishResults(snapshot.crewId, payload, relays)
+        results.forEach { result ->
+            projectionStore.recordPublishResult(
+                crewId = snapshot.crewId,
+                result = result,
+                nowEpochSeconds = snapshot.publishedAtEpochSeconds,
+            )
+        }
+        return results.any { it.accepted }
     }
 
     public suspend fun pull(crewId: String, crewKey: String, relays: List<String>): List<CrewSnapshot> {
@@ -40,6 +48,9 @@ public class LocalCrewRelayStore(context: Context) {
         projectionStore.observe(crewId)
 
     public suspend fun loadProjection(crewId: String): CrewProjection = projectionStore.load(crewId)
+
+    public fun lastPublishSuccessEpochSeconds(crewId: String): Long? =
+        projectionStore.lastPublishSuccessEpochSeconds(crewId)
 
     public suspend fun setHidden(crewId: String, identityPublicKey: String, hidden: Boolean) {
         projectionStore.setHidden(crewId, identityPublicKey, hidden)

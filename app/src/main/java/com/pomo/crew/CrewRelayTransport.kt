@@ -40,6 +40,12 @@ public data class CrewRelayResult(
     val error: String? = null,
 )
 
+public data class CrewRelayPublishResult(
+    val relayUrl: String,
+    val accepted: Boolean,
+    val error: String? = null,
+)
+
 public class CrewRelayTransport(
     private val nostrPrivateKey: String,
 ) {
@@ -52,12 +58,17 @@ public class CrewRelayTransport(
         crewId: String,
         payload: String,
         relays: List<String>,
-    ): Boolean = coroutineScope {
+    ): Boolean = publishResults(crewId, payload, relays).any { it.accepted }
+
+    public suspend fun publishResults(
+        crewId: String,
+        payload: String,
+        relays: List<String>,
+    ): List<CrewRelayPublishResult> = coroutineScope {
         val event = signedEvent(crewId, payload)
         filterValidRelayUrls(relays)
             .map { relay -> async(Dispatchers.IO) { publishToRelay(relay, event) } }
             .awaitAll()
-            .any { it }
     }
 
     public suspend fun pull(crewId: String, relays: List<String>): List<CrewRelayEvent> =
@@ -143,9 +154,10 @@ public class CrewRelayTransport(
         return CrewRelayEvent(relayUrl, id, pubkey, createdAt, content)
     }
 
-    private fun publishToRelay(relay: String, event: JsonObject): Boolean = try {
+    private fun publishToRelay(relay: String, event: JsonObject): CrewRelayPublishResult = try {
         val latch = CountDownLatch(1)
         var accepted = false
+        var error: String? = null
         val listener = object : WebSocketListener() {
             override fun onOpen(webSocket: WebSocket, response: Response) {
                 webSocket.send(gson.toJson(listOf("EVENT", event)))
@@ -155,21 +167,26 @@ public class CrewRelayTransport(
                 val message = parseArray(text) ?: return
                 if (message.firstString() == "OK") {
                     accepted = message.getOrNull(2)?.asBoolean == true
+                    if (!accepted) {
+                        error = message.getOrNull(3)?.asString ?: "relay rejected event"
+                    }
                     webSocket.close(1000, null)
                     latch.countDown()
                 }
             }
 
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                error = t.message ?: "relay failure"
                 latch.countDown()
             }
         }
         val socket = client.newWebSocket(Request.Builder().url(relay).build(), listener)
-        latch.await(RELAY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        val completed = latch.await(RELAY_TIMEOUT_MS, TimeUnit.MILLISECONDS)
+        if (!completed && error == null) error = "timeout"
         socket.cancel()
-        accepted
-    } catch (_: Exception) {
-        false
+        CrewRelayPublishResult(relayUrl = relay, accepted = accepted, error = error)
+    } catch (exception: Exception) {
+        CrewRelayPublishResult(relayUrl = relay, accepted = false, error = exception.message ?: "relay failure")
     }
 
     private fun pullFromRelay(relay: String, crewId: String): CrewRelayResult = try {

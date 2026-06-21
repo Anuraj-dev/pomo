@@ -17,6 +17,7 @@ public data class CrewProjection(
 
 public class CrewProjectionStore(context: Context) {
     private val dao = AppDatabase.getInstance(context.applicationContext).crewDao()
+    private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     public fun observe(crewId: String): Flow<CrewProjection> =
         combine(
@@ -80,6 +81,21 @@ public class CrewProjectionStore(context: Context) {
 
     public suspend fun delete(crewId: String) {
         dao.deleteCrewProjection(crewId)
+        clearLastPublishSuccess(crewId)
+    }
+
+    public fun lastPublishSuccessEpochSeconds(crewId: String): Long? =
+        if (prefs.contains(lastPublishSuccessKey(crewId))) prefs.getLong(lastPublishSuccessKey(crewId), 0L) else null
+
+    public suspend fun recordPublishResult(crewId: String, result: CrewRelayPublishResult, nowEpochSeconds: Long) {
+        recordRelayResult(crewId, result.relayUrl, result.error)
+        if (result.accepted) {
+            prefs.edit().putLong(lastPublishSuccessKey(crewId), nowEpochSeconds).apply()
+        }
+    }
+
+    public fun clearLastPublishSuccess(crewId: String) {
+        prefs.edit().remove(lastPublishSuccessKey(crewId)).apply()
     }
 
     private fun List<CrewSnapshotEntity>.toModels(
@@ -133,4 +149,10 @@ public class CrewProjectionStore(context: Context) {
         focusMinutes = focusMinutes,
         completedWorkBlocks = completedWorkBlocks,
     )
+
+    private fun lastPublishSuccessKey(crewId: String): String = "crew_publish_success_$crewId"
+
+    private companion object {
+        private const val PREFS_NAME: String = "crew_projection_meta"
+    }
 }

@@ -83,6 +83,7 @@ public fun CrewScreen(
             errorMessage = state.errorMessage,
             onCreateCrew = onCreateCrew,
             onJoinCrew = requestJoin,
+            onImportRecovery = onImportRecovery,
         )
         else -> CrewBoardContent(
             isSyncing = state.isSyncing,
@@ -133,6 +134,7 @@ private fun CrewEmptyState(
     errorMessage: String?,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
+    onImportRecovery: () -> Unit,
 ) {
     var crewName by remember { mutableStateOf("") }
     var displayName by remember { mutableStateOf("") }
@@ -168,6 +170,21 @@ private fun CrewEmptyState(
                     )
                 }
             }
+        }
+        item {
+            SectionHeader("Recovery")
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Restore a saved identity and memberships after reinstalling or clearing Crew data.",
+                style = MaterialTheme.typography.bodySmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Spacer(Modifier.height(8.dp))
+            PomoButton(
+                onClick = onImportRecovery,
+                variant = PomoButtonVariant.Tonal,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Restore Recovery") }
         }
         item {
             SectionHeader("Create")
