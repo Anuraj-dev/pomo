@@ -51,38 +51,22 @@ public class CrewStoreTest {
     }
 
     @Test
-    public fun replaceMembershipsKeepsOnlyDistinctActiveV2Memberships() {
+    public fun initArchivesLegacyCurrentCrewFallbackWhenMembershipListIsMissing() {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putString(LEGACY_CURRENT_CREW_KEY, """{"crewId":"${"33".repeat(16)}","displayName":"Bo"}""")
+            .commit()
+
         val store = CrewStore(context)
-        val first = membership(crewId = "11".repeat(16), crewName = "Alpha")
-        val duplicate = membership(crewId = first.crewId, crewName = "Alpha Copy")
-        val second = membership(crewId = "22".repeat(16), crewName = "Beta")
+        val archived = store.loadArchivedMemberships()
 
-        store.replaceMemberships(listOf(second, first, duplicate))
-
-        val memberships = store.loadMemberships()
-        assertEquals(listOf("Alpha", "Beta"), memberships.map { it.crewName })
-        assertEquals(first.crewId, store.loadMembership()?.crewId)
-    }
-
-    private fun membership(crewId: String, crewName: String): CrewMembership {
-        val payload = CrewJoinPayload(
-            crewId = crewId,
-            crewName = crewName,
-            relays = listOf("wss://relay.example"),
-            key = "33".repeat(32),
-        )
-        return CrewMembership(
-            crewId = crewId,
-            crewName = crewName,
-            joinCode = CrewJoinCodeCodec.encode(payload),
-            relays = payload.relays,
-            key = payload.key,
-            displayName = "Me",
-        )
+        assertEquals(1, archived.size)
+        assertEquals("Bo", archived.single().displayName)
+        assertTrue(archived.single().isArchived)
     }
 
     private companion object {
         private const val PREFS_NAME: String = "crew_prefs"
+        private const val LEGACY_CURRENT_CREW_KEY: String = "current_crew"
         private const val LEGACY_MEMBERSHIPS_KEY: String = "memberships"
     }
 }
