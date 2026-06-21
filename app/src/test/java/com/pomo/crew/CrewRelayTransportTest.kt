@@ -44,6 +44,26 @@ public class CrewRelayTransportTest {
         )
     }
 
+    @Test
+    public fun decodeRelayEventRejectsWrongKindAndMalformedSignature() {
+        val privateKey = CrewNostrKeys.generatePrivateKeyHex()
+        val transport = CrewRelayTransport(privateKey)
+        val event = transport.signedEvent(CREW_ID, "ciphertext")
+
+        event.addProperty("kind", CrewDefaults.SNAPSHOT_EVENT_KIND + 1)
+        assertNull(transport.decodeRelayEvent("""["EVENT","sub",$event]""", CREW_ID, "wss://relay.example"))
+
+        val validEvent = transport.signedEvent(CREW_ID, "ciphertext")
+        validEvent.addProperty("sig", "00")
+        assertNull(
+            transport.decodeRelayEvent(
+                """["EVENT","sub",$validEvent]""",
+                CREW_ID,
+                "wss://relay.example",
+            ),
+        )
+    }
+
     private companion object {
         private val CREW_ID: String = "11".repeat(16)
         private val OTHER_CREW_ID: String = "22".repeat(16)
