@@ -73,6 +73,7 @@ import kotlin.math.roundToInt
 
 public data class CrewScreenState(
     val isLoading: Boolean = false,
+    val isSyncing: Boolean = false,
     val board: CrewBoard? = null,
     val archivedMemberships: List<CrewMembershipSummary> = emptyList(),
     val errorMessage: String? = null,
@@ -119,6 +120,7 @@ public fun CrewScreen(
             onJoinCrew = requestJoin,
         )
         else -> CrewBoardContent(
+            isSyncing = state.isSyncing,
             board = state.board,
             onCreateCrew = onCreateCrew,
             onJoinCrew = requestJoin,
@@ -252,6 +254,7 @@ private fun CrewEmptyState(
 
 @Composable
 private fun CrewBoardContent(
+    isSyncing: Boolean,
     board: CrewBoard,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
@@ -282,7 +285,7 @@ private fun CrewBoardContent(
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
     ) {
         item(key = "header") {
-            CrewHeader(board, onManage = { showManage = true })
+            CrewHeader(board, isSyncing = isSyncing, onManage = { showManage = true })
             Spacer(Modifier.height(20.dp))
         }
         item(key = "window") {
@@ -368,6 +371,8 @@ private fun CrewBoardContent(
     selectedMember?.let { row ->
         MemberDetailSheet(
             row = row,
+            self = board.rows.firstOrNull { it.isSelf },
+            rankingMode = board.rankingMode,
             onDismiss = { selectedMember = null },
             onHide = {
                 onMemberHiddenChange(row.identityPublicKey, true)
@@ -378,7 +383,7 @@ private fun CrewBoardContent(
 }
 
 @Composable
-private fun CrewHeader(board: CrewBoard, onManage: () -> Unit) {
+private fun CrewHeader(board: CrewBoard, isSyncing: Boolean, onManage: () -> Unit) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
@@ -389,9 +394,9 @@ private fun CrewHeader(board: CrewBoard, onManage: () -> Unit) {
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
-                text = freshnessLabel(board),
+                text = freshnessLabel(board, isSyncing),
                 style = MaterialTheme.typography.labelSmall,
-                color = freshnessColor(board),
+                color = freshnessColor(board, isSyncing),
                 fontFamily = FontFamily.Monospace,
             )
         }
@@ -535,7 +540,13 @@ private fun SevenDayBars(row: CrewBoardRow) {
 }
 
 @Composable
-private fun MemberDetailSheet(row: CrewBoardRow, onDismiss: () -> Unit, onHide: () -> Unit) {
+private fun MemberDetailSheet(
+    row: CrewBoardRow,
+    self: CrewBoardRow?,
+    rankingMode: CrewRankingMode,
+    onDismiss: () -> Unit,
+    onHide: () -> Unit,
+) {
     val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
     val average = row.dailyAggregates.filter { it.focusMinutes > 0 }
         .map { it.focusMinutes }
@@ -560,6 +571,20 @@ private fun MemberDetailSheet(row: CrewBoardRow, onDismiss: () -> Unit, onHide: 
             DetailFact("Work blocks", row.dailyAggregates.sumOf { it.completedWorkBlocks }.toString())
             DetailFact("Current streak", "${row.currentStreak}d")
             DetailFact("Identity", row.identityPublicKey.take(12).uppercase(Locale.ROOT))
+            if (!row.isSelf && self != null) {
+                DetailFact(
+                    "${rankingMode.label} vs you",
+                    comparisonLabel(row.selectedFocusMinutes - self.selectedFocusMinutes),
+                )
+                DetailFact(
+                    "30 day vs you",
+                    comparisonLabel(row.thirtyDayFocusMinutes - self.thirtyDayFocusMinutes),
+                )
+                DetailFact(
+                    "Streak vs you",
+                    comparisonDaysLabel(row.currentStreak - self.currentStreak),
+                )
+            }
             if (!row.isSelf) {
                 PomoButton(onClick = onHide, variant = PomoButtonVariant.Ghost) { Text("Hide member locally") }
             }
@@ -849,7 +874,7 @@ private fun rowMeta(row: CrewBoardRow): String = buildList {
     if (row.isInactive) add("inactive")
 }.joinToString(" · ")
 
-private fun freshnessLabel(board: CrewBoard): String {
+private fun freshnessLabel(board: CrewBoard, isSyncing: Boolean): String {
     val updated = board.lastUpdatedEpochSeconds ?: return "NO SNAPSHOTS"
     val ageSeconds = ((System.currentTimeMillis() / 1000L) - updated).coerceAtLeast(0L)
     val age = when {
@@ -857,17 +882,42 @@ private fun freshnessLabel(board: CrewBoard): String {
         ageSeconds < 3600 -> "${ageSeconds / 60}m AGO"
         else -> "${ageSeconds / 3600}h AGO"
     }
+    val syncPrefix = if (isSyncing) "SYNCING · " else ""
     return when {
-        board.successfulRelayCount == 0 -> "OFFLINE · UPDATED $age"
+        board.successfulRelayCount == 0 -> "${syncPrefix}OFFLINE · UPDATED $age"
         board.successfulRelayCount < board.totalRelayCount ->
-            "PARTIAL · ${board.successfulRelayCount}/${board.totalRelayCount} RELAYS · $age"
-        else -> "UPDATED $age"
+            "${syncPrefix}PARTIAL · ${board.successfulRelayCount}/${board.totalRelayCount} RELAYS · $age"
+        else -> "${syncPrefix}UPDATED $age"
     }
 }
 
 @Composable
-private fun freshnessColor(board: CrewBoard) =
-    if (board.successfulRelayCount == 0) PomoTokens.colors.warn else PomoTokens.colors.onSurfaceMuted
+private fun freshnessColor(board: CrewBoard, isSyncing: Boolean) =
+    when {
+        isSyncing -> PomoTokens.colors.accent
+        board.successfulRelayCount == 0 -> PomoTokens.colors.warn
+        else -> PomoTokens.colors.onSurfaceMuted
+    }
+
+private val CrewRankingMode.label: String
+    get() = when (this) {
+        CrewRankingMode.Today -> "Today"
+        CrewRankingMode.SevenDays -> "7 day"
+        CrewRankingMode.ThirtyDays -> "30 day"
+        CrewRankingMode.AllTime -> "All time"
+    }
+
+private fun comparisonLabel(deltaMinutes: Int): String = when {
+    deltaMinutes > 0 -> "+${formatMinutes(deltaMinutes)}"
+    deltaMinutes < 0 -> "-${formatMinutes(-deltaMinutes)}"
+    else -> "Even"
+}
+
+private fun comparisonDaysLabel(deltaDays: Int): String = when {
+    deltaDays > 0 -> "+${deltaDays}d"
+    deltaDays < 0 -> "-${-deltaDays}d"
+    else -> "Even"
+}
 
 private fun formatMinutes(minutes: Int): String = when {
     minutes < 60 -> "${minutes}m"

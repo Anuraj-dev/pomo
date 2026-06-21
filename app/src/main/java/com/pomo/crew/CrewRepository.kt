@@ -6,9 +6,12 @@ import com.pomo.timer.TimerState
 import com.pomo.util.DateLogic
 import java.time.Instant
 import java.time.ZoneId
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.sample
 
 public class CrewRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -42,17 +45,19 @@ public class CrewRepository(context: Context) {
             }
 
     public suspend fun publishCurrentSnapshot(): Boolean {
-        val memberships = crewStore.loadMemberships() + crewStore.loadArchivedMemberships()
+        val memberships = crewStore.loadMemberships()
         if (memberships.isEmpty()) return false
         memberships.forEach { membership -> publishSelfSnapshot(membership) }
         return true
     }
 
+    @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     public fun observeCurrentBoard(rankingMode: Flow<CrewRankingMode>): Flow<CrewBoard> {
         val membership = crewStore.loadMembership() ?: return emptyFlow()
         val memberships = crewStore.loadMemberships()
         return relayStore.observeProjection(membership.crewId)
             .combine(rankingMode) { projection, mode -> projection.toBoard(membership, memberships, mode) }
+            .sample(100L)
     }
 
     public fun refreshCurrentCrew(): Flow<CrewRelayResult> {
@@ -63,6 +68,17 @@ public class CrewRepository(context: Context) {
     public fun observeLiveSnapshots(): Flow<CrewSnapshot> {
         val membership = crewStore.loadMembership() ?: return emptyFlow()
         return relayStore.observe(membership.crewId, membership.key, membership.relays)
+    }
+
+    public suspend fun republishCurrentCrewIfStale(maxAgeSeconds: Long = REPUBLISH_MAX_AGE_SECONDS): Boolean {
+        val membership = crewStore.loadMembership() ?: return false
+        val selfSnapshot = relayStore.loadProjection(membership.crewId).snapshots
+            .filter { it.identityPublicKey == identityPublicKey }
+            .maxByOrNull { it.publishedAtEpochSeconds }
+        val now = System.currentTimeMillis() / 1000L
+        if (selfSnapshot != null && now - selfSnapshot.publishedAtEpochSeconds < maxAgeSeconds) return false
+        publishSelfSnapshot(membership)
+        return true
     }
 
     public suspend fun createSoloCrew(displayName: String, crewName: String = "${displayName.ifBlank { "My" }} Crew"): CrewBoard {
@@ -276,5 +292,9 @@ public class CrewRepository(context: Context) {
         CrewRankingMode.SevenDays -> dailyAggregates.take(7).sumOf { it.focusMinutes }
         CrewRankingMode.ThirtyDays -> dailyAggregates.take(30).sumOf { it.focusMinutes }
         CrewRankingMode.AllTime -> allTimeFocusMinutes
+    }
+
+    private companion object {
+        private const val REPUBLISH_MAX_AGE_SECONDS: Long = 24L * 60L * 60L
     }
 }

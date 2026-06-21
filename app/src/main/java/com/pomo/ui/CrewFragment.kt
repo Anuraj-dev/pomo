@@ -200,7 +200,13 @@ public class CrewFragment : Fragment() {
         liveBoardJob?.cancel()
         liveBoardJob = viewLifecycleOwner.lifecycleScope.launch {
             launch {
-                repository.refreshCurrentCrew().collect { }
+                screenState.value = screenState.value.copy(isSyncing = true)
+                repository.republishCurrentCrewIfStale()
+                try {
+                    repository.refreshCurrentCrew().collect { }
+                } finally {
+                    screenState.value = screenState.value.copy(isSyncing = false)
+                }
             }
             launch {
                 repository.observeLiveSnapshots().collect { }
@@ -214,6 +220,7 @@ public class CrewFragment : Fragment() {
     private fun publishBoard(board: com.pomo.crew.CrewBoard?, errorMessage: String? = null) {
         screenState.value = CrewScreenState(
             isLoading = false,
+            isSyncing = screenState.value.isSyncing,
             board = board,
             archivedMemberships = repository.currentArchivedMemberships(),
             errorMessage = errorMessage,
