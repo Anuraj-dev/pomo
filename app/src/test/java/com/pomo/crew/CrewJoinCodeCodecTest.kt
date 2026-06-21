@@ -1,48 +1,52 @@
 package com.pomo.crew
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Base64
 
 public class CrewJoinCodeCodecTest {
     @Test
-    public fun encodeDecode_roundTripRecoversPayload() {
+    public fun rawAndUriRoundTripRecoverNormalizedV2Payload() {
         val payload = CrewJoinPayload(
-            crewId = "crew-1",
+            crewId = "11".repeat(16),
+            crewName = "Deep Work",
             relays = listOf("wss://relay.example", "wss://backup.example"),
-            key = "abc123",
+            key = "22".repeat(32),
         )
 
-        val decoded = CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encode(payload))
-
-        assertEquals(payload, decoded)
+        assertEquals(payload, CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encode(payload)))
+        assertEquals(payload, CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encodeUri(payload)))
     }
 
     @Test
-    public fun decode_malformedCodeIsRejected() {
+    public fun decodeRejectsMalformedLegacyAndUnknownVersionCodes() {
         assertNull(CrewJoinCodeCodec.decode("not-a-crew-code"))
-        assertNull(CrewJoinCodeCodec.decode("pomo-crew.not-base64"))
+        assertNull(CrewJoinCodeCodec.decode("pomo-crew.v2.not-base64"))
+        assertNull(CrewJoinCodeCodec.decode("pomo-crew.legacy"))
+        assertTrue(CrewJoinCodeCodec.isLegacy("pomo-crew.legacy"))
+
+        val payload = CrewJoinCodeCodec.newPayload("Deep Work")
+        val unknownVersion = CrewJoinCodeCodec.encode(payload).replace("v2", "v3")
+        assertNull(CrewJoinCodeCodec.decode(unknownVersion))
     }
 
     @Test
-    public fun decode_emptyRelayListFallsBackToDefaults() {
-        val json = """{"version":1,"crewId":"crew-1","relays":[],"key":"abc123"}"""
-        val code = "pomo-crew." + Base64.getUrlEncoder()
-            .withoutPadding()
-            .encodeToString(json.toByteArray(Charsets.UTF_8))
+    public fun newPayloadUsesDefaultsSafeNameAndRandomValues() {
+        val first = CrewJoinCodeCodec.newPayload("  Deep   Work  ")
+        val second = CrewJoinCodeCodec.newPayload("Deep Work")
 
-        val decoded = CrewJoinCodeCodec.decode(code)
-
-        assertEquals(CrewDefaults.DEFAULT_RELAYS, decoded?.relays)
+        assertEquals("Deep Work", first.crewName)
+        assertEquals(CrewDefaults.DEFAULT_RELAYS, first.relays)
+        assertNotEquals(first.crewId, second.crewId)
+        assertNotEquals(first.key, second.key)
+        assertNotNull(CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encode(first)))
     }
 
-    @Test
-    public fun newPayload_usesDefaultsAndRandomValues() {
-        val payload = CrewJoinCodeCodec.newPayload()
-
-        assertNotNull(CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encode(payload)))
-        assertEquals(CrewDefaults.DEFAULT_RELAYS, payload.relays)
+    @Test(expected = IllegalArgumentException::class)
+    public fun newPayloadRejectsUnsafeCrewName() {
+        CrewJoinCodeCodec.newPayload("unsafe\u202ename")
     }
 }

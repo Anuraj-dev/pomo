@@ -5,8 +5,14 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 public class CrewStore(context: Context) {
-    private val prefs = context.getSharedPreferences("crew_prefs", Context.MODE_PRIVATE)
+    private val prefs = context.applicationContext
+        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
+    private val cipher: CrewSecretCipher by lazy { CrewSecretCipher() }
+
+    init {
+        archiveLegacyMembershipsIfNeeded()
+    }
 
     public fun loadMembership(): CrewMembership? {
         val memberships = loadMemberships()
@@ -15,25 +21,47 @@ public class CrewStore(context: Context) {
     }
 
     public fun loadMemberships(): List<CrewMembership> {
-        val json = prefs.getString(MEMBERSHIPS_KEY, null)
-        if (json != null) {
-            return try {
-                val type = object : TypeToken<List<CrewMembership>>() {}.type
-                gson.fromJson<List<CrewMembership>>(json, type).orEmpty()
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
+        val encrypted = prefs.getString(SECURE_MEMBERSHIPS_KEY, null) ?: return emptyList()
+        val json = cipher.decryptString(encrypted) ?: return emptyList()
+        return runCatching {
+            val type = object : TypeToken<List<CrewMembership>>() {}.type
+            gson.fromJson<List<CrewMembership>>(json, type).orEmpty()
+                .filter { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived }
+        }.getOrDefault(emptyList())
+    }
 
-        return loadLegacyMembership()?.let { listOf(it) }.orEmpty()
+    public fun loadArchivedMemberships(): List<CrewMembership> {
+        val json = prefs.getString(ARCHIVED_MEMBERSHIPS_KEY, null) ?: return emptyList()
+        return runCatching {
+            val type = object : TypeToken<List<ArchivedMembership>>() {}.type
+            gson.fromJson<List<ArchivedMembership>>(json, type).orEmpty().map { archived ->
+                CrewMembership(
+                    crewId = archived.crewId,
+                    crewName = archived.crewName,
+                    joinCode = "",
+                    relays = emptyList(),
+                    key = "",
+                    displayName = archived.displayName,
+                    protocolVersion = 1,
+                    isArchived = true,
+                )
+            }
+        }.getOrDefault(emptyList())
     }
 
     public fun saveMembership(membership: CrewMembership) {
+        require(membership.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !membership.isArchived)
         val next = loadMemberships()
             .filterNot { it.crewId == membership.crewId }
             .plus(membership)
             .sortedBy { it.crewId }
         saveMemberships(next, activeCrewId = membership.crewId)
+    }
+
+    public fun replaceMemberships(memberships: List<CrewMembership>) {
+        require(memberships.isNotEmpty())
+        require(memberships.all { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived })
+        saveMemberships(memberships.distinctBy { it.crewId }.sortedBy { it.crewId }, memberships.first().crewId)
     }
 
     public fun selectCrew(crewId: String): Boolean {
@@ -57,40 +85,67 @@ public class CrewStore(context: Context) {
     }
 
     public fun updateDisplayName(displayName: String): List<CrewMembership> {
-        val name = displayName.trim().ifBlank { "Me" }
+        val name = CrewValidation.normalizeDisplayName(displayName) ?: return loadMemberships()
         val updated = loadMemberships().map { it.copy(displayName = name) }
         saveMemberships(updated, prefs.getString(ACTIVE_CREW_KEY, null))
         return updated
     }
 
     private fun saveMemberships(memberships: List<CrewMembership>, activeCrewId: String?) {
+        val encrypted = cipher.encryptString(gson.toJson(memberships))
         prefs.edit()
-            .putString(MEMBERSHIPS_KEY, gson.toJson(memberships))
+            .putString(SECURE_MEMBERSHIPS_KEY, encrypted)
             .apply {
-                if (activeCrewId == null) {
-                    remove(ACTIVE_CREW_KEY)
-                } else {
-                    putString(ACTIVE_CREW_KEY, activeCrewId)
-                }
-                if (memberships.isEmpty()) {
-                    remove(CURRENT_CREW_KEY)
-                }
+                if (activeCrewId == null) remove(ACTIVE_CREW_KEY) else putString(ACTIVE_CREW_KEY, activeCrewId)
             }
-            .apply()
+            .commit()
     }
 
-    private fun loadLegacyMembership(): CrewMembership? {
-        val json = prefs.getString(CURRENT_CREW_KEY, null) ?: return null
-        return try {
-            gson.fromJson(json, CrewMembership::class.java)
-        } catch (_: Exception) {
-            null
-        }
+    private fun archiveLegacyMembershipsIfNeeded() {
+        if (prefs.contains(LEGACY_ARCHIVE_COMPLETE_KEY)) return
+        val legacyJson = prefs.getString(LEGACY_MEMBERSHIPS_KEY, null)
+            ?: prefs.getString(LEGACY_CURRENT_CREW_KEY, null)?.let { "[$it]" }
+        val archived = legacyJson?.let { json ->
+            runCatching {
+                val type = object : TypeToken<List<LegacyMembership>>() {}.type
+                gson.fromJson<List<LegacyMembership>>(json, type).orEmpty()
+                    .filter { it.crewId.isNotBlank() }
+                    .map { legacy ->
+                        ArchivedMembership(
+                            crewId = legacy.crewId,
+                            crewName = "Archived Crew ${legacy.crewId.take(6)}",
+                            displayName = legacy.displayName.ifBlank { "Me" },
+                        )
+                    }
+            }.getOrDefault(emptyList())
+        }.orEmpty()
+        prefs.edit()
+            .putString(ARCHIVED_MEMBERSHIPS_KEY, gson.toJson(archived))
+            .putBoolean(LEGACY_ARCHIVE_COMPLETE_KEY, true)
+            .remove(LEGACY_MEMBERSHIPS_KEY)
+            .remove(LEGACY_CURRENT_CREW_KEY)
+            .remove(ACTIVE_CREW_KEY)
+            .commit()
     }
 
-    public companion object {
-        private const val CURRENT_CREW_KEY: String = "current_crew"
-        private const val MEMBERSHIPS_KEY: String = "memberships"
+    private data class LegacyMembership(
+        val crewId: String = "",
+        val displayName: String = "",
+    )
+
+    private data class ArchivedMembership(
+        val crewId: String,
+        val crewName: String,
+        val displayName: String,
+    )
+
+    private companion object {
+        private const val PREFS_NAME: String = "crew_prefs"
+        private const val SECURE_MEMBERSHIPS_KEY: String = "memberships_v2_encrypted"
+        private const val ARCHIVED_MEMBERSHIPS_KEY: String = "memberships_v1_archive"
+        private const val LEGACY_ARCHIVE_COMPLETE_KEY: String = "memberships_v1_archive_complete"
         private const val ACTIVE_CREW_KEY: String = "active_crew_id"
+        private const val LEGACY_CURRENT_CREW_KEY: String = "current_crew"
+        private const val LEGACY_MEMBERSHIPS_KEY: String = "memberships"
     }
 }

@@ -193,6 +193,51 @@ Built to answer three questions without scrolling: how long have I been doing th
 
 Empty state: if no sessions, all of the above collapse into a single centered caps line `NO SESSIONS YET` with a ghost "Start a session" action returning to Timer.
 
+### Crew
+
+Crew is a leaderboard first, not an administration form.
+
+1. **Header** — the human-readable Crew name plus a compact freshness readout and
+   a secondary Manage Crew action. Freshness uses `SYNCING`, `UPDATED 2m AGO`,
+   `PARTIAL · 2/3 RELAYS`, or `OFFLINE · UPDATED 3h AGO`. Once cached rows exist,
+   refresh never replaces them with a full-screen loading or error state.
+2. **Ranking window** — segmented control for Today, 7 days, 30 days, and
+   All-time.
+3. **Crew summary** — three inline `StatTile`s for total Crew Focus minutes,
+   members active in the selected window, and median member Focus minutes.
+4. **Your standing** — compact inline strip with the current member's rank,
+   selected-window Focus minutes, and competitive context. Show gap to the next
+   distinct rank, `TIED WITH N`, lead over second, or `UNRANKED` as applicable.
+   Never show a misleading zero-minute gap. No podium treatment.
+5. **Leaderboard** — dense ranked rows immediately below the standing strip.
+   Equal Focus-minute totals share a rank. The current member is marked with the
+   signal color without turning every row into a card. Each row contains rank,
+   display name, selected-window Focus minutes, streak, and a compact 7-day
+   trend rendered as seven daily bars, never an interpolated line.
+   Seven-day-silent members are visibly stale. Members inactive for 30
+   days leave active ranking and appear in a collapsed `INACTIVE` section rather
+   than disappearing. Zero-window members follow ranked members and display `—`
+   instead of a numeric rank. Relay bursts coalesce into at most one visible
+   update per 100 ms; rank changes snap without bounce or reorder animation.
+   Duplicate normalized Display names gain a short public Identity fingerprint,
+   such as `Asha · 7F2C`; unique names do not show protocol metadata.
+   Above 20 active members, a compact search field filters Display name or visible
+   fingerprint without changing the stored rank numbers.
+   The board is a keyed virtualized lazy list; it must not compose every member
+   inside a vertically scrolling `Column`.
+6. **Management** — join code, display name, Crew switching, creation, joining,
+   and leaving live in a sheet opened from Manage Crew. They never precede the
+   leaderboard in the main scroll path. `Share Crew` opens Android sharing and
+   exposes a scannable QR code; raw Join-code copy is secondary.
+7. **Member details** — tapping a row opens a bottom sheet with the 30-day trend,
+   active days, average per active day, best day, completed Work blocks, and a
+   comparison with the current member. No raw Work block timestamps appear. A
+   secondary action hides or unhides that Identity on this phone only.
+
+Join links open a confirmation sheet showing Crew name, relay domains, and the
+shared-link/honor-system warning before the primary `JOIN` action becomes
+available. Deep links never join silently.
+
 ### History
 
 1. Day-grouped list, sticky day header in `caps`.

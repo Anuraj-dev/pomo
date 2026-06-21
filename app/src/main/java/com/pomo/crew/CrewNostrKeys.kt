@@ -22,6 +22,15 @@ public object CrewNostrKeys {
     public fun signSchnorr(messageHex: String, privateKeyHex: String): String =
         secp256k1.signSchnorr(messageHex.hexToBytes(), privateKeyHex.hexToBytes(), null).toHex()
 
+    public fun verifySchnorr(messageHex: String, signatureHex: String, publicKeyHex: String): Boolean =
+        runCatching {
+            secp256k1.verifySchnorr(
+                signatureHex.hexToBytes(),
+                messageHex.hexToBytes(),
+                publicKeyHex.hexToBytes(),
+            )
+        }.getOrDefault(false)
+
     public fun ByteArray.toHex(): String =
         joinToString("") { "%02x".format(it) }
 
