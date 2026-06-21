@@ -28,6 +28,19 @@ public class CrewRepository(context: Context) {
             .toBoard(membership, memberships, mode)
     }
 
+    public fun currentArchivedMemberships(): List<CrewMembershipSummary> =
+        crewStore.loadArchivedMemberships()
+            .sortedBy { it.crewName }
+            .map { membership ->
+                CrewMembershipSummary(
+                    crewId = membership.crewId,
+                    crewName = membership.crewName,
+                    displayName = membership.displayName,
+                    isActive = false,
+                    isArchived = true,
+                )
+            }
+
     public suspend fun publishCurrentSnapshot(): Boolean {
         val memberships = crewStore.loadMemberships() + crewStore.loadArchivedMemberships()
         if (memberships.isEmpty()) return false

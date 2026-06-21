@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Groups
@@ -56,6 +55,7 @@ import com.pomo.crew.CrewHiddenMember
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewJoinCodeCodec
 import com.pomo.crew.CrewJoinPayload
+import com.pomo.crew.CrewMembershipSummary
 import com.pomo.crew.CrewRankingMode
 import com.pomo.ui.components.EmptyState
 import com.pomo.ui.components.PomoButton
@@ -74,6 +74,7 @@ import kotlin.math.roundToInt
 public data class CrewScreenState(
     val isLoading: Boolean = false,
     val board: CrewBoard? = null,
+    val archivedMemberships: List<CrewMembershipSummary> = emptyList(),
     val errorMessage: String? = null,
 )
 
@@ -87,6 +88,8 @@ public fun CrewScreen(
     onDisplayNameChange: (String) -> Unit,
     onRankingModeChange: (CrewRankingMode) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
+    onExportRecovery: () -> Unit,
+    onImportRecovery: () -> Unit,
     initialJoinCode: String? = null,
     onInitialJoinCodeConsumed: () -> Unit = {},
 ) {
@@ -110,6 +113,7 @@ public fun CrewScreen(
     when {
         state.isLoading && state.board == null -> CrewLoadingState()
         state.board == null -> CrewEmptyState(
+            archivedMemberships = state.archivedMemberships,
             errorMessage = state.errorMessage,
             onCreateCrew = onCreateCrew,
             onJoinCrew = requestJoin,
@@ -123,6 +127,8 @@ public fun CrewScreen(
             onDisplayNameChange = onDisplayNameChange,
             onRankingModeChange = onRankingModeChange,
             onMemberHiddenChange = onMemberHiddenChange,
+            onExportRecovery = onExportRecovery,
+            onImportRecovery = onImportRecovery,
         )
     }
     pendingJoin?.let { pending ->
@@ -156,6 +162,7 @@ private fun CrewLoadingState() {
 
 @Composable
 private fun CrewEmptyState(
+    archivedMemberships: List<CrewMembershipSummary>,
     errorMessage: String?,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
@@ -172,11 +179,28 @@ private fun CrewEmptyState(
     ) {
         item {
             EmptyState(
-                headline = "No Crew yet",
-                body = "Create a private leaderboard or join one shared by a friend.",
+                headline = if (archivedMemberships.isEmpty()) "No Crew yet" else "Crew v2 required",
+                body = if (archivedMemberships.isEmpty()) {
+                    "Create a private leaderboard or join one shared by a friend."
+                } else {
+                    "Older Crew memberships were archived locally. Create or join a v2 Crew for active rankings."
+                },
                 icon = Icons.Outlined.Groups,
                 modifier = Modifier.fillMaxWidth(),
             )
+        }
+        if (archivedMemberships.isNotEmpty()) {
+            item {
+                SectionHeader("Archived v1")
+                Spacer(Modifier.height(8.dp))
+                archivedMemberships.forEach { membership ->
+                    Text(
+                        text = "${membership.crewName} · ${membership.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                }
+            }
         }
         item {
             SectionHeader("Create")
@@ -236,6 +260,8 @@ private fun CrewBoardContent(
     onDisplayNameChange: (String) -> Unit,
     onRankingModeChange: (CrewRankingMode) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
+    onExportRecovery: () -> Unit,
+    onImportRecovery: () -> Unit,
 ) {
     var showManage by remember { mutableStateOf(false) }
     var selectedMember by remember { mutableStateOf<CrewBoardRow?>(null) }
@@ -335,6 +361,8 @@ private fun CrewBoardContent(
             onLeaveCrew = onLeaveCrew,
             onDisplayNameChange = onDisplayNameChange,
             onMemberHiddenChange = onMemberHiddenChange,
+            onExportRecovery = onExportRecovery,
+            onImportRecovery = onImportRecovery,
         )
     }
     selectedMember?.let { row ->
@@ -558,6 +586,8 @@ private fun ManageCrewSheet(
     onLeaveCrew: (String) -> Unit,
     onDisplayNameChange: (String) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
+    onExportRecovery: () -> Unit,
+    onImportRecovery: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -629,6 +659,34 @@ private fun ManageCrewSheet(
                     HiddenMemberRow(member = member, onUnhide = {
                         onMemberHiddenChange(member.identityPublicKey, false)
                     })
+                }
+            }
+            if (board.memberships.any { it.isArchived }) {
+                item { SectionHeader("Archived v1") }
+                items(board.memberships.filter { it.isArchived }, key = { "archived-${it.crewId}" }) { membership ->
+                    Text(
+                        text = "${membership.crewName} · ${membership.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                }
+            }
+            item { SectionHeader("Recovery") }
+            item {
+                Text(
+                    text = "Export your current identity before restoring another one.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = PomoTokens.colors.onSurfaceMuted,
+                )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    PomoButton(onClick = onExportRecovery, variant = PomoButtonVariant.Tonal) {
+                        Text("Export Recovery")
+                    }
+                    PomoButton(onClick = onImportRecovery, variant = PomoButtonVariant.Ghost) {
+                        Text("Restore Recovery")
+                    }
                 }
             }
             item { SectionHeader("Join another") }
