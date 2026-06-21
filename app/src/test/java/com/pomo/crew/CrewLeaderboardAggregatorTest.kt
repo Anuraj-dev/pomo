@@ -85,6 +85,32 @@ public class CrewLeaderboardAggregatorTest {
         assertNull(rows.last().rank)
     }
 
+    @Test
+    public fun rankHandlesFiveHundredMembersWithoutDroppingOrderOrSelf() {
+        val snapshots = (1..500).map { index ->
+            snapshot(
+                identity = identity(index),
+                name = "Member $index",
+                allTime = 1_000 - index,
+                dailyMinutes = mapOf(0 to (index % 180) + 1),
+            )
+        }
+
+        val rows = CrewLeaderboardAggregator.rank(
+            crewId = CREW_ID,
+            selfIdentityPublicKey = identity(250),
+            snapshots = snapshots,
+            mode = CrewRankingMode.AllTime,
+            nowEpochSeconds = now,
+        )
+
+        assertEquals(500, rows.size)
+        assertEquals("Member 1", rows.first().displayName)
+        assertEquals("Member 500", rows.last().displayName)
+        assertTrue(rows.single { it.identityPublicKey == identity(250) }.isSelf)
+        assertEquals((1..500).toList(), rows.mapNotNull { it.rank })
+    }
+
     private fun snapshot(
         identity: String,
         name: String,
