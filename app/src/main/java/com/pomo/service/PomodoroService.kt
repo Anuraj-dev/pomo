@@ -271,6 +271,12 @@ public class PomodoroService : Service(), TimerObserver {
             updateNotification()
             broadcastStateUpdate()
         }
+
+        // Work blocks that complete while the service is dead are recorded to history but
+        // never fire onTimerComplete, so no Crew snapshot is published and the leaderboard
+        // lags local history. Catch up by publishing when local history holds a completed
+        // block newer than the last publish — this covers blocks from a previous day too.
+        publishCrewCatchUp()
     }
 
     override fun onTimerUpdate(state: TimerState) {
@@ -428,6 +434,16 @@ public class PomodoroService : Service(), TimerObserver {
                 crewRepository.publishCurrentSnapshot()
             }.onFailure { error ->
                 Log.w(TAG, "Failed to publish Crew snapshot after $reason", error)
+            }
+        }
+    }
+
+    private fun publishCrewCatchUp() {
+        serviceScope.launch(Dispatchers.IO) {
+            runCatching {
+                crewRepository.republishStaleLocalHistory()
+            }.onFailure { error ->
+                Log.w(TAG, "Failed Crew catch-up publish", error)
             }
         }
     }
