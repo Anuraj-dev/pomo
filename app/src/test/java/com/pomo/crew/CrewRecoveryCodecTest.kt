@@ -1,5 +1,7 @@
 package com.pomo.crew
 
+import com.google.gson.Gson
+import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -35,8 +37,32 @@ public class CrewRecoveryCodecTest {
         assertNull(CrewRecoveryCodec.decode(recovery, "wrong passphrase".toCharArray()))
     }
 
+    @Test
+    public fun recoveryDecodeUsesEnvelopeIterationsForForwardCompatibility() {
+        val recovery = CrewRecoveryCodec.encode(payload, "correct horse battery".toCharArray())
+        val migratedRecovery = recovery.withIterations(700_000)
+
+        assertEquals(payload, CrewRecoveryCodec.decode(migratedRecovery, "correct horse battery".toCharArray()))
+    }
+
     @Test(expected = IllegalArgumentException::class)
     public fun recoveryRejectsShortPassphrase() {
         CrewRecoveryCodec.encode(payload, "too short".toCharArray())
+    }
+
+    private fun String.withIterations(iterations: Int): String {
+        val encodedEnvelope = removePrefix(PREFIX)
+        val json = String(Base64.getUrlDecoder().decode(encodedEnvelope), Charsets.UTF_8)
+        val envelope = Gson().fromJson(json, MutableMap::class.java).toMutableMap()
+        envelope["iterations"] = iterations
+        val updatedJson = Gson().toJson(envelope)
+        val updatedEnvelope = Base64.getUrlEncoder()
+            .withoutPadding()
+            .encodeToString(updatedJson.toByteArray(Charsets.UTF_8))
+        return PREFIX + updatedEnvelope
+    }
+
+    private companion object {
+        private const val PREFIX: String = "pomo-recovery.v1."
     }
 }

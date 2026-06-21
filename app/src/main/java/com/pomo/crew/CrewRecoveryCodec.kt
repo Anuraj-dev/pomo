@@ -35,6 +35,7 @@ public object CrewRecoveryCodec {
             passphrase = passphrase,
             salt = salt,
             nonce = nonce,
+            iterations = PBKDF2_ITERATIONS,
         )
         val envelope = RecoveryEnvelope(
             version = VERSION,
@@ -60,6 +61,7 @@ public object CrewRecoveryCodec {
                 passphrase = passphrase,
                 salt = decodeBytes(envelope.salt),
                 nonce = decodeBytes(envelope.nonce),
+                iterations = envelope.iterations,
             )
             gson.fromJson(String(plaintext, Charsets.UTF_8), CrewRecoveryPayload::class.java)
                 ?.takeIf(::isValid)
@@ -72,8 +74,9 @@ public object CrewRecoveryCodec {
         passphrase: CharArray,
         salt: ByteArray,
         nonce: ByteArray,
+        iterations: Int,
     ): ByteArray {
-        val spec = PBEKeySpec(passphrase, salt, PBKDF2_ITERATIONS, KEY_BITS)
+        val spec = PBEKeySpec(passphrase, salt, iterations, KEY_BITS)
         val keyBytes = try {
             SecretKeyFactory.getInstance(KDF_NAME).generateSecret(spec).encoded
         } finally {
@@ -91,7 +94,7 @@ public object CrewRecoveryCodec {
     private fun RecoveryEnvelope.isSupported(): Boolean =
         version == VERSION &&
             kdf == KDF_NAME &&
-            iterations == PBKDF2_ITERATIONS &&
+            iterations in MIN_PBKDF2_ITERATIONS..MAX_PBKDF2_ITERATIONS &&
             cipher == CIPHER_NAME &&
             runCatching { decodeBytes(salt).size == SALT_BYTES }.getOrDefault(false) &&
             runCatching { decodeBytes(nonce).size == NONCE_BYTES }.getOrDefault(false) &&
@@ -131,4 +134,6 @@ public object CrewRecoveryCodec {
     private const val CIPHER_NAME: String = "AES/GCM/NoPadding"
     private const val MIN_PASSPHRASE_LENGTH: Int = 12
     private const val MAX_ENCODED_LENGTH: Int = 128 * 1024
+    private const val MIN_PBKDF2_ITERATIONS: Int = 100_000
+    private const val MAX_PBKDF2_ITERATIONS: Int = 2_000_000
 }
