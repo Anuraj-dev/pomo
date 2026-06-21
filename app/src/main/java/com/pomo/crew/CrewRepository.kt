@@ -5,6 +5,7 @@ import com.pomo.db.HistoryCacheRepository
 import com.pomo.timer.TimerState
 import com.pomo.util.DateLogic
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -72,11 +73,12 @@ public class CrewRepository(context: Context) {
 
     public suspend fun republishCurrentCrewIfStale(maxAgeSeconds: Long = REPUBLISH_MAX_AGE_SECONDS): Boolean {
         val membership = crewStore.loadMembership() ?: return false
-        val selfSnapshot = relayStore.loadProjection(membership.crewId).snapshots
-            .filter { it.identityPublicKey == identityPublicKey }
-            .maxByOrNull { it.publishedAtEpochSeconds }
+        val projection = relayStore.loadProjection(membership.crewId)
+        val lastSuccessfulPublish = projection.relayStates
+            .mapNotNull { it.lastSuccessEpochSeconds }
+            .maxOrNull()
         val now = System.currentTimeMillis() / 1000L
-        if (selfSnapshot != null && now - selfSnapshot.publishedAtEpochSeconds < maxAgeSeconds) return false
+        if (lastSuccessfulPublish != null && now - lastSuccessfulPublish < maxAgeSeconds) return false
         publishSelfSnapshot(membership)
         return true
     }
@@ -287,12 +289,21 @@ public class CrewRepository(context: Context) {
             )
         }
 
-    private fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int = when (mode) {
-        CrewRankingMode.Today -> todayFocusMinutes
-        CrewRankingMode.SevenDays -> dailyAggregates.take(7).sumOf { it.focusMinutes }
-        CrewRankingMode.ThirtyDays -> dailyAggregates.take(30).sumOf { it.focusMinutes }
-        CrewRankingMode.AllTime -> allTimeFocusMinutes
+    private fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int {
+        val today = LocalDate.parse(localDate)
+        return when (mode) {
+            CrewRankingMode.Today -> todayFocusMinutes
+            CrewRankingMode.SevenDays -> focusMinutesBetween(today.minusDays(6), today)
+            CrewRankingMode.ThirtyDays -> focusMinutesBetween(today.minusDays(29), today)
+            CrewRankingMode.AllTime -> allTimeFocusMinutes
+        }
     }
+
+    private fun CrewSnapshot.focusMinutesBetween(startDate: LocalDate, endDate: LocalDate): Int =
+        dailyAggregates.sumOf { aggregate ->
+            val date = LocalDate.parse(aggregate.localDate)
+            if (date < startDate || date > endDate) 0 else aggregate.focusMinutes
+        }
 
     private companion object {
         private const val REPUBLISH_MAX_AGE_SECONDS: Long = 24L * 60L * 60L

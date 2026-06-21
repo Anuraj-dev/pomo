@@ -66,12 +66,13 @@ public class CrewProjectionStore(context: Context) {
 
     public suspend fun recordRelayResult(crewId: String, relayUrl: String, error: String?) {
         val now = System.currentTimeMillis() / 1000L
+        val previousSuccess = dao.getRelayState(crewId, relayUrl)?.lastSuccessEpochSeconds
         dao.upsertRelayState(
             CrewRelayStateEntity(
                 crewId = crewId,
                 relayUrl = relayUrl,
                 lastAttemptEpochSeconds = now,
-                lastSuccessEpochSeconds = if (error == null) now else null,
+                lastSuccessEpochSeconds = if (error == null) now else previousSuccess,
                 lastError = error,
             ),
         )

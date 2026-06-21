@@ -34,6 +34,9 @@ public interface CrewDao {
     @Query("SELECT * FROM crew_relay_state WHERE crewId = :crewId ORDER BY relayUrl ASC")
     public suspend fun getRelayStates(crewId: String): List<CrewRelayStateEntity>
 
+    @Query("SELECT * FROM crew_relay_state WHERE crewId = :crewId AND relayUrl = :relayUrl LIMIT 1")
+    public suspend fun getRelayState(crewId: String, relayUrl: String): CrewRelayStateEntity?
+
     @Query(
         "SELECT publishedAtEpochSeconds FROM crew_snapshots " +
             "WHERE crewId = :crewId AND identityPublicKey = :identityPublicKey",

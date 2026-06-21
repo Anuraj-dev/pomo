@@ -9,9 +9,6 @@ import kotlinx.coroutines.flow.toList
 public class LocalCrewRelayStore(context: Context) {
     private val appContext = context.applicationContext
     private val identityStore = CrewIdentityStore(appContext)
-    private val transport: CrewRelayTransport by lazy {
-        CrewRelayTransport(identityStore.identity().privateKey)
-    }
     private val projectionStore = CrewProjectionStore(appContext)
 
     public suspend fun publish(
@@ -20,7 +17,7 @@ public class LocalCrewRelayStore(context: Context) {
         relays: List<String>,
     ): Boolean {
         projectionStore.upsertLatest(snapshot)
-        return transport.publish(snapshot.crewId, payload, relays)
+        return transport().publish(snapshot.crewId, payload, relays)
     }
 
     public suspend fun pull(crewId: String, crewKey: String, relays: List<String>): List<CrewSnapshot> {
@@ -29,14 +26,14 @@ public class LocalCrewRelayStore(context: Context) {
     }
 
     public fun refresh(crewId: String, crewKey: String, relays: List<String>): Flow<CrewRelayResult> =
-        transport.pullIncrementally(crewId, relays)
+        transport().pullIncrementally(crewId, relays)
             .onEach { result ->
                 result.events.forEach { event -> acceptEvent(event, crewKey) }
                 projectionStore.recordRelayResult(crewId, result.relayUrl, result.error)
             }
 
     public fun observe(crewId: String, crewKey: String, relays: List<String>): Flow<CrewSnapshot> =
-        transport.observe(crewId, relays)
+        transport().observe(crewId, relays)
             .mapNotNull { event -> acceptEvent(event, crewKey) }
 
     public fun observeProjection(crewId: String): Flow<CrewProjection> =
@@ -54,11 +51,17 @@ public class LocalCrewRelayStore(context: Context) {
 
     private suspend fun acceptEvent(event: CrewRelayEvent, crewKey: String): CrewSnapshot? {
         val snapshot = CrewSnapshotCodec.decodeEncrypted(event.content, crewKey) ?: return null
+        val now = System.currentTimeMillis() / 1000L
         if (snapshot.identityPublicKey != event.authorPublicKey) return null
+        if (event.createdAtEpochSeconds > now + MAX_CLOCK_SKEW_SECONDS) return null
+        if (snapshot.publishedAtEpochSeconds > now + MAX_CLOCK_SKEW_SECONDS) return null
         if (snapshot.publishedAtEpochSeconds > event.createdAtEpochSeconds + MAX_CLOCK_SKEW_SECONDS) return null
         projectionStore.upsertLatest(snapshot)
         return snapshot
     }
+
+    private fun transport(): CrewRelayTransport =
+        CrewRelayTransport(identityStore.identity().privateKey)
 
     private companion object {
         private const val MAX_CLOCK_SKEW_SECONDS: Long = 5 * 60L
