@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.pomo.crew.CrewBoard
+import com.pomo.crew.CrewHiddenMember
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewJoinCodeCodec
 import com.pomo.crew.CrewJoinPayload
@@ -333,6 +334,7 @@ private fun CrewBoardContent(
             onSwitchCrew = onSwitchCrew,
             onLeaveCrew = onLeaveCrew,
             onDisplayNameChange = onDisplayNameChange,
+            onMemberHiddenChange = onMemberHiddenChange,
         )
     }
     selectedMember?.let { row ->
@@ -555,6 +557,7 @@ private fun ManageCrewSheet(
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
     onDisplayNameChange: (String) -> Unit,
+    onMemberHiddenChange: (String, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -620,6 +623,14 @@ private fun ManageCrewSheet(
                     ) { Text(membership.crewName) }
                 }
             }
+            if (board.hiddenMembers.isNotEmpty()) {
+                item { SectionHeader("Hidden members") }
+                items(board.hiddenMembers, key = { "hidden-${it.identityPublicKey}" }) { member ->
+                    HiddenMemberRow(member = member, onUnhide = {
+                        onMemberHiddenChange(member.identityPublicKey, false)
+                    })
+                }
+            }
             item { SectionHeader("Join another") }
             item {
                 OutlinedTextField(
@@ -661,6 +672,33 @@ private fun ManageCrewSheet(
                 }
             }
             item { Spacer(Modifier.height(24.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun HiddenMemberRow(member: CrewHiddenMember, onUnhide: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = member.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = formatMinutes(member.selectedFocusMinutes),
+                style = MaterialTheme.typography.bodySmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        PomoButton(onClick = onUnhide, variant = PomoButtonVariant.Ghost) {
+            Text("Unhide")
         }
     }
 }

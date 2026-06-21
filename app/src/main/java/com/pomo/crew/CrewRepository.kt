@@ -213,6 +213,20 @@ public class CrewRepository(context: Context) {
         mode: CrewRankingMode,
     ): CrewBoard {
         val visibleSnapshots = snapshots.filterNot { it.identityPublicKey in hiddenIdentityPublicKeys }
+        val hiddenMembers = snapshots
+            .filter { it.identityPublicKey in hiddenIdentityPublicKeys }
+            .sortedWith(
+                compareByDescending<CrewSnapshot> { it.selectedFocusMinutes(mode) }
+                    .thenBy { it.displayName.lowercase() }
+                    .thenBy { it.identityPublicKey },
+            )
+            .map { snapshot ->
+                CrewHiddenMember(
+                    identityPublicKey = snapshot.identityPublicKey,
+                    displayName = snapshot.displayName,
+                    selectedFocusMinutes = snapshot.selectedFocusMinutes(mode),
+                )
+            }
         return CrewBoard(
             crewId = membership.crewId,
             crewName = membership.crewName,
@@ -223,6 +237,7 @@ public class CrewRepository(context: Context) {
                 selfIdentityPublicKey = identityPublicKey,
                 mode = mode,
             ),
+            hiddenMembers = hiddenMembers,
             rankingMode = mode,
             lastUpdatedEpochSeconds = snapshots.maxOfOrNull { it.publishedAtEpochSeconds },
             successfulRelayCount = relayStates.count { it.lastSuccessEpochSeconds != null },
@@ -242,4 +257,11 @@ public class CrewRepository(context: Context) {
                 isArchived = membership.isArchived,
             )
         }
+
+    private fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int = when (mode) {
+        CrewRankingMode.Today -> todayFocusMinutes
+        CrewRankingMode.SevenDays -> dailyAggregates.take(7).sumOf { it.focusMinutes }
+        CrewRankingMode.ThirtyDays -> dailyAggregates.take(30).sumOf { it.focusMinutes }
+        CrewRankingMode.AllTime -> allTimeFocusMinutes
+    }
 }

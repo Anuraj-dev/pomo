@@ -69,12 +69,19 @@ public data class CrewBoard(
     val crewName: String,
     val joinCode: String,
     val rows: List<CrewBoardRow>,
+    val hiddenMembers: List<CrewHiddenMember> = emptyList(),
     val rankingMode: CrewRankingMode = CrewRankingMode.Today,
     val lastUpdatedEpochSeconds: Long? = null,
     val successfulRelayCount: Int = 0,
     val totalRelayCount: Int = 0,
     val memberships: List<CrewMembershipSummary> = emptyList(),
     val displayName: String = "",
+)
+
+public data class CrewHiddenMember(
+    val identityPublicKey: String,
+    val displayName: String,
+    val selectedFocusMinutes: Int,
 )
 
 public data class CrewMembership(
