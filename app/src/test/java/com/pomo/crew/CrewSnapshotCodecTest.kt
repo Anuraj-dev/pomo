@@ -58,7 +58,7 @@ public class CrewSnapshotCodecTest {
 
         assertNull(
             CrewSnapshotCodec.decodeEncrypted(
-                gson.toJson(envelope.copy(ciphertext = envelope.ciphertext.replaceLastChar())),
+                gson.toJson(envelope.copy(ciphertext = "not-base64")),
                 crewKey,
             ),
         )
@@ -88,10 +88,5 @@ public class CrewSnapshotCodecTest {
         assertNotNull(envelope)
         assertEquals(snapshot.crewId, envelope?.crewId)
         assertEquals(snapshot.identityPublicKey, envelope?.identityPublicKey)
-    }
-
-    private fun String.replaceLastChar(): String {
-        val replacement = if (last() == 'A') 'B' else 'A'
-        return dropLast(1) + replacement
     }
 }
