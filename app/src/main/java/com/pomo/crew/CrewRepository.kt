@@ -289,23 +289,23 @@ public class CrewRepository(context: Context) {
             )
         }
 
-    private fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int {
-        val today = LocalDate.parse(localDate)
-        return when (mode) {
-            CrewRankingMode.Today -> todayFocusMinutes
-            CrewRankingMode.SevenDays -> focusMinutesBetween(today.minusDays(6), today)
-            CrewRankingMode.ThirtyDays -> focusMinutesBetween(today.minusDays(29), today)
-            CrewRankingMode.AllTime -> allTimeFocusMinutes
-        }
-    }
-
-    private fun CrewSnapshot.focusMinutesBetween(startDate: LocalDate, endDate: LocalDate): Int =
-        dailyAggregates.sumOf { aggregate ->
-            val date = LocalDate.parse(aggregate.localDate)
-            if (date < startDate || date > endDate) 0 else aggregate.focusMinutes
-        }
-
     private companion object {
         private const val REPUBLISH_MAX_AGE_SECONDS: Long = 24L * 60L * 60L
     }
 }
+
+internal fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int {
+    val today = LocalDate.parse(localDate)
+    return when (mode) {
+        CrewRankingMode.Today -> todayFocusMinutes
+        CrewRankingMode.SevenDays -> focusMinutesBetween(today.minusDays(6), today)
+        CrewRankingMode.ThirtyDays -> focusMinutesBetween(today.minusDays(29), today)
+        CrewRankingMode.AllTime -> allTimeFocusMinutes
+    }
+}
+
+internal fun CrewSnapshot.focusMinutesBetween(startDate: LocalDate, endDate: LocalDate): Int =
+    dailyAggregates.sumOf { aggregate ->
+        val date = LocalDate.parse(aggregate.localDate)
+        if (date < startDate || date > endDate) 0 else aggregate.focusMinutes
+    }

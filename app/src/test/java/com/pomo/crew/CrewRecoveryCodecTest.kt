@@ -1,6 +1,7 @@
 package com.pomo.crew
 
 import com.google.gson.Gson
+import com.google.gson.JsonParser
 import java.util.Base64
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,8 +54,9 @@ public class CrewRecoveryCodecTest {
     private fun String.withIterations(iterations: Int): String {
         val encodedEnvelope = removePrefix(PREFIX)
         val json = String(Base64.getUrlDecoder().decode(encodedEnvelope), Charsets.UTF_8)
-        val envelope = Gson().fromJson(json, MutableMap::class.java).toMutableMap()
-        envelope["iterations"] = iterations
+        val envelope = JsonParser.parseString(json).asJsonObject.apply {
+            addProperty("iterations", iterations)
+        }
         val updatedJson = Gson().toJson(envelope)
         val updatedEnvelope = Base64.getUrlEncoder()
             .withoutPadding()
