@@ -242,6 +242,7 @@ public class CrewFragment : Fragment() {
                 recovery = repository.createRecovery(passphrase.toCharArray()),
                 suggestedFileName = "pomo-crew-recovery-${System.currentTimeMillis()}.txt",
             )
+            @Suppress("DEPRECATION")
             val intent = keyguardManager.createConfirmDeviceCredentialIntent(
                 "Confirm device unlock",
                 "Unlock to export your Crew recovery",
