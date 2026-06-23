@@ -3,7 +3,6 @@ package com.pomo.ui.theme
 import androidx.compose.ui.graphics.Color
 
 // Cool slate neutrals (hue 250) + one signal red. No gold, no warm tints.
-// See DESIGN.md for OKLCH source values.
 
 // Dark theme (default, canonical)
 public val DarkBg: Color = Color(0xFF131418)
