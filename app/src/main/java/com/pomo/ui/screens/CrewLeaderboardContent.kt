@@ -72,6 +72,23 @@ internal fun CrewBoardContent(
 ) {
     var showManage by remember { mutableStateOf(false) }
     var selectedMember by remember { mutableStateOf<CrewBoardRow?>(null) }
+
+    if (showManage) {
+        ManageCrewScreen(
+            board = board,
+            onBack = { showManage = false },
+            onCreateCrew = onCreateCrew,
+            onJoinCrew = onJoinCrew,
+            onSwitchCrew = onSwitchCrew,
+            onLeaveCrew = onLeaveCrew,
+            onDisplayNameChange = onDisplayNameChange,
+            onMemberHiddenChange = onMemberHiddenChange,
+            onExportRecovery = onExportRecovery,
+            onImportRecovery = onImportRecovery,
+        )
+        return
+    }
+
     var search by remember { mutableStateOf("") }
     var showInactive by remember { mutableStateOf(false) }
     val activeRows = board.rows.filterNot { it.isInactive }
@@ -164,20 +181,6 @@ internal fun CrewBoardContent(
         }
     }
 
-    if (showManage) {
-        ManageCrewSheet(
-            board = board,
-            onDismiss = { showManage = false },
-            onCreateCrew = onCreateCrew,
-            onJoinCrew = onJoinCrew,
-            onSwitchCrew = onSwitchCrew,
-            onLeaveCrew = onLeaveCrew,
-            onDisplayNameChange = onDisplayNameChange,
-            onMemberHiddenChange = onMemberHiddenChange,
-            onExportRecovery = onExportRecovery,
-            onImportRecovery = onImportRecovery,
-        )
-    }
     selectedMember?.let { row ->
         MemberDetailSheet(
             row = row,

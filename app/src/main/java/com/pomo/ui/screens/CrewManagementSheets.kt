@@ -2,24 +2,28 @@ package com.pomo.ui.screens
 
 import android.content.Intent
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -48,9 +52,9 @@ import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.theme.PomoTokens
 
 @Composable
-internal fun ManageCrewSheet(
+internal fun ManageCrewScreen(
     board: CrewBoard,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
     onSwitchCrew: (String) -> Unit,
@@ -67,13 +71,36 @@ internal fun ManageCrewSheet(
     var joinCode by remember { mutableStateOf("") }
     val payload = remember(board.joinCode) { com.pomo.crew.CrewJoinCodeCodec.decode(board.joinCode) }
     val shareUri = payload?.let(com.pomo.crew.CrewJoinCodeCodec::encodeUri) ?: board.joinCode
-    PomoSheet(title = "Manage ${board.crewName}", onDismissRequest = onDismiss) {
+    BackHandler(onBack = onBack)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text(
+                text = "Manage ${board.crewName}",
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.titleLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
         LazyColumn(
             modifier = Modifier
                 .fillMaxWidth()
-                .heightIn(max = 620.dp),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .weight(1f),
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             item {
                 CrewQrCode(shareUri)
@@ -200,7 +227,6 @@ internal fun ManageCrewSheet(
                     ) { Text("Leave Crew") }
                 }
             }
-            item { Spacer(Modifier.height(24.dp)) }
         }
     }
 }
@@ -249,7 +275,7 @@ private fun CrewQrCode(value: String) {
         Image(
             bitmap = bitmap.asImageBitmap(),
             contentDescription = "QR code to join Crew",
-            modifier = Modifier.size(220.dp),
+            modifier = Modifier.size(160.dp),
         )
         Text("SCAN TO JOIN", style = MaterialTheme.typography.labelSmall, color = PomoTokens.colors.onSurfaceMuted)
     }
