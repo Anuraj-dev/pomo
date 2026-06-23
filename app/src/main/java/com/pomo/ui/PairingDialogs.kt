@@ -27,6 +27,7 @@ import androidx.compose.ui.unit.dp
 import com.pomo.R
 import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoRadius
+import com.pomo.ui.theme.PomoTokens
 
 internal data class PairingDialogData(
     val url: String,
@@ -49,6 +50,7 @@ internal fun PairingDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PomoTokens.colors.surfaceElevated,
         title = { Text(stringResource(R.string.pair_desktop_title)) },
         text = {
             Column(
@@ -96,6 +98,7 @@ internal fun RotateTokenConfirmDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PomoTokens.colors.surfaceElevated,
         title = { Text(stringResource(R.string.rotate_pairing_token_title)) },
         text = { Text(stringResource(R.string.rotate_pairing_token_confirm)) },
         confirmButton = {
@@ -116,6 +119,7 @@ internal fun ScanResultDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
+        containerColor = PomoTokens.colors.surfaceElevated,
         title = { Text(stringResource(R.string.scan_pairing_qr_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {

@@ -60,6 +60,7 @@ import com.pomo.ui.components.SegmentedToggle
 import com.pomo.ui.components.SegmentedToggleOption
 import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoRadius
+import com.pomo.ui.theme.PomoTokens
 import com.pomo.util.UtilPreferenceManager
 
 public sealed interface SettingsItem {
@@ -251,6 +252,7 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
         var draft by remember { mutableStateOf(current) }
         AlertDialog(
             onDismissRequest = { editing = false },
+            containerColor = PomoTokens.colors.surfaceElevated,
             title = { Text(item.title) },
             text = {
                 OutlinedTextField(
@@ -303,6 +305,7 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
     if (editing) {
         AlertDialog(
             onDismissRequest = { editing = false },
+            containerColor = PomoTokens.colors.surfaceElevated,
             title = { Text(item.title) },
             text = {
                 Column {

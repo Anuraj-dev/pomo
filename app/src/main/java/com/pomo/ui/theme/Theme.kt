@@ -86,6 +86,9 @@ public fun PomoColors.toMaterialScheme(): androidx.compose.material3.ColorScheme
         onSurface = onSurface,
         surfaceVariant = surfaceElevated,
         onSurfaceVariant = onSurfaceMuted,
+        // No warm tint at elevation. M3 defaults surfaceTint to primary (signal red),
+        // which bleeds maroon into dialogs/menus/sheets. Neutralize it app-wide.
+        surfaceTint = Color.Transparent,
         outline = outline,
         outlineVariant = outline,
         error = danger,
@@ -111,6 +114,9 @@ public fun PomoColors.toMaterialScheme(): androidx.compose.material3.ColorScheme
         onSurface = onSurface,
         surfaceVariant = surfaceElevated,
         onSurfaceVariant = onSurfaceMuted,
+        // No warm tint at elevation. M3 defaults surfaceTint to primary (signal red),
+        // which bleeds maroon into dialogs/menus/sheets. Neutralize it app-wide.
+        surfaceTint = Color.Transparent,
         outline = outline,
         outlineVariant = outline,
         error = danger,
