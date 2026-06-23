@@ -42,7 +42,7 @@ public class PhoneServer(
     public fun start() {
         if (engine != null) return
 
-        engine = embeddedServer(CIO, host = "0.0.0.0", port = port) {
+        val newEngine = embeddedServer(CIO, host = "0.0.0.0", port = port) {
             install(WebSockets)
             routing {
                 get("/api/status") {
@@ -117,9 +117,20 @@ public class PhoneServer(
                     }
                 }
             }
-        }.start(wait = false)
+        }
 
-        Log.d(TAG, "Phone API listening on port $port")
+        // The phone API is optional. If the port is taken (e.g. a second install
+        // serving on the same port) the bind fails — catch it so a non-critical
+        // feature can't take the whole service down. The timer keeps running.
+        try {
+            newEngine.start(wait = false)
+            engine = newEngine
+            Log.d(TAG, "Phone API listening on port $port")
+        } catch (e: Exception) {
+            Log.w(TAG, "Phone API failed to start on port $port: ${e.message}")
+            runCatching { newEngine.stop(gracePeriodMillis = 0, timeoutMillis = 0) }
+            engine = null
+        }
     }
 
     public fun stop() {
