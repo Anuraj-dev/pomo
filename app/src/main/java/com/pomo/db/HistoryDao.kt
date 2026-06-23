@@ -68,12 +68,15 @@ public interface HistoryDao {
         val durationMinutes = (session.duration + 59) / 60
 
         val newStats = currentStats.copy(
+            // `completed` gates the earned block count only. Work minutes are
+            // time-honest: a partial (skipped) block contributes minutes but no
+            // block (ADR-0002).
             completed = if (isWork && session.completed && countCompletedSession) {
                 currentStats.completed + 1
             } else {
                 currentStats.completed
             },
-            workMinutes = if (isWork && session.completed) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
+            workMinutes = if (isWork) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
             breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + durationMinutes else currentStats.breakMinutes,
             lastUpdated = System.currentTimeMillis(),
         )

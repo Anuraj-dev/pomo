@@ -7,9 +7,11 @@ about the product; it is not a spec and carries no implementation detail.
 ## Language
 
 **Work block**:
-One continuous run of the focus phase, from start until it ends or is skipped.
-Historically a fixed length (e.g. 25 min); once add-time exists it is
-variable-length. The unit that history rows and the long-break cadence count.
+One continuous run of the focus phase. It is *completed* when it runs to its
+scheduled end (including any add-time); it is *partial* when Skip ends it early.
+Reset abandons a block and records nothing at all. Historically a fixed length
+(e.g. 25 min); once add-time exists it is variable-length. The unit that history
+rows and the long-break cadence count.
 _Avoid_: session (ambiguous — see below), pomodoro, interval.
 
 **Session**:
@@ -17,14 +19,18 @@ Informal synonym for a Work block. Prefer "Work block" when precision matters,
 because "session" is also used loosely for "a stretch of using the app".
 
 **Focus minutes**:
-Total time actually spent in the focus phase, summed across Work blocks. The
-**headline metric** — what Stats lead with and what any ranking sorts on.
+Total time actually spent in the focus phase, summed across Work blocks —
+including the partial time of a block ended by Skip, and excluding any block
+abandoned by Reset. Time-honest: it measures real focus time, independent of
+whether a block was completed. The **headline metric** — what Stats lead with
+and what any ranking sorts on.
 _Avoid_: focus time when a unit is needed, productivity, score.
 
 **Cadence count**:
 The running count of completed Work blocks in the current cycle. Drives the
-long-break trigger (`longBreakAfter`) and the launch pips. Kept for cadence even
-though Focus minutes is the headline metric.
+long-break trigger (`longBreakAfter`) and the launch pips. Only completed blocks
+increment it; partial (skipped) blocks contribute Focus minutes but never the
+count. Kept for cadence even though Focus minutes is the headline metric.
 _Avoid_: completed, session count (when it could mean the headline metric).
 
 **Daily goal**:

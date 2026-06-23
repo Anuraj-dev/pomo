@@ -49,10 +49,16 @@ public class HistoryCacheRepositoryTest {
     }
 
     @Test
-    public fun saveLocalSession_workIncomplete_doesNotIncrement(): Unit = runTest {
+    public fun saveLocalSession_workIncomplete_creditsMinutesButNotBlock(): Unit = runTest {
         val session = Session(type = "work", start = currentDayNoonEpochSecond(), duration = 1500, completed = false)
         repo.saveLocalSession(session)
+
+        // Partial (skipped) block: minutes are time-honest, the block is not earned (ADR-0002).
         assertEquals(0, repo.getTodayCompletedCount())
+        val date = repo.getEffectiveDateString()
+        val stats = repo.getCachedDayStats().firstOrNull { it.date == date }
+        assertNotNull(stats)
+        assertEquals(25, stats!!.workMinutes)
     }
 
     @Test
@@ -94,8 +100,9 @@ public class HistoryCacheRepositoryTest {
 
         assertEquals(10, stats["2026-05-07"]?.workMinutes)
         assertEquals(10, stats["2026-05-08"]?.workMinutes)
-        assertEquals(0, stats["2026-05-07"]?.completed)
-        assertEquals(1, stats["2026-05-08"]?.completed)
+        // The block is filed under the day it started; the new day carries minutes only (ADR-0002).
+        assertEquals(1, stats["2026-05-07"]?.completed)
+        assertEquals(0, stats["2026-05-08"]?.completed)
     }
 
     @Test

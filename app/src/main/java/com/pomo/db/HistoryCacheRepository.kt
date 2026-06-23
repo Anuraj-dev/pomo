@@ -77,7 +77,9 @@ public class HistoryCacheRepository(context: Context) {
             dao.insertSessionWithDayStats(
                 date = segment.date,
                 session = entity,
-                countCompletedSession = index == segments.lastIndex,
+                // A block that crosses midnight is filed under the day it started
+                // (first segment); later-day segments carry minutes only (ADR-0002).
+                countCompletedSession = index == 0,
             )
         }
     }

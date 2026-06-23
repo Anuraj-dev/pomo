@@ -247,7 +247,13 @@ public class PomodoroService : Service(), TimerObserver {
         val completed = historyCacheRepository.getTodayCompletedCount()
         var changed = false
 
-        if (currentState.date != today) {
+        // A running block is allowed to cross midnight intact: it keeps ticking and is
+        // filed under its start day when it completes (ADR-0002). Don't reset or re-date
+        // it here — handleTimerComplete handles the day transition on completion.
+        val runningAcrossMidnight =
+            currentState.date != today && currentState.status == TimerState.STATUS_RUNNING
+
+        if (currentState.date != today && !runningAcrossMidnight) {
             currentState.status = TimerState.STATUS_STOPPED
             currentState.phase = TimerState.PHASE_WORK
             currentState.next_phase = null
@@ -259,7 +265,7 @@ public class PomodoroService : Service(), TimerObserver {
             changed = true
         }
 
-        if (currentState.completed != completed) {
+        if (!runningAcrossMidnight && currentState.completed != completed) {
             currentState.completed = completed
             changed = true
         }
@@ -298,6 +304,12 @@ public class PomodoroService : Service(), TimerObserver {
         if (completedPhase == TimerState.PHASE_WORK) {
             publishCrewSnapshot("work block complete")
         }
+    }
+
+    override fun onPartialWorkBlockRecorded() {
+        // Partial skip minutes count toward Crew ranking, so refresh the snapshot now
+        // rather than waiting for the next completed block (ADR-0002).
+        publishCrewSnapshot("partial work block")
     }
 
     private fun broadcastStateUpdate() {
