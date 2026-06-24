@@ -86,7 +86,7 @@ public class PomodoroService : Service(), TimerObserver {
     override fun onCreate() {
         super.onCreate()
         prefs = UtilPreferenceManager(this)
-        cueEngine = StateCueEngine(this, prefs)
+        cueEngine = StateCueEngine(this, prefs) { refreshRingNotification() }
         crewRepository = CrewRepository(this)
         currentState.goal = prefs.dailyGoal
         notificationHelper = NotificationHelper(this)
@@ -188,7 +188,17 @@ public class PomodoroService : Service(), TimerObserver {
         when (action) {
             "TOGGLE" -> toggleTimer()
             "SKIP" -> skipTimer()
+            "DISMISS" -> cueEngine.stop()
             "RECONNECT" -> Unit
+        }
+    }
+
+    /** Post or clear the heads-up ring notification to match the engine's ring state. */
+    private fun refreshRingNotification() {
+        if (cueEngine.isRinging()) {
+            notificationHelper.showRingNotification(currentState)
+        } else {
+            notificationHelper.cancelRingNotification()
         }
     }
 
@@ -368,6 +378,8 @@ public class PomodoroService : Service(), TimerObserver {
 
     private suspend fun executeCommand(command: TimerCommand): TimerState = commandMutex.withLock {
         withContext(Dispatchers.Main) {
+            // Acting on the timer from any surface acknowledges (and silences) a ring.
+            if (cueEngine.isRinging()) cueEngine.stop()
             reconcileDayTransitionIfNeeded(notify = false)
             val before = currentState.copy()
             val event = when (command) {

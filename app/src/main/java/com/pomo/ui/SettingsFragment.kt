@@ -43,6 +43,7 @@ import com.pomo.ui.theme.ThemeMode
 import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
+import com.pomo.util.UtilPreferenceManager
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -207,6 +208,28 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             title = getString(R.string.state_cues_stronger_title),
             summary = getString(R.string.state_cues_stronger_summary),
             default = false,
+        ))
+        add(SettingsItem.BoolPref(
+            key = "ring_until_dismissed",
+            title = getString(R.string.ring_until_dismissed_title),
+            summary = getString(R.string.ring_until_dismissed_summary),
+            default = false,
+        ))
+        add(SettingsItem.ChoicePref(
+            key = "ring_sound",
+            title = getString(R.string.ring_sound_title),
+            summary = getString(R.string.ring_sound_summary),
+            default = UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+            choices = listOf(
+                SettingsItem.Choice(
+                    UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+                    getString(R.string.ring_sound_system),
+                ),
+                SettingsItem.Choice(
+                    UtilPreferenceManager.RING_SOUND_POMO_CUE,
+                    getString(R.string.ring_sound_pomo),
+                ),
+            ),
         ))
         add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
         addCompletionCueItems()

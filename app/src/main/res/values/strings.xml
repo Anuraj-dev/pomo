@@ -66,6 +66,12 @@
     <string name="state_cues_note">State cues mark timer transitions without reward or alarm cues.</string>
     <string name="state_cues_stronger_title">Stronger completion cues</string>
     <string name="state_cues_stronger_summary">Use stronger completion cue delivery for easier detection</string>
+    <string name="ring_until_dismissed_title">Ring until acknowledged</string>
+    <string name="ring_until_dismissed_summary">Loop the completion alert for up to 1 minute until you dismiss it or act on the timer</string>
+    <string name="ring_sound_title">Ring sound</string>
+    <string name="ring_sound_summary">Sound looped while ringing</string>
+    <string name="ring_sound_system">System alarm</string>
+    <string name="ring_sound_pomo">Pomo completion sound</string>
     <string name="state_cues_completion_section">Completion cues</string>
     <string name="state_cues_manual_section">Manual haptics</string>
     <string name="state_cues_focus_complete_title">Focus complete</string>

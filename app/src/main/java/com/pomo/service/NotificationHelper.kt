@@ -30,6 +30,18 @@ public class NotificationHelper(private val context: Context) {
             )
             channel.description = "Shows active timer status"
             notificationManager.createNotificationChannel(channel)
+
+            // High-importance so the ring surfaces as a heads-up banner, but silent: the
+            // ring's own audio/vibration is owned by StateCueEngine, not this channel.
+            val ringChannel = NotificationChannel(
+                RING_CHANNEL_ID,
+                "Timer ring",
+                NotificationManager.IMPORTANCE_HIGH,
+            )
+            ringChannel.description = "Heads-up alert while a completed phase is ringing"
+            ringChannel.setSound(null, null)
+            ringChannel.enableVibration(false)
+            notificationManager.createNotificationChannel(ringChannel)
         }
     }
 
@@ -92,8 +104,64 @@ public class NotificationHelper(private val context: Context) {
         notificationManager.notify(NOTIFICATION_ID, buildNotification(state, isServing))
     }
 
+    public fun showRingNotification(state: TimerState) {
+        notificationManager.notify(RING_NOTIFICATION_ID, buildRingNotification(state))
+    }
+
+    public fun cancelRingNotification() {
+        notificationManager.cancel(RING_NOTIFICATION_ID)
+    }
+
+    private fun buildRingNotification(state: TimerState): Notification {
+        val openAppIntent = Intent(context, MainActivity::class.java)
+        val pendingOpenApp = PendingIntent.getActivity(
+            context, 0, openAppIntent, PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val phaseName = when (state.phase) {
+            TimerState.PHASE_WORK -> "Focus"
+            TimerState.PHASE_SHORT -> "Short Break"
+            TimerState.PHASE_LONG -> "Long Break"
+            else -> state.phase
+        }
+
+        val dismissIntent = Intent(context, NotificationActionReceiver::class.java)
+        dismissIntent.action = "DISMISS"
+        val pendingDismiss = PendingIntent.getBroadcast(
+            context, 3, dismissIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val startIntent = Intent(context, NotificationActionReceiver::class.java)
+        startIntent.action = "TOGGLE"
+        val pendingStart = PendingIntent.getBroadcast(
+            context, 1, startIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        val skipIntent = Intent(context, NotificationActionReceiver::class.java)
+        skipIntent.action = "SKIP"
+        val pendingSkip = PendingIntent.getBroadcast(
+            context, 2, skipIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+        )
+
+        return NotificationCompat.Builder(context, RING_CHANNEL_ID)
+            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentTitle("Time's up")
+            .setContentText("$phaseName is ready")
+            .setContentIntent(pendingOpenApp)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(false)
+            .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", pendingDismiss)
+            .addAction(android.R.drawable.ic_media_play, "Start $phaseName", pendingStart)
+            .addAction(android.R.drawable.ic_media_next, "Skip", pendingSkip)
+            .build()
+    }
+
     public companion object {
         public const val CHANNEL_ID: String = "pomodoro_channel"
+        public const val RING_CHANNEL_ID: String = "pomodoro_ring_channel"
         public const val NOTIFICATION_ID: Int = 1
+        public const val RING_NOTIFICATION_ID: Int = 2
     }
 }

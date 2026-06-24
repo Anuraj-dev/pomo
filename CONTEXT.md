@@ -37,6 +37,32 @@ _Avoid_: completed, session count (when it could mean the headline metric).
 A target expressed as a count of completed Work blocks per local calendar day.
 Remains count-based even though Focus minutes is the headline metric elsewhere.
 
+## Cues
+
+**Completion cue**:
+The sound and/or vibration Pomo emits the moment a phase ends and the timer
+parks at the next phase. It is a notice, not a transition: the timer never
+auto-advances, so the cue only tells the member a phase finished. It has two
+modes — one-shot and Ring.
+_Avoid_: alarm (reserve for the Ring mode), beep, chime, alert.
+
+**One-shot** (cue mode):
+The default Completion-cue mode: a single brief sound plus one haptic, then
+silence. Honours the phone's sound mode.
+
+**Ring** (cue mode):
+An opt-in Completion-cue mode that loops sound and vibration until the member
+acknowledges it or a one-minute cap elapses, then self-silences. Applies to all
+three phase completions. Audio honours the phone's sound mode (silent/DND stay
+quiet; vibration still fires). This is the only context where "alarm" is apt.
+_Avoid_: alarm clock, snooze (there is no snooze; the cap just silences).
+
+**Acknowledge / Dismiss**:
+Any act that silences a ringing cue — a Dismiss control or any timer command
+(Start, Skip, Reset, Add-time). Dismiss only silences; it leaves the timer
+parked at the next phase. The one-minute cap silences without acknowledgement.
+_Avoid_: snooze, stop alarm, cancel.
+
 ## Leaderboard
 
 **Crew**:
