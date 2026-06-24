@@ -211,13 +211,15 @@ public class StatsAggregatorTest {
     }
 
     @Test
-    public fun rhythm_ignoresAbortedAndBreakSessions() {
+    public fun rhythm_includesPartialWorkButIgnoresBreaks() {
         val work = work("2026-05-15T10:00:00")
-        val aborted = SessionEntity(
+        // A partial (skipped) work block — completed=false. Its minutes are time-honest and
+        // now contribute to the rhythm (ADR-0002). Kept shorter so hour 10 stays the peak.
+        val partial = SessionEntity(
             start = startSec("2026-05-15T11:00:00"),
             date = "2026-05-15",
             type = "work",
-            duration = 25 * 60,
+            duration = 10 * 60,
             completed = false,
         )
         val breakSession = SessionEntity(
@@ -229,7 +231,7 @@ public class StatsAggregatorTest {
         )
         val snap = StatsAggregator.aggregate(
             days = listOf(day("2026-05-15", 1, 25)),
-            sessions = listOf(work, aborted, breakSession),
+            sessions = listOf(work, partial, breakSession),
             dailyGoal = 8,
             today = "2026-05-18",
             nowMs = ms("2026-05-18T10:00:00"),
@@ -237,7 +239,7 @@ public class StatsAggregatorTest {
         )
         assertEquals(10, snap.rhythm.peakHour)
         assertTrue(snap.rhythm.buckets[10] > 0)
-        assertEquals(0, snap.rhythm.buckets[11])
-        assertEquals(0, snap.rhythm.buckets[12])
+        assertTrue(snap.rhythm.buckets[11] > 0) // partial work now counts
+        assertEquals(0, snap.rhythm.buckets[12]) // break still excluded
     }
 }
