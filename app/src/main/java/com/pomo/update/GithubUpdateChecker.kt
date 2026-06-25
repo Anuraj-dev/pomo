@@ -85,12 +85,13 @@ internal fun resolveUpdate(
     val apk = assets.firstOrNull { it.name.endsWith(".apk", ignoreCase = true) }
         ?: return UpdateCheckResult.MissingAsset
     val sha = assets.firstOrNull { it.name.endsWith(".apk.sha256", ignoreCase = true) }
+        ?: return UpdateCheckResult.MissingAsset
 
     return UpdateCheckResult.UpdateAvailable(
         LatestRelease(
             versionName = tag.trim().removePrefix("v").removePrefix("V"),
             apkUrl = apk.downloadUrl,
-            sha256Url = sha?.downloadUrl,
+            sha256Url = sha.downloadUrl,
             releaseNotes = releaseNotes,
         ),
     )

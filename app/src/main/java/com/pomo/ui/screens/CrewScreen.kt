@@ -74,13 +74,14 @@ public fun CrewScreen(
             pendingJoin = PendingJoin(joinCode.trim(), initialDisplayName, payload)
         }
     }
-    LaunchedEffect(initialJoinCode) {
-        if (initialJoinCode != null) {
-            CrewJoinCodeCodec.decode(initialJoinCode)?.let { payload ->
-                pendingJoin = PendingJoin(initialJoinCode, initialDisplayName, payload)
-            }
-            onInitialJoinCodeConsumed()
+    LaunchedEffect(initialJoinCode, state.isLoading, initialDisplayName) {
+        val joinCode = initialJoinCode ?: return@LaunchedEffect
+        if (state.isLoading && initialDisplayName.isBlank()) return@LaunchedEffect
+        val trimmedJoinCode = joinCode.trim()
+        CrewJoinCodeCodec.decode(trimmedJoinCode)?.let { payload ->
+            pendingJoin = PendingJoin(trimmedJoinCode, initialDisplayName, payload)
         }
+        onInitialJoinCodeConsumed()
     }
     // This Compose tree is hosted inside a View layout with no Surface ancestor, so the
     // ambient LocalContentColor defaults to black. Pin it to onSurface so any Text that

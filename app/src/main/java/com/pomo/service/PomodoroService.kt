@@ -380,7 +380,12 @@ public class PomodoroService : Service(), TimerObserver {
         withContext(Dispatchers.Main) {
             // Acting on the timer from any surface acknowledges (and silences) a ring.
             if (cueEngine.isRinging()) cueEngine.stop()
-            reconcileDayTransitionIfNeeded(notify = false)
+            val runningAcrossMidnight =
+                currentState.date != historyCacheRepository.getEffectiveDateString() &&
+                    currentState.status == TimerState.STATUS_RUNNING
+            if (!runningAcrossMidnight) {
+                reconcileDayTransitionIfNeeded(notify = false)
+            }
             val before = currentState.copy()
             val event = when (command) {
                 TimerCommand.Toggle -> if (currentState.status == TimerState.STATUS_RUNNING) {
@@ -399,6 +404,9 @@ public class PomodoroService : Service(), TimerObserver {
                 else -> if (command is TimerCommand.AddTime) {
                     offlineTimer.extend(command.secondsDelta)
                 }
+            }
+            if (runningAcrossMidnight && currentState.status != TimerState.STATUS_RUNNING) {
+                adoptCurrentDayAfterCrossMidnightCommand()
             }
             if (event != null && didStateChange(before, currentState)) {
                 cueEngine.playManual(event)
@@ -450,6 +458,18 @@ public class PomodoroService : Service(), TimerObserver {
             updateNotification()
             broadcastStateUpdate()
         }
+    }
+
+    private suspend fun adoptCurrentDayAfterCrossMidnightCommand() {
+        val today = historyCacheRepository.getEffectiveDateString()
+        if (currentState.date == today) return
+
+        currentState.date = today
+        currentState.completed = historyCacheRepository.getTodayCompletedCount()
+        currentState.last_action_time = System.currentTimeMillis() / 1000
+        sanitizeState(currentState)
+        offlineTimer.updateState(currentState)
+        saveCurrentState()
     }
 
     private fun publishCrewSnapshot(reason: String) {

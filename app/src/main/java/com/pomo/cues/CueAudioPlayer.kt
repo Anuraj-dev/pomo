@@ -14,7 +14,9 @@ public class CueAudioPlayer(context: Context) {
         buildMap {
             CompletionCueFamily.values().forEach { family ->
                 CueVariant.values().forEach { variant ->
-                    put(family to variant, createPlayer(rawResFor(family, variant)))
+                    createPlayer(rawResFor(family, variant))?.let { player ->
+                        put(family to variant, player)
+                    }
                 }
             }
         }
@@ -125,12 +127,12 @@ public class CueAudioPlayer(context: Context) {
     private fun createPlayer(
         rawResId: Int,
         usage: Int = AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
-    ): MediaPlayer {
+    ): MediaPlayer? {
         val audioAttributes = AudioAttributes.Builder()
             .setUsage(usage)
             .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
             .build()
-        return MediaPlayer.create(appContext, rawResId, audioAttributes, 0).apply {
+        return MediaPlayer.create(appContext, rawResId, audioAttributes, 0)?.apply {
             isLooping = false
         }
     }

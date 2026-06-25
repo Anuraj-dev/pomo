@@ -93,7 +93,7 @@ public fun AboutScreen() {
         }
         // Hidden on the side-by-side .demo build, which carries a separate applicationId
         // and cannot update itself in place.
-        if (!BuildConfig.APPLICATION_ID.endsWith(".demo")) {
+        if (BuildConfig.APPLICATION_ID == "com.pomo") {
             Spacer(Modifier.height(16.dp))
             UpdateSection()
         }

@@ -145,16 +145,24 @@ public class NotificationHelper(private val context: Context) {
 
         return NotificationCompat.Builder(context, RING_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Time's up")
-            .setContentText("$phaseName is ready")
+            .setContentTitle(context.getString(R.string.ring_notification_title))
+            .setContentText(context.getString(R.string.ring_notification_ready, phaseName))
             .setContentIntent(pendingOpenApp)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(false)
             .setOngoing(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Dismiss", pendingDismiss)
-            .addAction(android.R.drawable.ic_media_play, "Start $phaseName", pendingStart)
-            .addAction(android.R.drawable.ic_media_next, "Skip", pendingSkip)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                context.getString(R.string.ring_notification_dismiss),
+                pendingDismiss,
+            )
+            .addAction(
+                android.R.drawable.ic_media_play,
+                context.getString(R.string.ring_notification_start, phaseName),
+                pendingStart,
+            )
+            .addAction(android.R.drawable.ic_media_next, context.getString(R.string.action_skip), pendingSkip)
             .build()
     }
 

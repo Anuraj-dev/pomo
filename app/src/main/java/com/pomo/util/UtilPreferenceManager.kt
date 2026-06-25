@@ -113,7 +113,9 @@ public class UtilPreferenceManager(context: Context) {
         get() = prefs.getBoolean("ring_until_dismissed", false)
 
     public val ringSound: String
-        get() = prefs.getString("ring_sound", RING_SOUND_SYSTEM_ALARM) ?: RING_SOUND_SYSTEM_ALARM
+        get() = prefs.getString("ring_sound", RING_SOUND_SYSTEM_ALARM)
+            ?.takeIf { it == RING_SOUND_SYSTEM_ALARM || it == RING_SOUND_POMO_CUE }
+            ?: RING_SOUND_SYSTEM_ALARM
 
     public val themeMode: ThemeMode
         get() = prefs.themeMode()

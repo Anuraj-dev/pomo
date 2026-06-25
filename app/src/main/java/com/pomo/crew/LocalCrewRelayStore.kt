@@ -36,7 +36,7 @@ public class LocalCrewRelayStore(context: Context) {
 
     public suspend fun preview(crewId: String, crewKey: String, relays: List<String>): CrewJoinPreview? {
         val results = transport().pullIncrementally(crewId, relays).toList()
-        if (results.isEmpty() || results.all { it.error != null }) return null
+        if (results.isEmpty()) return null
 
         val latestSnapshots = results
             .flatMap { result -> result.events }
@@ -44,6 +44,7 @@ public class LocalCrewRelayStore(context: Context) {
             .groupBy { snapshot -> snapshot.identityPublicKey }
             .values
             .mapNotNull { snapshots -> snapshots.maxByOrNull { it.publishedAtEpochSeconds } }
+        if (latestSnapshots.isEmpty() && results.all { it.error != null }) return null
 
         val participating = latestSnapshots.filter { snapshot -> snapshot.todayFocusMinutes > 0 }
         val knownDisplayNames = latestSnapshots.mapTo(mutableSetOf()) { snapshot ->

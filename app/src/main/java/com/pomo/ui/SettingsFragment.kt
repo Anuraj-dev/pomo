@@ -53,6 +53,13 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     private val rotateConfirm = mutableStateOf(false)
     private val scanResult = mutableStateOf<ScanResultData?>(null)
 
+    override fun onDestroyView() {
+        pairingDialog.value = null
+        rotateConfirm.value = false
+        scanResult.value = null
+        super.onDestroyView()
+    }
+
     private val scanQrLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             if (result.resultCode != Activity.RESULT_OK) return@registerForActivityResult

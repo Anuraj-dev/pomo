@@ -57,7 +57,12 @@ internal class ApkInstaller(
                 }
             }
 
-            val expected = release.sha256Url?.let { fetchExpectedSha(it) }
+            val expected = release.sha256Url?.let { shaUrl ->
+                fetchExpectedSha(shaUrl) ?: run {
+                    apk.delete()
+                    return@withContext DownloadOutcome.Corrupt
+                }
+            }
             if (expected != null && !expected.equals(sha256Of(apk), ignoreCase = true)) {
                 apk.delete()
                 return@withContext DownloadOutcome.Corrupt

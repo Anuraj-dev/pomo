@@ -477,9 +477,9 @@ private fun CompletionCuePreviewRow(
         Spacer(Modifier.height(12.dp))
         SegmentedToggle(
             options = listOf(
-                SegmentedToggleOption(CueVariant.Variant1.number.toString(), "Variant 1"),
-                SegmentedToggleOption(CueVariant.Variant2.number.toString(), "Variant 2"),
-                SegmentedToggleOption(CueVariant.Variant3.number.toString(), "Variant 3"),
+                SegmentedToggleOption(CueVariant.Variant1.number.toString(), context.getString(R.string.state_cues_variant_1)),
+                SegmentedToggleOption(CueVariant.Variant2.number.toString(), context.getString(R.string.state_cues_variant_2)),
+                SegmentedToggleOption(CueVariant.Variant3.number.toString(), context.getString(R.string.state_cues_variant_3)),
             ),
             selectedValue = selectedVariant.number.toString(),
             onSelectedValueChange = { selectedVariant = CueVariant.fromNumber(it.toInt()) },
@@ -488,18 +488,22 @@ private fun CompletionCuePreviewRow(
         Spacer(Modifier.height(8.dp))
         Text(
             text = buildString {
-                append("Next up: Variant $nextVariantNumber")
+                append(context.getString(R.string.state_cues_preview_next_up, nextVariantNumber))
                 append(" · ")
-                append(if (soundEnabled) "Sound on" else "Sound off")
+                append(
+                    context.getString(
+                        if (soundEnabled) R.string.state_cues_preview_sound_on else R.string.state_cues_preview_sound_off_inline,
+                    ),
+                )
                 append(" · ")
                 append(
                     when {
-                        !vibrationEnabled -> "Vibration off"
-                        !vibrationAvailable -> "Vibration unavailable"
-                        else -> "Vibration on"
+                        !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                        !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                        else -> context.getString(R.string.state_cues_preview_vibration_on)
                     },
                 )
-                if (strongerEnabled) append(" · Stronger")
+                if (strongerEnabled) append(" · ${context.getString(R.string.state_cues_preview_stronger)}")
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -510,17 +514,17 @@ private fun CompletionCuePreviewRow(
                 onClick = { preview(CuePreviewChannel.Combined) },
                 variant = PomoButtonVariant.Tonal,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-            ) { Text("Preview") }
+            ) { Text(context.getString(R.string.state_cues_preview_button)) }
             PomoButton(
                 onClick = { preview(CuePreviewChannel.AudioOnly) },
                 variant = PomoButtonVariant.Ghost,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text("Audio") }
+            ) { Text(context.getString(R.string.state_cues_preview_audio)) }
             PomoButton(
                 onClick = { preview(CuePreviewChannel.HapticOnly) },
                 variant = PomoButtonVariant.Ghost,
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-            ) { Text("Haptic") }
+            ) { Text(context.getString(R.string.state_cues_preview_haptic)) }
         }
     }
 }
@@ -550,9 +554,9 @@ private fun ManualHapticPreviewRow(
         Spacer(Modifier.height(8.dp))
         Text(
             text = when {
-                !vibrationEnabled -> "Vibration off"
-                !vibrationAvailable -> "Vibration unavailable"
-                else -> "Vibration on"
+                !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                else -> context.getString(R.string.state_cues_preview_vibration_on)
             },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -569,7 +573,7 @@ private fun ManualHapticPreviewRow(
             },
             variant = PomoButtonVariant.Tonal,
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        ) { Text("Preview haptic") }
+        ) { Text(context.getString(R.string.state_cues_preview_haptic_button)) }
     }
 }
 

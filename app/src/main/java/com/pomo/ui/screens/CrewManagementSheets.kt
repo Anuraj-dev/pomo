@@ -61,6 +61,7 @@ internal fun ManageCrewScreen(
     board: CrewBoard,
     onBack: () -> Unit,
     onCreateCrew: (String, String) -> Unit,
+    onReviewJoin: (String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
@@ -204,7 +205,7 @@ internal fun ManageCrewScreen(
             }
             item {
                 PomoButton(
-                    onClick = { onJoinCrew(joinCode, "") },
+                    onClick = { onReviewJoin(joinCode) },
                     enabled = joinCode.isNotBlank(),
                     variant = PomoButtonVariant.Tonal,
                 ) { Text("Review Join") }
