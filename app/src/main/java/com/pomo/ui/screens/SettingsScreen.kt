@@ -149,6 +149,7 @@ private fun groupSettings(items: List<SettingsItem>): List<SettingsGroup> {
 public fun SettingsScreen(
     sharedPreferences: SharedPreferences,
     items: List<SettingsItem>,
+    showUpdateSection: Boolean = false,
 ) {
     val groups = remember(items) { groupSettings(items) }
 
@@ -168,6 +169,11 @@ public fun SettingsScreen(
             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
+            if (showUpdateSection) {
+                item(key = "updates") {
+                    UpdateSection()
+                }
+            }
             items(groups, key = { it.title ?: "_" }) { group ->
                 SettingsGroupCard(group, sharedPreferences)
             }
