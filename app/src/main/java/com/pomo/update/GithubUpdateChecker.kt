@@ -72,7 +72,7 @@ internal class GithubUpdateChecker(
             .header("User-Agent", USER_AGENT)
             .build()
 
-        try {
+        return try {
             client.newCall(request).execute().use { response ->
                 if (response.code == 429) {
                     return FetchReleaseResult.RateLimited
