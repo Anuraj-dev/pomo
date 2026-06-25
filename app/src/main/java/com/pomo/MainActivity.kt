@@ -7,12 +7,14 @@ import android.os.Build
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.HapticFeedbackConstants
 import android.view.MotionEvent
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.NavHostFragment
+import androidx.navigation.ui.NavigationUI
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.pomo.service.PomodoroService
@@ -69,6 +71,14 @@ public class MainActivity : AppCompatActivity() {
         val navController = navHostFragment.navController
         val navView: BottomNavigationView = findViewById(R.id.nav_view)
         navView.setupWithNavController(navController)
+        navView.setOnItemSelectedListener { item ->
+            val changedTab = navController.currentDestination?.id != item.itemId
+            if (changedTab) {
+                navView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
+            NavigationUI.onNavDestinationSelected(item, navController)
+        }
+        navView.setOnItemReselectedListener { }
 
         startService()
         requestNotificationPermission()
