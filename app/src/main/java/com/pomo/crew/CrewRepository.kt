@@ -52,6 +52,11 @@ public class CrewRepository(context: Context) {
         return true
     }
 
+    public suspend fun previewJoin(joinCode: String): CrewJoinPreview? {
+        val payload = CrewJoinCodeCodec.decode(joinCode.trim()) ?: return null
+        return relayStore.preview(payload.crewId, payload.key, payload.relays)
+    }
+
     @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
     public fun observeCurrentBoard(rankingMode: Flow<CrewRankingMode>): Flow<CrewBoard> {
         val membership = crewStore.loadMembership() ?: return emptyFlow()

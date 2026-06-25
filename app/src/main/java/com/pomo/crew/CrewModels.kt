@@ -13,6 +13,13 @@ public data class CrewJoinPayload(
     val version: Int = CrewDefaults.PROTOCOL_VERSION,
 )
 
+public data class CrewJoinPreview(
+    val activeMembers: Int,
+    val todayFocusMinutes: Int,
+    val medianMemberFocusMinutes: Int,
+    val knownDisplayNames: Set<String>,
+)
+
 public data class CrewDailyAggregate(
     val localDate: String,
     val focusMinutes: Int,

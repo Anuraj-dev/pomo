@@ -119,6 +119,7 @@ public class CrewFragment : Fragment() {
                     onMemberHiddenChange = { identityPublicKey, hidden ->
                         setMemberHidden(identityPublicKey, hidden)
                     },
+                    loadJoinPreview = { joinCode -> repository.previewJoin(joinCode) },
                     onExportRecovery = ::requestRecoveryExport,
                     onImportRecovery = ::requestRecoveryImport,
                     initialJoinCode = currentInitialJoinCode,

@@ -23,7 +23,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -55,6 +54,7 @@ import com.pomo.cues.StateCueEvent
 import com.pomo.service.PomodoroService
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
+import com.pomo.ui.components.PomoDialog
 import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.components.SegmentedToggle
 import com.pomo.ui.components.SegmentedToggleOption
@@ -250,28 +250,26 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
 
     if (editing) {
         var draft by remember { mutableStateOf(current) }
-        AlertDialog(
+        PomoDialog(
             onDismissRequest = { editing = false },
-            containerColor = PomoTokens.colors.surfaceElevated,
             title = { Text(item.title) },
-            text = {
+            body = {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it.filter(Char::isDigit) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             },
-            confirmButton = {
+            actions = {
+                TextButton(onClick = { editing = false }) { Text("Cancel") }
                 TextButton(onClick = {
                     val parsed = draft.toIntOrNull() ?: item.default
                     val sanitized = UtilPreferenceManager.sanitizeIntPreference(item.key, parsed, item.default)
                     prefs.edit().putString(item.key, sanitized.toString()).apply()
                     editing = false
                 }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editing = false }) { Text("Cancel") }
             },
         )
     }
@@ -303,11 +301,10 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
     )
 
     if (editing) {
-        AlertDialog(
+        PomoDialog(
             onDismissRequest = { editing = false },
-            containerColor = PomoTokens.colors.surfaceElevated,
             title = { Text(item.title) },
-            text = {
+            body = {
                 Column {
                     item.choices.forEach { choice ->
                         Text(
@@ -330,8 +327,7 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
+            actions = {
                 TextButton(onClick = { editing = false }) { Text("Cancel") }
             },
         )

@@ -29,6 +29,7 @@ import com.pomo.crew.CrewBoard
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewJoinCodeCodec
 import com.pomo.crew.CrewJoinPayload
+import com.pomo.crew.CrewJoinPreview
 import com.pomo.crew.CrewMembershipSummary
 import com.pomo.crew.CrewRankingMode
 import com.pomo.ui.components.EmptyState
@@ -56,24 +57,27 @@ public fun CrewScreen(
     onDisplayNameChange: (String) -> Unit,
     onRankingModeChange: (CrewRankingMode) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
+    loadJoinPreview: suspend (String) -> CrewJoinPreview?,
     onExportRecovery: () -> Unit,
     onImportRecovery: () -> Unit,
     initialJoinCode: String? = null,
     onInitialJoinCodeConsumed: () -> Unit = {},
 ) {
     var pendingJoin by remember { mutableStateOf<PendingJoin?>(null) }
-    val requestJoin: (String, String) -> Unit = { joinCode, displayName ->
+    var createRequest by remember { mutableStateOf<CreateCrewRequest?>(null) }
+    val initialDisplayName = state.board?.displayName.orEmpty()
+    val requestJoin: (String) -> Unit = { joinCode ->
         val payload = CrewJoinCodeCodec.decode(joinCode.trim())
         if (payload == null) {
-            onJoinCrew(joinCode, displayName)
+            onJoinCrew(joinCode, "")
         } else {
-            pendingJoin = PendingJoin(joinCode.trim(), displayName, payload)
+            pendingJoin = PendingJoin(joinCode.trim(), initialDisplayName, payload)
         }
     }
     LaunchedEffect(initialJoinCode) {
         if (initialJoinCode != null) {
             CrewJoinCodeCodec.decode(initialJoinCode)?.let { payload ->
-                pendingJoin = PendingJoin(initialJoinCode, "", payload)
+                pendingJoin = PendingJoin(initialJoinCode, initialDisplayName, payload)
             }
             onInitialJoinCodeConsumed()
         }
@@ -87,15 +91,15 @@ public fun CrewScreen(
             state.board == null -> CrewEmptyState(
                 archivedMemberships = state.archivedMemberships,
                 errorMessage = state.errorMessage,
-                onCreateCrew = onCreateCrew,
                 onJoinCrew = requestJoin,
+                onCreateCrew = { createRequest = CreateCrewRequest(initialDisplayName) },
                 onImportRecovery = onImportRecovery,
             )
             else -> CrewBoardContent(
                 isSyncing = state.isSyncing,
                 board = state.board,
                 onCreateCrew = onCreateCrew,
-                onJoinCrew = requestJoin,
+                onJoinCrew = { joinCode, _ -> requestJoin(joinCode) },
                 onSwitchCrew = onSwitchCrew,
                 onLeaveCrew = onLeaveCrew,
                 onDisplayNameChange = onDisplayNameChange,
@@ -109,10 +113,21 @@ public fun CrewScreen(
     pendingJoin?.let { pending ->
         JoinConfirmationSheet(
             pending = pending,
+            loadPreview = loadJoinPreview,
             onDismiss = { pendingJoin = null },
-            onConfirm = {
-                onJoinCrew(pending.joinCode, pending.displayName)
+            onConfirm = { displayName ->
+                onJoinCrew(pending.joinCode, displayName)
                 pendingJoin = null
+            },
+        )
+    }
+    createRequest?.let { request ->
+        CreateCrewSheet(
+            initialDisplayName = request.initialDisplayName,
+            onDismiss = { createRequest = null },
+            onConfirm = { crewName, displayName ->
+                onCreateCrew(crewName, displayName)
+                createRequest = null
             },
         )
     }
@@ -139,12 +154,10 @@ private fun CrewLoadingState() {
 private fun CrewEmptyState(
     archivedMemberships: List<CrewMembershipSummary>,
     errorMessage: String?,
-    onCreateCrew: (String, String) -> Unit,
-    onJoinCrew: (String, String) -> Unit,
+    onJoinCrew: (String) -> Unit,
+    onCreateCrew: () -> Unit,
     onImportRecovery: () -> Unit,
 ) {
-    var crewName by remember { mutableStateOf("") }
-    var displayName by remember { mutableStateOf("") }
     var joinCode by remember { mutableStateOf("") }
     LazyColumn(
         modifier = Modifier
@@ -165,55 +178,6 @@ private fun CrewEmptyState(
                 modifier = Modifier.fillMaxWidth(),
             )
         }
-        if (archivedMemberships.isNotEmpty()) {
-            item {
-                SectionHeader("Archived v1")
-                Spacer(Modifier.height(8.dp))
-                archivedMemberships.forEach { membership ->
-                    Text(
-                        text = "${membership.crewName} · ${membership.displayName}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = PomoTokens.colors.onSurfaceMuted,
-                    )
-                }
-            }
-        }
-        item {
-            SectionHeader("Recovery")
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = "Restore a saved identity and memberships after reinstalling or clearing Crew data.",
-                style = MaterialTheme.typography.bodySmall,
-                color = PomoTokens.colors.onSurfaceMuted,
-            )
-            Spacer(Modifier.height(8.dp))
-            PomoButton(
-                onClick = onImportRecovery,
-                variant = PomoButtonVariant.Tonal,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Restore Recovery") }
-        }
-        item {
-            SectionHeader("Create")
-            Spacer(Modifier.height(8.dp))
-            OutlinedTextField(
-                value = crewName,
-                onValueChange = { crewName = it },
-                label = { Text("Crew name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        }
-        item {
-            NameField(displayName, onValueChange = { displayName = it })
-        }
-        item {
-            PomoButton(
-                onClick = { onCreateCrew(crewName, displayName) },
-                enabled = crewName.isNotBlank(),
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Create Crew") }
-        }
         item {
             SectionHeader("Join")
             Spacer(Modifier.height(8.dp))
@@ -227,11 +191,47 @@ private fun CrewEmptyState(
         }
         item {
             PomoButton(
-                onClick = { onJoinCrew(joinCode, displayName) },
+                onClick = { onJoinCrew(joinCode) },
                 enabled = joinCode.isNotBlank(),
                 variant = PomoButtonVariant.Tonal,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Review Join") }
+        }
+        item {
+            SectionHeader("Create")
+            Spacer(Modifier.height(8.dp))
+            PomoButton(
+                onClick = onCreateCrew,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Create Crew") }
+        }
+        item {
+            SectionHeader("Recovery")
+            Spacer(Modifier.height(8.dp))
+            Text(
+                text = "Restore a saved identity and memberships after reinstalling or clearing Crew data.",
+                style = MaterialTheme.typography.bodySmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Spacer(Modifier.height(8.dp))
+            PomoButton(
+                onClick = onImportRecovery,
+                variant = PomoButtonVariant.Ghost,
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Restore Recovery") }
+        }
+        if (archivedMemberships.isNotEmpty()) {
+            item {
+                SectionHeader("Archived v1")
+                Spacer(Modifier.height(8.dp))
+                archivedMemberships.forEach { membership ->
+                    Text(
+                        text = "${membership.crewName} · ${membership.displayName}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                }
+            }
         }
         if (errorMessage != null) {
             item {
@@ -331,6 +331,10 @@ internal const val QR_BACKGROUND: Int = -0x90807
 
 internal data class PendingJoin(
     val joinCode: String,
-    val displayName: String,
+    val initialDisplayName: String,
     val payload: CrewJoinPayload,
+)
+
+internal data class CreateCrewRequest(
+    val initialDisplayName: String,
 )
