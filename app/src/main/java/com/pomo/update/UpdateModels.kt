@@ -14,6 +14,14 @@ internal data class LatestRelease(
     val releaseNotes: String,
 )
 
+/** Release notes for one specific published app version. */
+internal data class VersionReleaseNotes(
+    /** Tag with any leading `v` stripped, e.g. "2.0.0". */
+    val versionName: String,
+    /** GitHub release body. May be blank if the release was published without notes. */
+    val releaseNotes: String,
+)
+
 /** Outcome of a manual "Check for updates" request. */
 internal sealed interface UpdateCheckResult {
     data class UpdateAvailable(val release: LatestRelease) : UpdateCheckResult
@@ -24,6 +32,15 @@ internal sealed interface UpdateCheckResult {
     data object MalformedMetadata : UpdateCheckResult
     /** A release exists but carries no installable `.apk` asset. */
     data object MissingAsset : UpdateCheckResult
+}
+
+/** Outcome of fetching release notes for an already-installed app version. */
+internal sealed interface ReleaseNotesResult {
+    data class Found(val release: VersionReleaseNotes) : ReleaseNotesResult
+    data object NotFound : ReleaseNotesResult
+    data object Offline : ReleaseNotesResult
+    data object RateLimited : ReleaseNotesResult
+    data object MalformedMetadata : ReleaseNotesResult
 }
 
 /** Outcome of downloading + verifying the release APK. */

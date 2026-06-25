@@ -9,11 +9,12 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.google.android.material.transition.MaterialSharedAxis
-import com.pomo.ui.components.ComponentGalleryScreen
+import com.pomo.ui.screens.ReleaseNotesScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.themeMode
 
-public class ComponentGalleryFragment : Fragment() {
+public class ReleaseNotesFragment : Fragment() {
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enterTransition = MaterialSharedAxis(MaterialSharedAxis.Z, true)
@@ -28,7 +29,7 @@ public class ComponentGalleryFragment : Fragment() {
         setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
         setContent {
             PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
-                ComponentGalleryScreen()
+                ReleaseNotesScreen()
             }
         }
     }
