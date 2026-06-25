@@ -257,15 +257,14 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         ))
 
         add(SettingsItem.Section(getString(R.string.category_info)))
-        if (BuildConfig.DEBUG) {
-            add(SettingsItem.Action(
-                title = getString(R.string.component_gallery_title),
-                summary = getString(R.string.component_gallery_summary),
-                onClick = {
-                    runCatching { findNavController().navigate(R.id.navigation_component_gallery) }
-                },
-            ))
-        }
+        add(SettingsItem.Action(
+            title = getString(R.string.release_notes_title),
+            summary = getString(R.string.release_notes_summary, BuildConfig.VERSION_NAME),
+            iconRes = R.drawable.ic_info,
+            onClick = {
+                runCatching { findNavController().navigate(R.id.navigation_release_notes) }
+            },
+        ))
         add(SettingsItem.Action(
             title = getString(R.string.about_title),
             summary = getString(R.string.about_summary),

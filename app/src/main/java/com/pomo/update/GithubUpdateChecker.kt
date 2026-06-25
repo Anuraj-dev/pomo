@@ -9,6 +9,11 @@ import okhttp3.Request
 
 /** A release asset as exposed by the GitHub API, reduced to the fields we read. */
 internal data class ReleaseAsset(val name: String, val downloadUrl: String)
+internal data class ReleasePayload(
+    val tagName: String?,
+    val releaseNotes: String,
+    val assets: List<ReleaseAsset>,
+)
 
 /**
  * Queries the latest stable GitHub release for the Pomo repo and decides whether the
@@ -20,8 +25,48 @@ internal class GithubUpdateChecker(
 ) {
 
     suspend fun check(currentVersionName: String): UpdateCheckResult = withContext(Dispatchers.IO) {
+        when (val release = fetchRelease("releases/latest")) {
+            is FetchReleaseResult.Success ->
+                resolveUpdate(
+                    currentVersionName = currentVersionName,
+                    tagName = release.payload.tagName,
+                    releaseNotes = release.payload.releaseNotes,
+                    assets = release.payload.assets,
+                )
+            FetchReleaseResult.Offline -> UpdateCheckResult.Offline
+            FetchReleaseResult.RateLimited -> UpdateCheckResult.RateLimited
+            FetchReleaseResult.NotFound -> UpdateCheckResult.MalformedMetadata
+            FetchReleaseResult.MalformedMetadata -> UpdateCheckResult.MalformedMetadata
+        }
+    }
+
+    suspend fun releaseNotesFor(versionName: String): ReleaseNotesResult = withContext(Dispatchers.IO) {
+        val tags = listOf("v$versionName", versionName).distinct()
+        for (tag in tags) {
+            when (val release = fetchRelease("releases/tags/$tag")) {
+                is FetchReleaseResult.Success -> {
+                    val tagName = release.payload.tagName ?: return@withContext ReleaseNotesResult.MalformedMetadata
+                    val parsedVersion = tagName.trim().removePrefix("v").removePrefix("V")
+                    return@withContext ReleaseNotesResult.Found(
+                        VersionReleaseNotes(
+                            versionName = parsedVersion,
+                            releaseNotes = release.payload.releaseNotes,
+                        ),
+                    )
+                }
+                FetchReleaseResult.NotFound -> continue
+                FetchReleaseResult.Offline -> return@withContext ReleaseNotesResult.Offline
+                FetchReleaseResult.RateLimited -> return@withContext ReleaseNotesResult.RateLimited
+                FetchReleaseResult.MalformedMetadata ->
+                    return@withContext ReleaseNotesResult.MalformedMetadata
+            }
+        }
+        ReleaseNotesResult.NotFound
+    }
+
+    private suspend fun fetchRelease(path: String): FetchReleaseResult = withContext(Dispatchers.IO) {
         val request = Request.Builder()
-            .url("https://api.github.com/repos/$repo/releases/latest")
+            .url("https://api.github.com/repos/$repo/$path")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
             .header("User-Agent", USER_AGENT)
@@ -30,22 +75,23 @@ internal class GithubUpdateChecker(
         try {
             client.newCall(request).execute().use { response ->
                 if (response.code == 403 && response.header("X-RateLimit-Remaining") == "0") {
-                    return@withContext UpdateCheckResult.RateLimited
+                    return@withContext FetchReleaseResult.RateLimited
                 }
+                if (response.code == 404) return@withContext FetchReleaseResult.NotFound
                 if (!response.isSuccessful) {
-                    return@withContext UpdateCheckResult.MalformedMetadata
+                    return@withContext FetchReleaseResult.MalformedMetadata
                 }
-                val body = response.body?.string() ?: return@withContext UpdateCheckResult.MalformedMetadata
-                parseRelease(body)?.let { (tag, notes, assets) ->
-                    resolveUpdate(currentVersionName, tag, notes, assets)
-                } ?: UpdateCheckResult.MalformedMetadata
+                val body = response.body?.string() ?: return@withContext FetchReleaseResult.MalformedMetadata
+                parseRelease(body)?.let { payload ->
+                    FetchReleaseResult.Success(payload)
+                } ?: FetchReleaseResult.MalformedMetadata
             }
         } catch (_: IOException) {
-            UpdateCheckResult.Offline
+            FetchReleaseResult.Offline
         }
     }
 
-    private fun parseRelease(json: String): Triple<String?, String, List<ReleaseAsset>>? = try {
+    private fun parseRelease(json: String): ReleasePayload? = try {
         val root = JsonParser.parseString(json).asJsonObject
         val tag = root.get("tag_name")?.takeUnless { it.isJsonNull }?.asString
         val notes = root.get("body")?.takeUnless { it.isJsonNull }?.asString.orEmpty()
@@ -56,7 +102,7 @@ internal class GithubUpdateChecker(
                 ?: return@mapNotNull null
             ReleaseAsset(name, url)
         }.orEmpty()
-        Triple(tag, notes, assets)
+        ReleasePayload(tagName = tag, releaseNotes = notes, assets = assets)
     } catch (_: Exception) {
         null
     }
@@ -64,6 +110,14 @@ internal class GithubUpdateChecker(
     internal companion object {
         const val DEFAULT_REPO: String = "Snehit70/pomo"
     }
+}
+
+private sealed interface FetchReleaseResult {
+    data class Success(val payload: ReleasePayload) : FetchReleaseResult
+    data object NotFound : FetchReleaseResult
+    data object Offline : FetchReleaseResult
+    data object RateLimited : FetchReleaseResult
+    data object MalformedMetadata : FetchReleaseResult
 }
 
 /**

@@ -42,8 +42,8 @@
         android:label="About" />
 
     <fragment
-        android:id="@+id/navigation_component_gallery"
-        android:name="com.pomo.ui.ComponentGalleryFragment"
-        android:label="Component gallery" />
+        android:id="@+id/navigation_release_notes"
+        android:name="com.pomo.ui.ReleaseNotesFragment"
+        android:label="Release notes" />
 
 </navigation>

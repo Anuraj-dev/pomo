@@ -139,10 +139,10 @@
     </string-array>
     <string name="daily_goal_title">Daily Goal</string>
     <string name="daily_goal_summary">Number of focus sessions per day</string>
+    <string name="release_notes_title">Release notes</string>
+    <string name="release_notes_summary">Read what shipped in version %1$s</string>
     <string name="about_title">About</string>
     <string name="about_summary">Version info &amp; credits</string>
-    <string name="component_gallery_title">Component gallery</string>
-    <string name="component_gallery_summary">Debug preview of shared UI components</string>
     <string name="about_subtitle">A mobile-first Pomodoro timer with optional desktop control.</string>
     <string name="about_features_title">Features</string>
     <string name="about_features">• Phone-owned timer state\n• Local session history\n• Paired desktop API\n• Detailed statistics &amp; analytics\n• Home screen widget</string>
