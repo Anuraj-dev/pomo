@@ -12,18 +12,14 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.ScrollView
-import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -47,10 +43,22 @@ import com.pomo.ui.theme.ThemeMode
 import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
+import com.pomo.util.UtilPreferenceManager
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
     private val gson = Gson()
+
+    private val pairingDialog = mutableStateOf<PairingDialogData?>(null)
+    private val rotateConfirm = mutableStateOf(false)
+    private val scanResult = mutableStateOf<ScanResultData?>(null)
+
+    override fun onDestroyView() {
+        pairingDialog.value = null
+        rotateConfirm.value = false
+        scanResult.value = null
+        super.onDestroyView()
+    }
 
     private val scanQrLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
@@ -92,6 +100,33 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 }
                 PomoTheme(mode = themeMode) {
                     SettingsScreen(sharedPreferences = prefs, items = items)
+
+                    pairingDialog.value?.let { data ->
+                        PairingDialog(
+                            data = data,
+                            onCopy = {
+                                copyPairingPayload(data.payload)
+                                pairingDialog.value = null
+                            },
+                            onShare = {
+                                sharePairingPayload(data.payload)
+                                pairingDialog.value = null
+                            },
+                            onDismiss = { pairingDialog.value = null },
+                        )
+                    }
+                    if (rotateConfirm.value) {
+                        RotateTokenConfirmDialog(
+                            onConfirm = {
+                                rotateConfirm.value = false
+                                doRotatePairingToken()
+                            },
+                            onDismiss = { rotateConfirm.value = false },
+                        )
+                    }
+                    scanResult.value?.let { data ->
+                        ScanResultDialog(data = data, onDismiss = { scanResult.value = null })
+                    }
                 }
             }
         }
@@ -125,7 +160,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         add(SettingsItem.Action(
             title = getString(R.string.rotate_pairing_token_title),
             summary = getString(R.string.rotate_pairing_token_summary),
-            onClick = ::onRotatePairingTokenClick,
+            onClick = { rotateConfirm.value = true },
         ))
         add(SettingsItem.Action(
             title = getString(R.string.scan_pairing_qr_title),
@@ -181,13 +216,35 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             summary = getString(R.string.state_cues_stronger_summary),
             default = false,
         ))
+        add(SettingsItem.BoolPref(
+            key = "ring_until_dismissed",
+            title = getString(R.string.ring_until_dismissed_title),
+            summary = getString(R.string.ring_until_dismissed_summary),
+            default = false,
+        ))
+        add(SettingsItem.ChoicePref(
+            key = "ring_sound",
+            title = getString(R.string.ring_sound_title),
+            summary = getString(R.string.ring_sound_summary),
+            default = UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+            choices = listOf(
+                SettingsItem.Choice(
+                    UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+                    getString(R.string.ring_sound_system),
+                ),
+                SettingsItem.Choice(
+                    UtilPreferenceManager.RING_SOUND_POMO_CUE,
+                    getString(R.string.ring_sound_pomo),
+                ),
+            ),
+        ))
         add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
         addCompletionCueItems()
         add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
         addManualHapticItems()
 
         add(SettingsItem.Section(getString(R.string.category_theme)))
-        add(SettingsItem.ChoicePref(
+        add(SettingsItem.SegmentedPref(
             key = THEME_MODE_PREF_KEY,
             title = getString(R.string.theme_mode_title),
             summary = getString(R.string.theme_mode_summary),
@@ -318,73 +375,26 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         val service = (activity as? MainActivity)?.service
         if (service == null) {
             showMessage(R.string.pair_desktop_unavailable)
+            return
+        }
+        val qrSize = (220 * resources.displayMetrics.density).toInt()
+        pairingDialog.value = PairingDialogData(
+            url = service.pairingUrl,
+            token = service.pairingToken,
+            payload = service.pairingPayload,
+            qr = createQrBitmap(service.pairingPayload, qrSize)?.asImageBitmap(),
+        )
+    }
+
+    private fun doRotatePairingToken() {
+        val service = (activity as? MainActivity)?.service
+        if (service == null) {
+            showMessage(R.string.pair_desktop_unavailable)
         } else {
-            showPairingDialog(service.pairingUrl, service.pairingToken, service.pairingPayload)
+            service.rotatePairingToken()
+            showMessage(R.string.rotate_pairing_token_done)
         }
     }
-
-    private fun showPairingDialog(url: String, token: String, payload: String) {
-        val ctx = requireContext()
-        val density = resources.displayMetrics.density
-        val padding = (20 * density).toInt()
-        val qrSize = (220 * density).toInt()
-
-        val content = LinearLayout(ctx).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(padding, padding, padding, 0)
-        }
-        content.addView(labelValueView(R.string.pairing_url_label, url))
-        content.addView(labelValueView(R.string.pairing_token_label, token))
-        content.addView(labelValueView(R.string.pairing_payload_label, payload))
-
-        createQrBitmap(payload, qrSize)?.let { qr ->
-            content.addView(ImageView(ctx).apply {
-                setImageBitmap(qr)
-                adjustViewBounds = true
-                layoutParams = LinearLayout.LayoutParams(qrSize, qrSize).apply {
-                    topMargin = (12 * density).toInt()
-                }
-                contentDescription = getString(R.string.pair_desktop_title)
-            })
-        }
-
-        AlertDialog.Builder(ctx)
-            .setTitle(R.string.pair_desktop_title)
-            .setView(ScrollView(ctx).apply { addView(content) })
-            .setPositiveButton(R.string.pairing_copy) { _, _ -> copyPairingPayload(payload) }
-            .setNegativeButton(R.string.pairing_share) { _, _ -> sharePairingPayload(payload) }
-            .setNeutralButton(android.R.string.ok, null)
-            .show()
-    }
-
-    private fun onRotatePairingTokenClick() {
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.rotate_pairing_token_title)
-            .setMessage(R.string.rotate_pairing_token_confirm)
-            .setPositiveButton(R.string.rotate_pairing_token_action) { _, _ ->
-                val service = (activity as? MainActivity)?.service
-                if (service == null) {
-                    showMessage(R.string.pair_desktop_unavailable)
-                } else {
-                    service.rotatePairingToken()
-                    showMessage(R.string.rotate_pairing_token_done)
-                }
-            }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
-    }
-
-    private fun labelValueView(labelRes: Int, value: String): TextView =
-        TextView(requireContext()).apply {
-            text = getString(labelRes) + "\n" + value
-            setTextIsSelectable(true)
-            layoutParams = LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply {
-                bottomMargin = (10 * resources.displayMetrics.density).toInt()
-            }
-        }
 
     private fun createQrBitmap(payload: String, size: Int): Bitmap? = try {
         val matrix = MultiFormatWriter().encode(payload, BarcodeFormat.QR_CODE, size, size)
@@ -441,11 +451,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             else -> getString(R.string.scan_pairing_qr_other)
         }
 
-        AlertDialog.Builder(requireContext())
-            .setTitle(R.string.scan_pairing_qr_title)
-            .setMessage(message + "\n\n" + scannedUrl)
-            .setPositiveButton(android.R.string.ok, null)
-            .show()
+        scanResult.value = ScanResultData(message = message, url = scannedUrl)
     }
 
     private fun showMessage(messageRes: Int) {

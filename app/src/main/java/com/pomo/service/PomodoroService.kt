@@ -86,7 +86,7 @@ public class PomodoroService : Service(), TimerObserver {
     override fun onCreate() {
         super.onCreate()
         prefs = UtilPreferenceManager(this)
-        cueEngine = StateCueEngine(this, prefs)
+        cueEngine = StateCueEngine(this, prefs) { refreshRingNotification() }
         crewRepository = CrewRepository(this)
         currentState.goal = prefs.dailyGoal
         notificationHelper = NotificationHelper(this)
@@ -188,7 +188,17 @@ public class PomodoroService : Service(), TimerObserver {
         when (action) {
             "TOGGLE" -> toggleTimer()
             "SKIP" -> skipTimer()
+            "DISMISS" -> cueEngine.stop()
             "RECONNECT" -> Unit
+        }
+    }
+
+    /** Post or clear the heads-up ring notification to match the engine's ring state. */
+    private fun refreshRingNotification() {
+        if (cueEngine.isRinging()) {
+            notificationHelper.showRingNotification(currentState)
+        } else {
+            notificationHelper.cancelRingNotification()
         }
     }
 
@@ -247,7 +257,13 @@ public class PomodoroService : Service(), TimerObserver {
         val completed = historyCacheRepository.getTodayCompletedCount()
         var changed = false
 
-        if (currentState.date != today) {
+        // A running block is allowed to cross midnight intact: it keeps ticking and is
+        // filed under its start day when it completes (ADR-0002). Don't reset or re-date
+        // it here — handleTimerComplete handles the day transition on completion.
+        val runningAcrossMidnight =
+            currentState.date != today && currentState.status == TimerState.STATUS_RUNNING
+
+        if (currentState.date != today && !runningAcrossMidnight) {
             currentState.status = TimerState.STATUS_STOPPED
             currentState.phase = TimerState.PHASE_WORK
             currentState.next_phase = null
@@ -259,7 +275,7 @@ public class PomodoroService : Service(), TimerObserver {
             changed = true
         }
 
-        if (currentState.completed != completed) {
+        if (!runningAcrossMidnight && currentState.completed != completed) {
             currentState.completed = completed
             changed = true
         }
@@ -298,6 +314,12 @@ public class PomodoroService : Service(), TimerObserver {
         if (completedPhase == TimerState.PHASE_WORK) {
             publishCrewSnapshot("work block complete")
         }
+    }
+
+    override fun onPartialWorkBlockRecorded() {
+        // Partial skip minutes count toward Crew ranking, so refresh the snapshot now
+        // rather than waiting for the next completed block (ADR-0002).
+        publishCrewSnapshot("partial work block")
     }
 
     private fun broadcastStateUpdate() {
@@ -356,7 +378,14 @@ public class PomodoroService : Service(), TimerObserver {
 
     private suspend fun executeCommand(command: TimerCommand): TimerState = commandMutex.withLock {
         withContext(Dispatchers.Main) {
-            reconcileDayTransitionIfNeeded(notify = false)
+            // Acting on the timer from any surface acknowledges (and silences) a ring.
+            if (cueEngine.isRinging()) cueEngine.stop()
+            val runningAcrossMidnight =
+                currentState.date != historyCacheRepository.getEffectiveDateString() &&
+                    currentState.status == TimerState.STATUS_RUNNING
+            if (!runningAcrossMidnight) {
+                reconcileDayTransitionIfNeeded(notify = false)
+            }
             val before = currentState.copy()
             val event = when (command) {
                 TimerCommand.Toggle -> if (currentState.status == TimerState.STATUS_RUNNING) {
@@ -375,6 +404,9 @@ public class PomodoroService : Service(), TimerObserver {
                 else -> if (command is TimerCommand.AddTime) {
                     offlineTimer.extend(command.secondsDelta)
                 }
+            }
+            if (runningAcrossMidnight && currentState.status != TimerState.STATUS_RUNNING) {
+                adoptCurrentDayAfterCrossMidnightCommand()
             }
             if (event != null && didStateChange(before, currentState)) {
                 cueEngine.playManual(event)
@@ -426,6 +458,18 @@ public class PomodoroService : Service(), TimerObserver {
             updateNotification()
             broadcastStateUpdate()
         }
+    }
+
+    private suspend fun adoptCurrentDayAfterCrossMidnightCommand() {
+        val today = historyCacheRepository.getEffectiveDateString()
+        if (currentState.date == today) return
+
+        currentState.date = today
+        currentState.completed = historyCacheRepository.getTodayCompletedCount()
+        currentState.last_action_time = System.currentTimeMillis() / 1000
+        sanitizeState(currentState)
+        offlineTimer.updateState(currentState)
+        saveCurrentState()
     }
 
     private fun publishCrewSnapshot(reason: String) {

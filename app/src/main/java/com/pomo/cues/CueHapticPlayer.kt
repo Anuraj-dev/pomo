@@ -33,6 +33,24 @@ public class CueHapticPlayer(context: Context) {
         return vibrateWaveform(pattern)
     }
 
+    /** Loop a buzz pattern until [stop]. Carries the ring in vibrate mode where the
+     *  alarm audio is suppressed. */
+    public fun startRing(): Boolean {
+        if (!isAvailable()) return false
+        val pattern = longArrayOf(0, 500, 700)
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createWaveform(pattern, 0))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(pattern, 0)
+            }
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     public fun playManual(event: StateCueEvent): Boolean {
         if (!isAvailable()) return false
         return when (event) {

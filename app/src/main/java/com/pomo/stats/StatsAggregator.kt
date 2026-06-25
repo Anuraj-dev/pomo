@@ -42,7 +42,9 @@ public object StatsAggregator {
             )
         }
 
-        val workSessions = sessions.filter { it.type == WORK_TYPE && it.completed }
+        // Minute distributions are time-honest: partial (skipped) work blocks count
+        // their elapsed minutes too. The block count lives in day stats (ADR-0002).
+        val workSessions = sessions.filter { it.type == WORK_TYPE }
         val dayByDate = days.associateBy { it.date }
 
         val lifetime = computeLifetime(days, today, tz)
@@ -93,7 +95,7 @@ public object StatsAggregator {
     public fun hourRhythmForDay(
         sessions: List<SessionEntity>,
         tz: TimeZone = TimeZone.getDefault(),
-    ): HourRhythm = computeHourRhythm(sessions.filter { it.type == WORK_TYPE && it.completed }, tz)
+    ): HourRhythm = computeHourRhythm(sessions.filter { it.type == WORK_TYPE }, tz)
 
     private fun computeHourRhythm(
         workSessions: List<SessionEntity>,

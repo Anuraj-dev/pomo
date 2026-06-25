@@ -66,6 +66,16 @@
     <string name="state_cues_note">State cues mark timer transitions without reward or alarm cues.</string>
     <string name="state_cues_stronger_title">Stronger completion cues</string>
     <string name="state_cues_stronger_summary">Use stronger completion cue delivery for easier detection</string>
+    <string name="ring_until_dismissed_title">Ring until acknowledged</string>
+    <string name="ring_until_dismissed_summary">Loop the completion alert for up to 1 minute until you dismiss it or act on the timer</string>
+    <string name="ring_sound_title">Ring sound</string>
+    <string name="ring_sound_summary">Sound looped while ringing</string>
+    <string name="ring_sound_system">System alarm</string>
+    <string name="ring_sound_pomo">Pomo completion sound</string>
+    <string name="ring_notification_title">Time\'s up</string>
+    <string name="ring_notification_ready">%1$s is ready</string>
+    <string name="ring_notification_dismiss">Dismiss</string>
+    <string name="ring_notification_start">Start %1$s</string>
     <string name="state_cues_completion_section">Completion cues</string>
     <string name="state_cues_manual_section">Manual haptics</string>
     <string name="state_cues_focus_complete_title">Focus complete</string>
@@ -89,6 +99,20 @@
     <string name="state_cues_preview_vibration_unavailable">This device cannot play vibration previews.</string>
     <string name="state_cues_preview_no_channels">No cue channels are available.</string>
     <string name="state_cues_preview_unavailable">That cue could not be played.</string>
+    <string name="state_cues_variant_1">Variant 1</string>
+    <string name="state_cues_variant_2">Variant 2</string>
+    <string name="state_cues_variant_3">Variant 3</string>
+    <string name="state_cues_preview_next_up">Next up: Variant %1$d</string>
+    <string name="state_cues_preview_sound_on">Sound on</string>
+    <string name="state_cues_preview_sound_off_inline">Sound off</string>
+    <string name="state_cues_preview_vibration_on">Vibration on</string>
+    <string name="state_cues_preview_vibration_off_inline">Vibration off</string>
+    <string name="state_cues_preview_vibration_unavailable_inline">Vibration unavailable</string>
+    <string name="state_cues_preview_stronger">Stronger</string>
+    <string name="state_cues_preview_button">Preview</string>
+    <string name="state_cues_preview_audio">Audio</string>
+    <string name="state_cues_preview_haptic">Haptic</string>
+    <string name="state_cues_preview_haptic_button">Preview haptic</string>
 
     <!-- Timer Settings -->
     <string name="category_timer">Timer</string>

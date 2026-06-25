@@ -1,6 +1,7 @@
 package com.pomo.crew
 
 import android.content.Context
+import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
@@ -33,6 +34,33 @@ public class LocalCrewRelayStore(context: Context) {
         return projectionStore.load(crewId).snapshots
     }
 
+    public suspend fun preview(crewId: String, crewKey: String, relays: List<String>): CrewJoinPreview? {
+        val results = transport().pullIncrementally(crewId, relays).toList()
+        if (results.isEmpty()) return null
+
+        val latestSnapshots = results
+            .flatMap { result -> result.events }
+            .mapNotNull { event -> decodeEvent(event, crewKey, persist = false) }
+            .groupBy { snapshot -> snapshot.identityPublicKey }
+            .values
+            .mapNotNull { snapshots -> snapshots.maxByOrNull { it.publishedAtEpochSeconds } }
+        if (latestSnapshots.isEmpty() && results.all { it.error != null }) return null
+
+        val participating = latestSnapshots.filter { snapshot -> snapshot.todayFocusMinutes > 0 }
+        val knownDisplayNames = latestSnapshots.mapTo(mutableSetOf()) { snapshot ->
+            snapshot.displayName.trim().lowercase(Locale.ROOT)
+        }
+        return CrewJoinPreview(
+            activeMembers = participating.size,
+            todayFocusMinutes = participating.sumOf { snapshot -> snapshot.todayFocusMinutes },
+            medianMemberFocusMinutes = participating
+                .map { snapshot -> snapshot.todayFocusMinutes }
+                .sorted()
+                .median(),
+            knownDisplayNames = knownDisplayNames,
+        )
+    }
+
     public fun refresh(crewId: String, crewKey: String, relays: List<String>): Flow<CrewRelayResult> =
         transport().pullIncrementally(crewId, relays)
             .onEach { result ->
@@ -61,18 +89,28 @@ public class LocalCrewRelayStore(context: Context) {
     }
 
     private suspend fun acceptEvent(event: CrewRelayEvent, crewKey: String): CrewSnapshot? {
+        return decodeEvent(event, crewKey, persist = true)
+    }
+
+    private suspend fun decodeEvent(event: CrewRelayEvent, crewKey: String, persist: Boolean): CrewSnapshot? {
         val snapshot = CrewSnapshotCodec.decodeEncrypted(event.content, crewKey) ?: return null
         val now = System.currentTimeMillis() / 1000L
         if (snapshot.identityPublicKey != event.authorPublicKey) return null
         if (event.createdAtEpochSeconds > now + MAX_CLOCK_SKEW_SECONDS) return null
         if (snapshot.publishedAtEpochSeconds > now + MAX_CLOCK_SKEW_SECONDS) return null
         if (snapshot.publishedAtEpochSeconds > event.createdAtEpochSeconds + MAX_CLOCK_SKEW_SECONDS) return null
-        projectionStore.upsertLatest(snapshot)
+        if (persist) projectionStore.upsertLatest(snapshot)
         return snapshot
     }
 
     private fun transport(): CrewRelayTransport =
         CrewRelayTransport(identityStore.identity().privateKey)
+
+    private fun List<Int>.median(): Int {
+        if (isEmpty()) return 0
+        val middle = size / 2
+        return if (size % 2 == 1) this[middle] else (this[middle - 1] + this[middle]) / 2
+    }
 
     private companion object {
         private const val MAX_CLOCK_SKEW_SECONDS: Long = 5 * 60L

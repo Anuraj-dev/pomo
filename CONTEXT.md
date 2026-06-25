@@ -7,9 +7,11 @@ about the product; it is not a spec and carries no implementation detail.
 ## Language
 
 **Work block**:
-One continuous run of the focus phase, from start until it ends or is skipped.
-Historically a fixed length (e.g. 25 min); once add-time exists it is
-variable-length. The unit that history rows and the long-break cadence count.
+One continuous run of the focus phase. It is *completed* when it runs to its
+scheduled end (including any add-time); it is *partial* when Skip ends it early.
+Reset abandons a block and records nothing at all. Historically a fixed length
+(e.g. 25 min); once add-time exists it is variable-length. The unit that history
+rows and the long-break cadence count.
 _Avoid_: session (ambiguous — see below), pomodoro, interval.
 
 **Session**:
@@ -17,19 +19,49 @@ Informal synonym for a Work block. Prefer "Work block" when precision matters,
 because "session" is also used loosely for "a stretch of using the app".
 
 **Focus minutes**:
-Total time actually spent in the focus phase, summed across Work blocks. The
-**headline metric** — what Stats lead with and what any ranking sorts on.
+Total time actually spent in the focus phase, summed across Work blocks —
+including the partial time of a block ended by Skip, and excluding any block
+abandoned by Reset. Time-honest: it measures real focus time, independent of
+whether a block was completed. The **headline metric** — what Stats lead with
+and what any ranking sorts on.
 _Avoid_: focus time when a unit is needed, productivity, score.
 
 **Cadence count**:
 The running count of completed Work blocks in the current cycle. Drives the
-long-break trigger (`longBreakAfter`) and the launch pips. Kept for cadence even
-though Focus minutes is the headline metric.
+long-break trigger (`longBreakAfter`) and the launch pips. Only completed blocks
+increment it; partial (skipped) blocks contribute Focus minutes but never the
+count. Kept for cadence even though Focus minutes is the headline metric.
 _Avoid_: completed, session count (when it could mean the headline metric).
 
 **Daily goal**:
 A target expressed as a count of completed Work blocks per local calendar day.
 Remains count-based even though Focus minutes is the headline metric elsewhere.
+
+## Cues
+
+**Completion cue**:
+The sound and/or vibration Pomo emits the moment a phase ends and the timer
+parks at the next phase. It is a notice, not a transition: the timer never
+auto-advances, so the cue only tells the member a phase finished. It has two
+modes — one-shot and Ring.
+_Avoid_: alarm (reserve for the Ring mode), beep, chime, alert.
+
+**One-shot** (cue mode):
+The default Completion-cue mode: a single brief sound plus one haptic, then
+silence. Honours the phone's sound mode.
+
+**Ring** (cue mode):
+An opt-in Completion-cue mode that loops sound and vibration until the member
+acknowledges it or a one-minute cap elapses, then self-silences. Applies to all
+three phase completions. Audio honours the phone's sound mode (silent/DND stay
+quiet; vibration still fires). This is the only context where "alarm" is apt.
+_Avoid_: alarm clock, snooze (there is no snooze; the cap just silences).
+
+**Acknowledge / Dismiss**:
+Any act that silences a ringing cue — a Dismiss control or any timer command
+(Start, Skip, Reset, Add-time). Dismiss only silences; it leaves the timer
+parked at the next phase. The one-minute cap silences without acknowledgement.
+_Avoid_: snooze, stop alarm, cancel.
 
 ## Leaderboard
 

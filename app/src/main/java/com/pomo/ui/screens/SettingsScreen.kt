@@ -6,12 +6,10 @@ import android.os.Build
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,11 +23,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.ChevronRight
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -57,8 +52,15 @@ import com.pomo.cues.CuePreviewChannel
 import com.pomo.cues.CueVariant
 import com.pomo.cues.StateCueEvent
 import com.pomo.service.PomodoroService
+import com.pomo.ui.components.PomoButton
+import com.pomo.ui.components.PomoButtonVariant
+import com.pomo.ui.components.PomoDialog
 import com.pomo.ui.components.SectionHeader
+import com.pomo.ui.components.SegmentedToggle
+import com.pomo.ui.components.SegmentedToggleOption
+import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoRadius
+import com.pomo.ui.theme.PomoTokens
 import com.pomo.util.UtilPreferenceManager
 
 public sealed interface SettingsItem {
@@ -77,6 +79,13 @@ public sealed interface SettingsItem {
         val default: Boolean,
     ) : SettingsItem
     public data class ChoicePref(
+        val key: String,
+        val title: String,
+        val summary: String,
+        val default: String,
+        val choices: List<Choice>,
+    ) : SettingsItem
+    public data class SegmentedPref(
         val key: String,
         val title: String,
         val summary: String,
@@ -193,6 +202,7 @@ private fun SettingsGroupCard(group: SettingsGroup, prefs: SharedPreferences) {
                         is SettingsItem.IntPref -> IntPrefRow(prefs, item)
                         is SettingsItem.BoolPref -> BoolPrefRow(prefs, item)
                         is SettingsItem.ChoicePref -> ChoicePrefRow(prefs, item)
+                        is SettingsItem.SegmentedPref -> SegmentedPrefRow(prefs, item)
                         is SettingsItem.Action -> ActionRow(item)
                         is SettingsItem.CompletionCuePreview -> CompletionCuePreviewRow(prefs, item)
                         is SettingsItem.ManualHapticPreview -> ManualHapticPreviewRow(prefs, item)
@@ -235,31 +245,31 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
         valueText = current,
         onClick = { editing = true },
         leadingIconRes = null,
+        valueMono = true,
     )
 
     if (editing) {
         var draft by remember { mutableStateOf(current) }
-        AlertDialog(
+        PomoDialog(
             onDismissRequest = { editing = false },
             title = { Text(item.title) },
-            text = {
+            body = {
                 OutlinedTextField(
                     value = draft,
                     onValueChange = { draft = it.filter(Char::isDigit) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             },
-            confirmButton = {
+            actions = {
+                TextButton(onClick = { editing = false }) { Text("Cancel") }
                 TextButton(onClick = {
                     val parsed = draft.toIntOrNull() ?: item.default
                     val sanitized = UtilPreferenceManager.sanitizeIntPreference(item.key, parsed, item.default)
                     prefs.edit().putString(item.key, sanitized.toString()).apply()
                     editing = false
                 }) { Text("OK") }
-            },
-            dismissButton = {
-                TextButton(onClick = { editing = false }) { Text("Cancel") }
             },
         )
     }
@@ -291,10 +301,10 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
     )
 
     if (editing) {
-        AlertDialog(
+        PomoDialog(
             onDismissRequest = { editing = false },
             title = { Text(item.title) },
-            text = {
+            body = {
                 Column {
                     item.choices.forEach { choice ->
                         Text(
@@ -317,10 +327,48 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
                     }
                 }
             },
-            confirmButton = {},
-            dismissButton = {
+            actions = {
                 TextButton(onClick = { editing = false }) { Text("Cancel") }
             },
+        )
+    }
+}
+
+@Composable
+private fun SegmentedPrefRow(prefs: SharedPreferences, item: SettingsItem.SegmentedPref) {
+    var current by remember(item.key) {
+        mutableStateOf(prefs.getString(item.key, item.default) ?: item.default)
+    }
+    DisposableEffect(item.key) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+            if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp),
+    ) {
+        Text(
+            item.title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
+        Spacer(Modifier.height(2.dp))
+        Text(
+            item.summary,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(12.dp))
+        SegmentedToggle(
+            options = item.choices.map { SegmentedToggleOption(it.value, it.label) },
+            selectedValue = current,
+            onSelectedValueChange = { value ->
+                current = value
+                prefs.edit().putString(item.key, value).apply()
+            },
+            modifier = Modifier.fillMaxWidth(),
         )
     }
 }
@@ -386,7 +434,6 @@ private fun ActionRow(item: SettingsItem.Action) {
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CompletionCuePreviewRow(
     prefs: SharedPreferences,
@@ -406,6 +453,15 @@ private fun CompletionCuePreviewRow(
         onDispose { }
     }
 
+    fun preview(channel: CuePreviewChannel) {
+        val service = serviceProvider()
+        if (service == null) {
+            item.onFeedback(R.string.state_cues_preview_service_unavailable)
+            return
+        }
+        service.previewCompletionCue(item.family, selectedVariant, channel).messageRes?.let(item.onFeedback)
+    }
+
     Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp)) {
         Text(
             item.title,
@@ -418,93 +474,57 @@ private fun CompletionCuePreviewRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = "Next up: Variant $nextVariantNumber",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
+        Spacer(Modifier.height(12.dp))
+        SegmentedToggle(
+            options = listOf(
+                SegmentedToggleOption(CueVariant.Variant1.number.toString(), context.getString(R.string.state_cues_variant_1)),
+                SegmentedToggleOption(CueVariant.Variant2.number.toString(), context.getString(R.string.state_cues_variant_2)),
+                SegmentedToggleOption(CueVariant.Variant3.number.toString(), context.getString(R.string.state_cues_variant_3)),
+            ),
+            selectedValue = selectedVariant.number.toString(),
+            onSelectedValueChange = { selectedVariant = CueVariant.fromNumber(it.toInt()) },
+            modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterChip(
-                selected = selectedVariant == CueVariant.Variant1,
-                onClick = { selectedVariant = CueVariant.Variant1 },
-                label = { Text("Variant 1") },
-            )
-            FilterChip(
-                selected = selectedVariant == CueVariant.Variant2,
-                onClick = { selectedVariant = CueVariant.Variant2 },
-                label = { Text("Variant 2") },
-            )
-            FilterChip(
-                selected = selectedVariant == CueVariant.Variant3,
-                onClick = { selectedVariant = CueVariant.Variant3 },
-                label = { Text("Variant 3") },
-            )
-        }
-        Spacer(Modifier.height(10.dp))
         Text(
             text = buildString {
-                append(if (soundEnabled) "Sound on" else "Sound off")
+                append(context.getString(R.string.state_cues_preview_next_up, nextVariantNumber))
+                append(" · ")
+                append(
+                    context.getString(
+                        if (soundEnabled) R.string.state_cues_preview_sound_on else R.string.state_cues_preview_sound_off_inline,
+                    ),
+                )
                 append(" · ")
                 append(
                     when {
-                        !vibrationEnabled -> "Vibration off"
-                        !vibrationAvailable -> "Vibration unavailable"
-                        else -> "Vibration on"
+                        !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                        !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                        else -> context.getString(R.string.state_cues_preview_vibration_on)
                     },
                 )
-                if (strongerEnabled) {
-                    append(" · Stronger completion cues on")
-                }
+                if (strongerEnabled) append(" · ${context.getString(R.string.state_cues_preview_stronger)}")
             },
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(12.dp))
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilledTonalButton(
-                onClick = {
-                    val service = serviceProvider()
-                    if (service == null) {
-                        item.onFeedback(R.string.state_cues_preview_service_unavailable)
-                        return@FilledTonalButton
-                    }
-                    service.previewCompletionCue(item.family, selectedVariant, CuePreviewChannel.Combined)
-                        .messageRes
-                        ?.let(item.onFeedback)
-                },
-            ) { Text("Preview") }
-            FilledTonalButton(
-                onClick = {
-                    val service = serviceProvider()
-                    if (service == null) {
-                        item.onFeedback(R.string.state_cues_preview_service_unavailable)
-                        return@FilledTonalButton
-                    }
-                    service.previewCompletionCue(item.family, selectedVariant, CuePreviewChannel.AudioOnly)
-                        .messageRes
-                        ?.let(item.onFeedback)
-                },
-            ) { Text("Audio only") }
-            FilledTonalButton(
-                onClick = {
-                    val service = serviceProvider()
-                    if (service == null) {
-                        item.onFeedback(R.string.state_cues_preview_service_unavailable)
-                        return@FilledTonalButton
-                    }
-                    service.previewCompletionCue(item.family, selectedVariant, CuePreviewChannel.HapticOnly)
-                        .messageRes
-                        ?.let(item.onFeedback)
-                },
-            ) { Text("Haptic only") }
+        Spacer(Modifier.height(10.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            PomoButton(
+                onClick = { preview(CuePreviewChannel.Combined) },
+                variant = PomoButtonVariant.Tonal,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+            ) { Text(context.getString(R.string.state_cues_preview_button)) }
+            PomoButton(
+                onClick = { preview(CuePreviewChannel.AudioOnly) },
+                variant = PomoButtonVariant.Ghost,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            ) { Text(context.getString(R.string.state_cues_preview_audio)) }
+            PomoButton(
+                onClick = { preview(CuePreviewChannel.HapticOnly) },
+                variant = PomoButtonVariant.Ghost,
+                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
+            ) { Text(context.getString(R.string.state_cues_preview_haptic)) }
         }
     }
 }
@@ -531,27 +551,29 @@ private fun ManualHapticPreviewRow(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(8.dp))
         Text(
             text = when {
-                !vibrationEnabled -> "Vibration off"
-                !vibrationAvailable -> "Vibration unavailable"
-                else -> "Vibration on"
+                !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                else -> context.getString(R.string.state_cues_preview_vibration_on)
             },
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(12.dp))
-        FilledTonalButton(
+        Spacer(Modifier.height(10.dp))
+        PomoButton(
             onClick = {
                 val service = serviceProvider()
-                if (service == null) {
+                if (service != null) {
+                    service.previewManualCue(item.event).messageRes?.let(item.onFeedback)
+                } else {
                     item.onFeedback(R.string.state_cues_preview_service_unavailable)
-                    return@FilledTonalButton
                 }
-                service.previewManualCue(item.event).messageRes?.let(item.onFeedback)
             },
-        ) { Text("Preview haptic") }
+            variant = PomoButtonVariant.Tonal,
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        ) { Text(context.getString(R.string.state_cues_preview_haptic_button)) }
     }
 }
 
@@ -562,6 +584,7 @@ private fun PrefRow(
     valueText: String?,
     onClick: () -> Unit,
     leadingIconRes: Int?,
+    valueMono: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -594,7 +617,11 @@ private fun PrefRow(
         if (valueText != null) {
             Text(
                 valueText,
-                style = MaterialTheme.typography.titleMedium,
+                style = if (valueMono) {
+                    MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono)
+                } else {
+                    MaterialTheme.typography.titleMedium
+                },
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.padding(end = 2.dp))

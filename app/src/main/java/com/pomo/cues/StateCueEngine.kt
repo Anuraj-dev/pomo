@@ -1,6 +1,8 @@
 package com.pomo.cues
 
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import com.pomo.R
 import com.pomo.util.UtilPreferenceManager
@@ -8,14 +10,20 @@ import com.pomo.util.UtilPreferenceManager
 public class StateCueEngine(
     context: Context,
     private val prefs: UtilPreferenceManager,
+    private val onRingStateChanged: () -> Unit = {},
 ) {
     private companion object {
         private const val TAG = "StateCueEngine"
+        private const val RING_TIMEOUT_MS = 60_000L
     }
 
     private val audioPlayer = CueAudioPlayer(context)
     private val hapticPlayer = CueHapticPlayer(context)
     private val rotationStore = CueRotationStore(context)
+    private val ringHandler = Handler(Looper.getMainLooper())
+    private var ringActive = false
+
+    public fun isRinging(): Boolean = ringActive
 
     public fun availability(): CueAvailability {
         return CueAvailability(
@@ -32,18 +40,42 @@ public class StateCueEngine(
         val family = CompletionCueFamily.fromEvent(event) ?: return
         stop()
         val variant = rotationStore.nextVariant(family)
-        val played = playCompletionChannels(
-            family = family,
-            variant = variant,
-            channel = CuePreviewChannel.Combined,
-            stronger = prefs.isStrongerCompletionCues,
-            isPreview = false,
-        ).played
+
+        val played = if (prefs.isRingUntilDismissed) {
+            startRing(family, variant)
+        } else {
+            playCompletionChannels(
+                family = family,
+                variant = variant,
+                channel = CuePreviewChannel.Combined,
+                stronger = prefs.isStrongerCompletionCues,
+                isPreview = false,
+            ).played
+        }
         if (played) {
             rotationStore.advance(family)
         } else {
             Log.d(TAG, "Completion cue skipped: no enabled or available channel for $family")
         }
+    }
+
+    private fun startRing(family: CompletionCueFamily, variant: CueVariant): Boolean {
+        val availability = availability()
+        var playedAny = false
+        if (availability.soundEnabled && audioPlayer.isRingAvailable()) {
+            val useSystemAlarm = prefs.ringSound == UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM
+            playedAny = audioPlayer.startRing(family, variant, useSystemAlarm) || playedAny
+        }
+        if (availability.vibrationEnabled && availability.vibrationAvailable) {
+            playedAny = hapticPlayer.startRing() || playedAny
+        }
+        if (!playedAny) return false
+
+        ringActive = true
+        ringHandler.removeCallbacksAndMessages(null)
+        ringHandler.postDelayed({ stop() }, RING_TIMEOUT_MS)
+        onRingStateChanged()
+        return true
     }
 
     public fun playManual(event: StateCueEvent) {
@@ -86,8 +118,14 @@ public class StateCueEngine(
     }
 
     public fun stop() {
+        ringHandler.removeCallbacksAndMessages(null)
         audioPlayer.stop()
+        audioPlayer.stopRing()
         hapticPlayer.stop()
+        if (ringActive) {
+            ringActive = false
+            onRingStateChanged()
+        }
     }
 
     public fun release() {

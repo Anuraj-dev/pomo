@@ -109,6 +109,14 @@ public class UtilPreferenceManager(context: Context) {
     public val isStrongerCompletionCues: Boolean
         get() = prefs.getBoolean("stronger_completion_cues", false)
 
+    public val isRingUntilDismissed: Boolean
+        get() = prefs.getBoolean("ring_until_dismissed", false)
+
+    public val ringSound: String
+        get() = prefs.getString("ring_sound", RING_SOUND_SYSTEM_ALARM)
+            ?.takeIf { it == RING_SOUND_SYSTEM_ALARM || it == RING_SOUND_POMO_CUE }
+            ?: RING_SOUND_SYSTEM_ALARM
+
     public val themeMode: ThemeMode
         get() = prefs.themeMode()
 
@@ -158,6 +166,9 @@ public class UtilPreferenceManager(context: Context) {
         }
 
     public companion object {
+        public const val RING_SOUND_SYSTEM_ALARM: String = "system_alarm"
+        public const val RING_SOUND_POMO_CUE: String = "pomo_cue"
+
         private const val PAIRING_PREFS_NAME: String = "pairing_prefs"
         private const val PAIRING_TOKEN_KEY: String = "pairing_token"
         private const val CREW_IDENTITY_PRIVATE_KEY: String = "crew_identity_private_key"

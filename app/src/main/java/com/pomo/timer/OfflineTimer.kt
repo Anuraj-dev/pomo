@@ -147,6 +147,13 @@ public class OfflineTimer(
 
     public fun skip() {
         if (completionJob?.isActive == true) return
+
+        // Skip on a work phase credits the partial focus time as Focus minutes (but no
+        // earned block); Reset, by contrast, discards. Capture before mutating state.
+        if (TimerState.PHASE_WORK == state.phase) {
+            recordPartialWorkBlock()
+        }
+
         state.status = TimerState.STATUS_STOPPED
         state.last_action_time = System.currentTimeMillis() / 1000
         stopLocalTimer()
@@ -214,5 +221,31 @@ public class OfflineTimer(
             else -> 25
         }
         return (minutes * 60).toDouble()
+    }
+
+    /** Record the elapsed focus time of a work block ended early by Skip. Below the
+     *  60s floor it is a non-event. The repository rounds seconds up to whole minutes
+     *  and splits across calendar days; `completed = false` keeps it out of the block
+     *  count while its minutes still count toward Focus minutes (ADR-0002). */
+    private fun recordPartialWorkBlock() {
+        val elapsedSeconds = (state.duration - state.remaining).toLong()
+        if (elapsedSeconds < MIN_PARTIAL_BLOCK_SECONDS) return
+
+        val now = System.currentTimeMillis() / 1000
+        val sessionStart = state.start_time.takeIf { it > 0 }?.toLong() ?: (now - elapsedSeconds)
+        val session = Session(
+            type = TimerState.PHASE_WORK,
+            start = sessionStart,
+            duration = elapsedSeconds.toInt(),
+            completed = false,
+        )
+        scope.launch {
+            historyRepository.saveLocalSession(session)
+            observer.onPartialWorkBlockRecorded()
+        }
+    }
+
+    private companion object {
+        const val MIN_PARTIAL_BLOCK_SECONDS: Long = 60
     }
 }

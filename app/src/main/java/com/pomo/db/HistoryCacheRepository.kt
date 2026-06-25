@@ -66,18 +66,21 @@ public class HistoryCacheRepository(context: Context) {
     public suspend fun saveLocalSession(session: com.pomo.models.Session) {
         val segments = splitSessionByCalendarDay(session)
         segments.forEachIndexed { index, segment ->
+            val segmentCompleted = session.completed && index == 0
             val entity = SessionEntity(
                 start = segment.start,
                 date = segment.date,
                 type = session.type,
                 duration = segment.duration,
-                completed = session.completed,
+                completed = segmentCompleted,
                 synced = true,
             )
             dao.insertSessionWithDayStats(
                 date = segment.date,
                 session = entity,
-                countCompletedSession = index == segments.lastIndex,
+                // A block that crosses midnight is filed under the day it started
+                // (first segment); later-day segments carry minutes only (ADR-0002).
+                countCompletedSession = segmentCompleted,
             )
         }
     }
