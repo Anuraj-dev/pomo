@@ -64,7 +64,7 @@ internal class GithubUpdateChecker(
         ReleaseNotesResult.NotFound
     }
 
-    private suspend fun fetchRelease(path: String): FetchReleaseResult = withContext(Dispatchers.IO) {
+    private fun fetchRelease(path: String): FetchReleaseResult {
         val request = Request.Builder()
             .url("https://api.github.com/repos/$repo/$path")
             .header("Accept", "application/vnd.github+json")
@@ -74,14 +74,22 @@ internal class GithubUpdateChecker(
 
         try {
             client.newCall(request).execute().use { response ->
-                if (response.code == 403 && response.header("X-RateLimit-Remaining") == "0") {
-                    return@withContext FetchReleaseResult.RateLimited
+                if (response.code == 429) {
+                    return FetchReleaseResult.RateLimited
                 }
-                if (response.code == 404) return@withContext FetchReleaseResult.NotFound
+                if (response.code == 403 &&
+                    (
+                        response.header("X-RateLimit-Remaining") == "0" ||
+                            response.header("Retry-After") != null
+                        )
+                ) {
+                    return FetchReleaseResult.RateLimited
+                }
+                if (response.code == 404) return FetchReleaseResult.NotFound
                 if (!response.isSuccessful) {
-                    return@withContext FetchReleaseResult.MalformedMetadata
+                    return FetchReleaseResult.MalformedMetadata
                 }
-                val body = response.body?.string() ?: return@withContext FetchReleaseResult.MalformedMetadata
+                val body = response.body?.string() ?: return FetchReleaseResult.MalformedMetadata
                 parseRelease(body)?.let { payload ->
                     FetchReleaseResult.Success(payload)
                 } ?: FetchReleaseResult.MalformedMetadata

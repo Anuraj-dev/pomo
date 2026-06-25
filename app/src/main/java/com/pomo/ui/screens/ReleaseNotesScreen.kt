@@ -23,8 +23,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pomo.R
 import com.pomo.BuildConfig
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
@@ -77,13 +79,13 @@ public fun ReleaseNotesScreen() {
     ) {
         Column(Modifier.padding(start = 20.dp, top = 20.dp, end = 20.dp, bottom = 8.dp)) {
             Text(
-                text = "Release notes",
+                text = stringResource(R.string.release_notes_title),
                 style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text = "Installed version ${BuildConfig.VERSION_NAME}",
+                text = stringResource(R.string.release_notes_installed_version, BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -95,34 +97,37 @@ public fun ReleaseNotesScreen() {
             item {
                 when (val ui = state) {
                     ReleaseNotesUiState.Loading -> ReleaseNotesCard(
-                        title = "Loading",
-                        body = "Fetching notes for the installed release from GitHub…",
+                        title = stringResource(R.string.release_notes_loading_title),
+                        body = stringResource(R.string.release_notes_loading_body),
                     )
                     is ReleaseNotesUiState.Loaded -> ReleaseNotesCard(
-                        title = "Version ${ui.versionName}",
+                        title = stringResource(R.string.release_notes_version_title, ui.versionName),
                         body = ui.notes.ifBlank {
-                            "This release was published without detailed notes."
+                            stringResource(R.string.release_notes_empty_body)
                         },
                         mono = false,
                     )
                     ReleaseNotesUiState.NotFound -> RetryCard(
-                        title = "Release not found",
-                        body = "GitHub does not have a published release entry for version ${BuildConfig.VERSION_NAME}.",
+                        title = stringResource(R.string.release_notes_not_found_title),
+                        body = stringResource(
+                            R.string.release_notes_not_found_body,
+                            BuildConfig.VERSION_NAME,
+                        ),
                         onRetry = { reloadKey++ },
                     )
                     ReleaseNotesUiState.Offline -> RetryCard(
-                        title = "No connection",
-                        body = "Release notes could not be loaded because the phone appears to be offline.",
+                        title = stringResource(R.string.release_notes_offline_title),
+                        body = stringResource(R.string.release_notes_offline_body),
                         onRetry = { reloadKey++ },
                     )
                     ReleaseNotesUiState.RateLimited -> RetryCard(
-                        title = "Rate limited",
-                        body = "GitHub rate limiting blocked this request. Try again in a little while.",
+                        title = stringResource(R.string.release_notes_rate_limited_title),
+                        body = stringResource(R.string.release_notes_rate_limited_body),
                         onRetry = { reloadKey++ },
                     )
                     ReleaseNotesUiState.Malformed -> RetryCard(
-                        title = "Unavailable",
-                        body = "GitHub returned release metadata that Pomo could not read.",
+                        title = stringResource(R.string.release_notes_unavailable_title),
+                        body = stringResource(R.string.release_notes_unavailable_body),
                         onRetry = { reloadKey++ },
                     )
                 }
@@ -182,7 +187,7 @@ private fun RetryCard(title: String, body: String, onRetry: () -> Unit) {
                 onClick = onRetry,
                 variant = PomoButtonVariant.Ghost,
             ) {
-                Text("Try again")
+                Text(stringResource(R.string.release_notes_retry))
             }
         }
     }
