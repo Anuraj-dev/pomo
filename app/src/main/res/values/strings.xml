@@ -72,7 +72,7 @@
     <string name="ring_sound_summary">Sound looped while ringing</string>
     <string name="ring_sound_system">System alarm</string>
     <string name="ring_sound_pomo">Pomo completion sound</string>
-    <string name="ring_notification_title">Time&apos;s up</string>
+    <string name="ring_notification_title">Time\'s up</string>
     <string name="ring_notification_ready">%1$s is ready</string>
     <string name="ring_notification_dismiss">Dismiss</string>
     <string name="ring_notification_start">Start %1$s</string>
