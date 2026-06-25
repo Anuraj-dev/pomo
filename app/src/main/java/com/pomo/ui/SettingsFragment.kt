@@ -99,7 +99,11 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                     onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
                 }
                 PomoTheme(mode = themeMode) {
-                    SettingsScreen(sharedPreferences = prefs, items = items)
+                    SettingsScreen(
+                        sharedPreferences = prefs,
+                        items = items,
+                        showUpdateSection = BuildConfig.APPLICATION_ID == "com.pomo",
+                    )
 
                     pairingDialog.value?.let { data ->
                         PairingDialog(
