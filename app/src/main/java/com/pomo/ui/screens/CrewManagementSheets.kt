@@ -62,7 +62,6 @@ internal fun ManageCrewScreen(
     onBack: () -> Unit,
     onCreateCrew: (String, String) -> Unit,
     onReviewJoin: (String) -> Unit,
-    onJoinCrew: (String, String) -> Unit,
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
     onDisplayNameChange: (String) -> Unit,

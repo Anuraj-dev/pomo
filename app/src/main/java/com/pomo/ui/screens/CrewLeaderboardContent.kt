@@ -79,7 +79,6 @@ internal fun CrewBoardContent(
             onBack = { showManage = false },
             onCreateCrew = onCreateCrew,
             onReviewJoin = { joinCode -> onJoinCrew(joinCode, "") },
-            onJoinCrew = onJoinCrew,
             onSwitchCrew = onSwitchCrew,
             onLeaveCrew = onLeaveCrew,
             onDisplayNameChange = onDisplayNameChange,
