@@ -14,6 +14,7 @@ the old cool-slate-and-red identity and are stale.
 | --- | --- |
 | `timer-accepted.png` | The accepted Timer look — palette, type voice, and heat. This is the target. |
 | `timer-states-and-icons.png` | Refined layout with the bottom nav, an icon sheet, and the four phase states (idle / focus / final minute / break). The more complete reference of the two. |
+| `palette-midnight-glow.png` | A candidate *second* palette (deep navy `#001F3F` → cyan `#00BFFF`) for a theme switcher. **Not decided** — see [#56](https://github.com/Snehit70/pomo/issues/56). It has no heat, so it forces the question of whether the metaphor is *heat* or the more general *intensity*. |
 
 ## What is binding
 
