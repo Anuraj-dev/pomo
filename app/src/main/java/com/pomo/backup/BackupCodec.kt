@@ -2,6 +2,8 @@ package com.pomo.backup
 
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import com.pomo.crew.CrewDefaults
 import com.pomo.crew.CrewValidation
 import com.pomo.timer.TimerState
@@ -22,12 +24,25 @@ public object BackupCodec {
 
     public fun decode(json: String): PomoBackup? {
         if (json.length > MAX_BYTES) return null
-        val decoded = runCatching { plain.fromJson(json, PomoBackup::class.java) }.getOrNull()
+        // Every field of PomoBackup carries a default, so Gson happily turns any JSON object into a
+        // valid-looking empty backup. The format and version must be read off the file itself.
+        val root = runCatching { JsonParser.parseString(json) }.getOrNull()
+            ?.takeIf { it.isJsonObject }
+            ?.asJsonObject
             ?: return null
-        if (decoded.format != PomoBackup.FORMAT) return null
-        if (decoded.version !in 1..PomoBackup.VERSION) return null
+        if (root.stringOrNull("format") != PomoBackup.FORMAT) return null
+        val version = root.intOrNull("version") ?: return null
+        if (version !in 1..PomoBackup.VERSION) return null
+        val decoded = runCatching { plain.fromJson(root, PomoBackup::class.java) }.getOrNull()
+            ?: return null
         return decoded.sanitized()
     }
+
+    private fun JsonObject.stringOrNull(key: String): String? =
+        get(key)?.takeIf { it.isJsonPrimitive }?.asString
+
+    private fun JsonObject.intOrNull(key: String): Int? =
+        get(key)?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isNumber }?.asInt
 
     private fun PomoBackup.sanitized(): PomoBackup = copy(
         history = BackupHistory(
