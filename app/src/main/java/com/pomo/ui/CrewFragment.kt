@@ -98,6 +98,10 @@ public class CrewFragment : Fragment() {
         exitTransition = MaterialFadeThrough()
         repository = CrewRepository(requireContext())
         profileStore = ProfileStore(requireContext())
+        // Read before the first composition, not just in onResume: a deep-linked join code is
+        // consumed on the first pass, and a name that arrives later would arrive after the join
+        // sheet had already decided to ask for one.
+        profileDisplayName.value = profileStore.displayName()
         initialJoinCode.value = arguments?.getString("crewJoinPayload")
             ?.let { payload -> "pomo://crew/join/v2/$payload" }
     }

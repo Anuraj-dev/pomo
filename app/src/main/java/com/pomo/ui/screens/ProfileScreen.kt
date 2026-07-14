@@ -165,9 +165,7 @@ private fun StatStrip(
     currentStreak: Int,
     blocks: Int,
 ) {
-    val hours = lifetimeFocusMinutes / 60
-    val minutes = lifetimeFocusMinutes % 60
-    val focus = if (hours > 0) "${hours}h ${minutes}m" else "${minutes}m"
+    val focus = formatMinutes(lifetimeFocusMinutes)
 
     Hairline()
     Row(

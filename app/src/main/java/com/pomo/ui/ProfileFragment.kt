@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
@@ -27,12 +28,14 @@ import com.pomo.ui.screens.ProfileScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.ThemeMode
 import com.pomo.util.DateLogic
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 public class ProfileFragment : Fragment() {
 
@@ -54,7 +57,6 @@ public class ProfileFragment : Fragment() {
     ): View {
         val ctx = requireContext()
         val profileStore = ProfileStore(ctx)
-        val fingerprint = KeyFingerprint.format(CrewIdentityStore(ctx).publicKey())
         val repo = HistoryCacheRepository(ctx)
 
         displayName.value = profileStore.displayName()
@@ -80,6 +82,16 @@ public class ProfileFragment : Fragment() {
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
                     var name by displayName
+
+                    // Asking for the public key mints the identity if there isn't one, which means
+                    // Keystore crypto and a synchronous commit(). A member who has never opened
+                    // Crew pays that cost the first time they open Profile, so it happens off the
+                    // main thread and the line appears when it is ready.
+                    val fingerprint by produceState(initialValue = "") {
+                        value = withContext(Dispatchers.IO) {
+                            KeyFingerprint.format(CrewIdentityStore(ctx).publicKey())
+                        }
+                    }
 
                     ProfileScreen(
                         displayName = name,
