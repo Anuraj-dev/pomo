@@ -24,6 +24,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.pomo.achievements.AchievementEvaluator
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewValidation
 import com.pomo.crew.hasFullStats
@@ -42,6 +43,8 @@ internal fun CrewMemberStatsScreen(
 ) {
     val snapshot = remember(row) { row.toStatsSnapshot() }
     val full = remember(row) { row.hasFullStats() }
+    // Earned-only: their snapshot can prove what they reached, never that they didn't (ADR 0005).
+    val earnedAchievements = remember(row) { AchievementEvaluator.earnedOnly(snapshot) }
 
     StatsContent(
         snapshot = snapshot,
@@ -53,7 +56,13 @@ internal fun CrewMemberStatsScreen(
         rhythmSection = full,
         // Members share daily totals, never session times, so there is no hour-by-hour today.
         showTodayRange = false,
-        footer = { MemberStatsFooter(full = full) },
+        footer = {
+            if (earnedAchievements.isNotEmpty()) {
+                PeerAchievementsSection(displayName = row.displayName, earned = earnedAchievements)
+                Spacer(Modifier.height(16.dp))
+            }
+            MemberStatsFooter(full = full)
+        },
     )
 }
 

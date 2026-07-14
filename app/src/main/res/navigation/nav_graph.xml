@@ -25,6 +25,11 @@
         android:label="Settings" />
 
     <fragment
+        android:id="@+id/navigation_achievements"
+        android:name="com.pomo.ui.AchievementsFragment"
+        android:label="Achievements" />
+
+    <fragment
         android:id="@+id/navigation_history"
         android:name="com.pomo.ui.HistoryFragment"
         android:label="History" />
