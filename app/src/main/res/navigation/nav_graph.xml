@@ -15,6 +15,11 @@
         android:label="Stats" />
 
     <fragment
+        android:id="@+id/navigation_profile"
+        android:name="com.pomo.ui.ProfileFragment"
+        android:label="Profile" />
+
+    <fragment
         android:id="@+id/navigation_settings"
         android:name="com.pomo.ui.SettingsFragment"
         android:label="Settings" />

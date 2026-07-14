@@ -83,16 +83,29 @@ The human-readable label chosen when a Crew is created and fixed by its Join
 code. It identifies the Crew in product UI but is not its protocol identity.
 _Avoid_: Crew id, channel name, mutable title.
 
+**Profile**:
+A member-owned identity surface that can carry durable self-described fields
+beyond the Display name. A Profile belongs to one member identity, not to a
+Pomo account or a Crew.
+_Avoid_: account, login, persona.
+
 **Identity key**:
-The per-device keypair that signs a member's snapshots. The real, anonymous
-identity of a member; the display name is just a self-asserted label on top of
-it. No accounts, no login.
-_Avoid_: account, user id, profile.
+The per-device keypair that signs a member's snapshots. It is the stable
+cryptographic identity of a member inside Crew and underlies that member's
+Profile.
+_Avoid_: account, user id.
 
 **Display name**:
-A member's self-asserted human-readable label. It is not unique and does not
-identify the member; the Identity key does.
+A member's self-asserted human-readable label. It is one field on the member's
+Profile, is not unique, and does not identify the member; the Identity key
+does. One name per member, the same in every Crew.
 _Avoid_: username, handle, account name.
+
+**Key fingerprint**:
+A short, human-readable rendering of a member's Identity key public key, shown
+under their Display name. Because Display names are not unique, this is what
+answers "which of these two is which". It identifies; it does not authenticate.
+_Avoid_: user id, account number, hash.
 
 **Recovery file**:
 A passphrase-protected portable backup of an Identity key and its Crew

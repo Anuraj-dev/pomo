@@ -17,7 +17,7 @@
         android:icon="@drawable/ic_stats"
         android:title="Stats" />
     <item
-        android:id="@+id/navigation_settings"
-        android:icon="@drawable/ic_settings"
-        android:title="Settings" />
+        android:id="@+id/navigation_profile"
+        android:icon="@drawable/ic_profile"
+        android:title="Profile" />
 </menu>

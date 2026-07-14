@@ -75,11 +75,11 @@ import kotlin.math.abs
 internal fun CrewBoardContent(
     isSyncing: Boolean,
     board: CrewBoard,
+    profileDisplayName: String,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
-    onDisplayNameChange: (String) -> Unit,
     onRankingModeChange: (CrewRankingMode) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
     onExportRecovery: () -> Unit,
@@ -99,12 +99,12 @@ internal fun CrewBoardContent(
     if (showManage) {
         ManageCrewScreen(
             board = board,
+            profileDisplayName = profileDisplayName,
             onBack = { showManage = false },
             onCreateCrew = onCreateCrew,
             onReviewJoin = { joinCode -> onJoinCrew(joinCode, "") },
             onSwitchCrew = onSwitchCrew,
             onLeaveCrew = onLeaveCrew,
-            onDisplayNameChange = onDisplayNameChange,
             onMemberHiddenChange = onMemberHiddenChange,
             onExportRecovery = onExportRecovery,
             onImportRecovery = onImportRecovery,
