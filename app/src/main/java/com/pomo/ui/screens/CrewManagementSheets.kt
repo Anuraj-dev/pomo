@@ -22,11 +22,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Share
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -46,11 +48,13 @@ import androidx.compose.ui.unit.dp
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.MultiFormatWriter
 import com.pomo.crew.CrewBoard
+import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewHiddenMember
 import com.pomo.crew.CrewJoinPreview
 import com.pomo.crew.CrewValidation
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
+import com.pomo.ui.components.PomoDialog
 import com.pomo.ui.components.PomoSheet
 import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.theme.PomoTokens
@@ -74,6 +78,7 @@ internal fun ManageCrewScreen(
     var displayName by remember(board.displayName) { mutableStateOf(board.displayName) }
     var joinCode by remember { mutableStateOf("") }
     var createRequest by remember(board.displayName) { mutableStateOf<CreateCrewRequest?>(null) }
+    var pendingHide by remember { mutableStateOf<CrewBoardRow?>(null) }
     val payload = remember(board.joinCode) { com.pomo.crew.CrewJoinCodeCodec.decode(board.joinCode) }
     val shareUri = payload?.let(com.pomo.crew.CrewJoinCodeCodec::encodeUri) ?: board.joinCode
     BackHandler(onBack = onBack)
@@ -156,6 +161,13 @@ internal fun ManageCrewScreen(
                     ) { Text(membership.crewName) }
                 }
             }
+            val hideableMembers = board.rows.filterNot { it.isSelf }
+            if (hideableMembers.isNotEmpty()) {
+                item { SectionHeader("Members") }
+                items(hideableMembers, key = { "member-${it.identityPublicKey}" }) { row ->
+                    ActiveMemberRow(row = row, onHide = { pendingHide = row })
+                }
+            }
             if (board.hiddenMembers.isNotEmpty()) {
                 item { SectionHeader("Hidden members") }
                 items(board.hiddenMembers, key = { "hidden-${it.identityPublicKey}" }) { member ->
@@ -234,6 +246,72 @@ internal fun ManageCrewScreen(
             },
         )
     }
+    pendingHide?.let { row ->
+        HideMemberConfirmDialog(
+            memberName = row.displayName,
+            onConfirm = {
+                onMemberHiddenChange(row.identityPublicKey, true)
+                pendingHide = null
+            },
+            onDismiss = { pendingHide = null },
+        )
+    }
+}
+
+@Composable
+private fun ActiveMemberRow(row: CrewBoardRow, onHide: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = row.displayName,
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "${formatMinutes(row.selectedFocusMinutes)} · ${row.identityPublicKey.take(4).uppercase(Locale.ROOT)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+                fontFamily = FontFamily.Monospace,
+            )
+        }
+        IconButton(onClick = onHide) {
+            Icon(
+                Icons.Outlined.VisibilityOff,
+                contentDescription = "Hide ${row.displayName}",
+                tint = PomoTokens.colors.onSurfaceMuted,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+    }
+}
+
+@Composable
+internal fun HideMemberConfirmDialog(
+    memberName: String,
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    PomoDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Hide $memberName?") },
+        body = {
+            Text(
+                text = "They disappear from your leaderboard on this device only. Nothing is " +
+                    "deleted for them, and you can unhide them any time from Manage.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+        },
+        actions = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onConfirm) { Text("Hide") }
+        },
+    )
 }
 
 @Composable

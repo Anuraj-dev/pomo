@@ -34,7 +34,7 @@ import kotlinx.coroutines.launch
 
 public class CrewFragment : Fragment() {
     private val screenState = MutableStateFlow(CrewScreenState(isLoading = true))
-    private val rankingMode = MutableStateFlow(CrewRankingMode.Today)
+    private val rankingMode = MutableStateFlow<CrewRankingMode>(CrewRankingMode.Today)
     private val initialJoinCode = MutableStateFlow<String?>(null)
     private lateinit var repository: CrewRepository
     private var liveBoardJob: Job? = null

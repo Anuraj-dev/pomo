@@ -37,6 +37,8 @@ import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.theme.PomoTokens
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 public data class CrewScreenState(
@@ -296,10 +298,21 @@ internal fun freshnessColor(board: CrewBoard, isSyncing: Boolean) =
 internal val CrewRankingMode.label: String
     get() = when (this) {
         CrewRankingMode.Today -> "Today"
+        CrewRankingMode.Yesterday -> "Yesterday"
         CrewRankingMode.SevenDays -> "7 day"
         CrewRankingMode.ThirtyDays -> "30 day"
         CrewRankingMode.AllTime -> "All time"
+        is CrewRankingMode.Day -> formatDayLabel(localDate)
     }
+
+/** "2026-06-23" -> "Tue 23 Jun", falling back to the raw date if it cannot be parsed. */
+internal fun formatDayLabel(localDate: String): String =
+    runCatching {
+        LocalDate.parse(localDate).format(DAY_LABEL_FORMAT)
+    }.getOrDefault(localDate)
+
+private val DAY_LABEL_FORMAT: DateTimeFormatter =
+    DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 
 internal fun comparisonLabel(deltaMinutes: Int): String = when {
     deltaMinutes > 0 -> "+${formatMinutes(deltaMinutes)}"

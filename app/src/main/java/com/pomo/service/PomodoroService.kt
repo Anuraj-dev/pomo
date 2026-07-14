@@ -57,6 +57,9 @@ public class PomodoroService : Service(), TimerObserver {
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
             serviceScope.launch { restartPhoneServerIfNeeded() }
+            // A block finished while offline never reached the relay. Coming back online is the
+            // first chance to send it, and it must not wait for the Crew page to be opened.
+            publishCrewCatchUp()
         }
         override fun onLost(network: Network) {
             serviceScope.launch { restartPhoneServerIfNeeded() }

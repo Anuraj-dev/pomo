@@ -25,9 +25,11 @@ public object CrewLeaderboardAggregator {
             val thirtyDayMinutes = snapshot.sumFocusMinutes(today.minusDays(29), today)
             val selectedMinutes = when (mode) {
                 CrewRankingMode.Today -> todayAggregate?.focusMinutes ?: 0
+                CrewRankingMode.Yesterday -> snapshot.focusMinutesOn(today.minusDays(1).toString())
                 CrewRankingMode.SevenDays -> sevenDayMinutes
                 CrewRankingMode.ThirtyDays -> thirtyDayMinutes
                 CrewRankingMode.AllTime -> snapshot.allTimeFocusMinutes
+                is CrewRankingMode.Day -> snapshot.focusMinutesOn(mode.localDate)
             }
             RankedSnapshot(
                 snapshot = snapshot,
@@ -86,7 +88,12 @@ public object CrewLeaderboardAggregator {
             isSelf = snapshot.identityPublicKey == selfIdentityPublicKey,
             isStale = isStale,
             isInactive = isInactive,
+            localDate = snapshot.localDate,
+            stats = snapshot.stats,
         )
+
+    private fun CrewSnapshot.focusMinutesOn(localDate: String): Int =
+        dailyAggregates.firstOrNull { it.localDate == localDate }?.focusMinutes ?: 0
 
     private fun CrewSnapshot.sumFocusMinutes(startDate: LocalDate, endDate: LocalDate): Int =
         dailyAggregates.sumOf { aggregate ->
