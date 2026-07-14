@@ -72,6 +72,7 @@ internal fun CrewBoardContent(
 ) {
     var showManage by remember { mutableStateOf(false) }
     var selectedMember by remember { mutableStateOf<CrewBoardRow?>(null) }
+    var pendingHide by remember { mutableStateOf<CrewBoardRow?>(null) }
 
     if (showManage) {
         ManageCrewScreen(
@@ -187,10 +188,19 @@ internal fun CrewBoardContent(
             self = board.rows.firstOrNull { it.isSelf },
             rankingMode = board.rankingMode,
             onDismiss = { selectedMember = null },
-            onHide = {
+            onHide = { pendingHide = row },
+        )
+    }
+
+    pendingHide?.let { row ->
+        HideMemberConfirmDialog(
+            memberName = row.displayName,
+            onConfirm = {
                 onMemberHiddenChange(row.identityPublicKey, true)
+                pendingHide = null
                 selectedMember = null
             },
+            onDismiss = { pendingHide = null },
         )
     }
 }
