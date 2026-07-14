@@ -23,6 +23,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import com.google.android.material.transition.MaterialFadeThrough
@@ -33,6 +34,8 @@ import com.google.zxing.MultiFormatWriter
 import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
+import com.pomo.backup.BackupRepository
+import com.pomo.backup.PomoBackup
 import com.pomo.cues.CompletionCueFamily
 import com.pomo.cues.StateCueEvent
 import com.pomo.ui.screens.SettingsItem
@@ -44,6 +47,10 @@ import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
 import com.pomo.util.UtilPreferenceManager
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
 
@@ -52,11 +59,18 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     private val pairingDialog = mutableStateOf<PairingDialogData?>(null)
     private val rotateConfirm = mutableStateOf(false)
     private val scanResult = mutableStateOf<ScanResultData?>(null)
+    private val restorePreview = mutableStateOf<RestorePreviewData?>(null)
+
+    private var pendingRestore: PomoBackup? = null
+
+    private val backupRepository: BackupRepository by lazy { BackupRepository(requireContext()) }
 
     override fun onDestroyView() {
         pairingDialog.value = null
         rotateConfirm.value = false
         scanResult.value = null
+        restorePreview.value = null
+        pendingRestore = null
         super.onDestroyView()
     }
 
@@ -69,6 +83,29 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 return@registerForActivityResult
             }
             handleScannedPairingPayload(contents)
+        }
+
+    private val exportBackupLauncher =
+        registerForActivityResult(ActivityResultContracts.CreateDocument(BackupRepository.MIME_TYPE)) { uri ->
+            val target = uri ?: return@registerForActivityResult
+            viewLifecycleOwner.lifecycleScope.launch {
+                val written = backupRepository.writeTo(target)
+                showMessage(if (written) R.string.backup_export_done else R.string.backup_export_failed)
+            }
+        }
+
+    private val importBackupLauncher =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            val source = uri ?: return@registerForActivityResult
+            viewLifecycleOwner.lifecycleScope.launch {
+                val backup = backupRepository.readFrom(source)
+                if (backup == null) {
+                    showMessage(R.string.backup_restore_invalid)
+                    return@launch
+                }
+                pendingRestore = backup
+                restorePreview.value = backup.toPreview()
+            }
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,6 +167,19 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                     }
                     scanResult.value?.let { data ->
                         ScanResultDialog(data = data, onDismiss = { scanResult.value = null })
+                    }
+                    restorePreview.value?.let { data ->
+                        RestoreConfirmDialog(
+                            data = data,
+                            onConfirm = {
+                                restorePreview.value = null
+                                runRestore()
+                            },
+                            onDismiss = {
+                                restorePreview.value = null
+                                pendingRestore = null
+                            },
+                        )
                     }
                 }
             }
@@ -258,6 +308,18 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 SettingsItem.Choice(ThemeMode.Light.preferenceValue, ThemeMode.Light.displayName),
                 SettingsItem.Choice(ThemeMode.Dark.preferenceValue, ThemeMode.Dark.displayName),
             ),
+        ))
+
+        add(SettingsItem.Section(getString(R.string.category_data)))
+        add(SettingsItem.Action(
+            title = getString(R.string.backup_export_title),
+            summary = getString(R.string.backup_export_summary),
+            onClick = ::launchBackupExport,
+        ))
+        add(SettingsItem.Action(
+            title = getString(R.string.backup_restore_title),
+            summary = getString(R.string.backup_restore_summary),
+            onClick = ::launchBackupImport,
         ))
 
         add(SettingsItem.Section(getString(R.string.category_info)))
@@ -457,7 +519,67 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         scanResult.value = ScanResultData(message = message, url = scannedUrl)
     }
 
+    private fun launchBackupExport() {
+        val today = LocalDate.now().toString()
+        runCatching { exportBackupLauncher.launch(BackupRepository.suggestedFileName(today)) }
+            .onFailure { showMessage(R.string.backup_no_file_picker) }
+    }
+
+    private fun launchBackupImport() {
+        // Some file providers hand JSON out as a generic stream, so accept both and validate on read.
+        val mimeTypes = arrayOf(BackupRepository.MIME_TYPE, "application/octet-stream")
+        runCatching { importBackupLauncher.launch(mimeTypes) }
+            .onFailure { showMessage(R.string.backup_no_file_picker) }
+    }
+
+    private fun runRestore() {
+        val backup = pendingRestore ?: return
+        pendingRestore = null
+        viewLifecycleOwner.lifecycleScope.launch {
+            val summary = runCatching { backupRepository.restore(backup) }.getOrNull()
+            if (summary == null) {
+                showMessage(R.string.backup_restore_failed)
+                return@launch
+            }
+            (activity as? MainActivity)?.service?.refreshFromHistory()
+            showMessage(
+                getString(
+                    R.string.backup_restore_done,
+                    resources.getQuantityString(
+                        R.plurals.backup_sessions,
+                        summary.sessionsAdded,
+                        summary.sessionsAdded,
+                    ),
+                    resources.getQuantityString(
+                        R.plurals.backup_crews,
+                        summary.membershipsAdded,
+                        summary.membershipsAdded,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun PomoBackup.toPreview(): RestorePreviewData = RestorePreviewData(
+        sessionCount = history.sessions.size,
+        crewCount = crew.memberships.size,
+        hasIdentity = crew.identityPrivateKey.isNotBlank(),
+        exportedOn = exportedAtEpochSeconds
+            .takeIf { it > 0L }
+            ?.let {
+                Instant.ofEpochSecond(it)
+                    .atZone(ZoneId.systemDefault())
+                    .toLocalDate()
+                    .toString()
+            }
+            ?: getString(R.string.backup_exported_unknown),
+    )
+
     private fun showMessage(messageRes: Int) {
         Toast.makeText(requireContext(), messageRes, Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showMessage(message: String) {
+        Toast.makeText(requireContext(), message, Toast.LENGTH_LONG).show()
     }
 }

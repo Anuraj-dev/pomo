@@ -84,6 +84,29 @@ public class CrewStore(context: Context) {
         return removed
     }
 
+    public fun activeCrewId(): String? = prefs.getString(ACTIVE_CREW_KEY, null)
+
+    /**
+     * Adds crews from a backup that this device is not already in, and returns how many were new.
+     * A crew the device already holds is left untouched: its membership carries the display name
+     * currently in use, which is fresher than whatever the backup froze.
+     */
+    public fun mergeMemberships(memberships: List<CrewMembership>, preferredActiveCrewId: String?): Int {
+        val existing = loadMemberships()
+        val existingIds = existing.map { it.crewId }.toSet()
+        val added = memberships
+            .filter { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived }
+            .distinctBy { it.crewId }
+            .filterNot { it.crewId in existingIds }
+        if (added.isEmpty()) return 0
+        val next = (existing + added).sortedBy { it.crewId }
+        val active = activeCrewId()?.takeIf { id -> next.any { it.crewId == id } }
+            ?: preferredActiveCrewId?.takeIf { id -> next.any { it.crewId == id } }
+            ?: next.first().crewId
+        saveMemberships(next, active)
+        return added.size
+    }
+
     public fun updateDisplayName(displayName: String): List<CrewMembership> {
         val name = CrewValidation.normalizeDisplayName(displayName) ?: return loadMemberships()
         val updated = loadMemberships().map { it.copy(displayName = name) }

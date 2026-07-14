@@ -37,6 +37,40 @@ public interface CrewDao {
     @Query("SELECT * FROM crew_relay_state WHERE crewId = :crewId AND relayUrl = :relayUrl LIMIT 1")
     public suspend fun getRelayState(crewId: String, relayUrl: String): CrewRelayStateEntity?
 
+    @Query("SELECT * FROM crew_snapshots ORDER BY crewId ASC, identityPublicKey ASC")
+    public suspend fun getAllSnapshots(): List<CrewSnapshotEntity>
+
+    @Query("SELECT * FROM crew_daily_aggregates ORDER BY crewId ASC, identityPublicKey ASC, localDate ASC")
+    public suspend fun getAllDailyAggregates(): List<CrewDailyAggregateEntity>
+
+    @Query("SELECT * FROM crew_hidden_members ORDER BY crewId ASC, identityPublicKey ASC")
+    public suspend fun getAllHiddenMembers(): List<CrewHiddenMemberEntity>
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insertMissingSnapshots(snapshots: List<CrewSnapshotEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insertMissingDailyAggregates(aggregates: List<CrewDailyAggregateEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    public suspend fun insertMissingHiddenMembers(hiddenMembers: List<CrewHiddenMemberEntity>)
+
+    /**
+     * Fills the projection back in from a backup without disturbing what the device already knows.
+     * Rows that exist are left alone — a live snapshot is always at least as fresh as a backed-up
+     * one — and snapshots go in ahead of aggregates, which are their foreign-key children.
+     */
+    @Transaction
+    public suspend fun restoreProjection(
+        snapshots: List<CrewSnapshotEntity>,
+        aggregates: List<CrewDailyAggregateEntity>,
+        hiddenMembers: List<CrewHiddenMemberEntity>,
+    ) {
+        insertMissingSnapshots(snapshots)
+        insertMissingDailyAggregates(aggregates)
+        insertMissingHiddenMembers(hiddenMembers)
+    }
+
     @Query(
         "SELECT publishedAtEpochSeconds FROM crew_snapshots " +
             "WHERE crewId = :crewId AND identityPublicKey = :identityPublicKey",

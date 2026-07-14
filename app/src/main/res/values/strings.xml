@@ -25,6 +25,7 @@
     <string name="category_notifications">Notifications</string>
     <string name="category_state_cues">State Cues</string>
     <string name="category_theme">Theme</string>
+    <string name="category_data">Data</string>
     <string name="category_info">Info</string>
     
     <string name="ip_address_summary">Desktop clients connect to the phone URL shown in pairing.</string>
@@ -162,4 +163,29 @@
     <string name="about_features">• Phone-owned timer state\n• Local session history\n• Paired desktop API\n• Detailed statistics &amp; analytics\n• Home screen widget</string>
     <string name="about_created_by">Created by Snehit</string>
     <string name="about_made_with">Made with ❤️ and Kotlin</string>
+
+    <string name="backup_export_title">Export backup</string>
+    <string name="backup_export_summary">Save history, crews, and identity to a JSON file you keep</string>
+    <string name="backup_export_done">Backup saved</string>
+    <string name="backup_export_failed">Backup could not be saved</string>
+    <string name="backup_restore_title">Restore backup</string>
+    <string name="backup_restore_summary">Merge a Pomo backup file into this phone</string>
+    <string name="backup_restore_action">Restore</string>
+    <string name="backup_restore_contents">This backup holds %1$s and %2$s, exported on %3$s.</string>
+    <string name="backup_restore_merge_note">Restoring merges: nothing already on this phone is removed or overwritten.</string>
+    <string name="backup_restore_identity_note">The Crew identity in the file is only taken back if this phone is in no crews yet.</string>
+    <string name="backup_restore_invalid">That file is not a Pomo backup.</string>
+    <string name="backup_restore_failed">Backup could not be restored</string>
+    <string name="backup_restore_done">Restored %1$s and %2$s</string>
+    <string name="backup_exported_unknown">an unknown date</string>
+    <string name="backup_no_file_picker">No file picker is available on this phone.</string>
+
+    <plurals name="backup_sessions">
+        <item quantity="one">%d session</item>
+        <item quantity="other">%d sessions</item>
+    </plurals>
+    <plurals name="backup_crews">
+        <item quantity="one">%d crew</item>
+        <item quantity="other">%d crews</item>
+    </plurals>
 </resources>
