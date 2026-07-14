@@ -325,9 +325,12 @@ internal fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int {
     val today = LocalDate.parse(localDate)
     return when (mode) {
         CrewRankingMode.Today -> todayFocusMinutes
+        CrewRankingMode.Yesterday -> today.minusDays(1).let { focusMinutesBetween(it, it) }
         CrewRankingMode.SevenDays -> focusMinutesBetween(today.minusDays(6), today)
         CrewRankingMode.ThirtyDays -> focusMinutesBetween(today.minusDays(29), today)
         CrewRankingMode.AllTime -> allTimeFocusMinutes
+        is CrewRankingMode.Day -> LocalDate.parse(mode.localDate)
+            .let { focusMinutesBetween(it, it) }
     }
 }
 
