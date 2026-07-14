@@ -492,6 +492,15 @@ public class PomodoroService : Service(), TimerObserver {
         }
     }
 
+    /**
+     * Re-reads today's earned block count from Room. A backup restore writes sessions behind the
+     * service's back, so the count it is holding — and showing on the timer, notification, and
+     * widget — is stale until it looks again.
+     */
+    public fun refreshFromHistory() {
+        serviceScope.launch { reconcileStateWithHistory() }
+    }
+
     public fun updateDailyGoal() {
         val newGoal = prefs.dailyGoal
         if (currentState.goal != newGoal) {
