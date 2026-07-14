@@ -29,7 +29,7 @@ public fun CrewBoardRow.toStatsSnapshot(
     nowMs: Long = System.currentTimeMillis(),
     timeZone: TimeZone = TimeZone.getDefault(),
 ): StatsSnapshot {
-    val today = localDate.toIsoDateOrNull() ?: LocalDate.now().toString()
+    val today: String = localDate.toIsoDateOrNull()?.toString() ?: LocalDate.now().toString()
     val days = memberDays()
     val base = StatsAggregator.aggregate(
         days = days,
