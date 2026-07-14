@@ -24,13 +24,17 @@ public class ProfileStore(context: Context) {
         return prefs.getString(KEY_DISPLAY_NAME, "").orEmpty()
     }
 
-    /** Returns the normalized name that was stored, or null if [value] is not a usable name. */
+    /**
+     * Returns the normalized name that was stored, or null if [value] is not a usable name.
+     *
+     * This only persists the Profile's own copy. Crews still read the name off their membership
+     * rows, and a rename has to be *published* to reach them, so the caller must also put the name
+     * through `CrewRepository.updateDisplayName` — which pairs the membership write with a snapshot
+     * publish. Writing to `CrewStore` from here would update the rows and never tell anybody.
+     */
     public fun updateDisplayName(value: String): String? {
         val name = CrewValidation.normalizeDisplayName(value) ?: return null
         prefs.edit().putString(KEY_DISPLAY_NAME, name).apply()
-        // Crew snapshots still read the name off their membership rows, so the two must not drift
-        // until the Crew side is migrated to read the Profile directly.
-        CrewStore(app).updateDisplayName(name)
         return name
     }
 

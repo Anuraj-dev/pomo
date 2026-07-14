@@ -11,11 +11,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.crew.CrewIdentityStore
+import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.profile.KeyFingerprint
 import com.pomo.profile.ProfileStore
@@ -25,8 +27,12 @@ import com.pomo.ui.screens.ProfileScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.ThemeMode
 import com.pomo.util.DateLogic
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.launch
 
 public class ProfileFragment : Fragment() {
 
@@ -53,9 +59,12 @@ public class ProfileFragment : Fragment() {
 
         displayName.value = profileStore.displayName()
 
-        val today: String = DateLogic.effectiveDate(System.currentTimeMillis())
         val snapshotFlow: Flow<StatsSnapshot> =
-            combine(repo.observeDayStats(), repo.observeAllSessions()) { days, sessions ->
+            combine(
+                repo.observeDayStats(),
+                repo.observeAllSessions(),
+                currentDateFlow(),
+            ) { days, sessions, today ->
                 StatsAggregator.aggregate(
                     days = days,
                     sessions = sessions,
@@ -79,7 +88,15 @@ public class ProfileFragment : Fragment() {
                         currentStreak = snapshot.habit.currentStreak,
                         blocks = snapshot.lifetime.sessions,
                         onDisplayNameChange = { requested ->
-                            profileStore.updateDisplayName(requested)?.let { saved -> name = saved }
+                            profileStore.updateDisplayName(requested)?.let { saved ->
+                                name = saved
+                                // Crews read the name off their membership rows and only learn of a
+                                // change when a snapshot is published, so the rename goes through the
+                                // repository rather than straight into CrewStore.
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    CrewRepository(ctx).updateDisplayName(saved)
+                                }
+                            }
                         },
                         onOpenSettings = {
                             findNavController().navigate(R.id.navigation_settings)
@@ -89,6 +106,15 @@ public class ProfileFragment : Fragment() {
             }
         }
     }
+
+    /** The streak has to keep up with the calendar while the screen is open, as Stats does. */
+    private fun currentDateFlow(): Flow<String> = flow {
+        while (true) {
+            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+            delay(DATE_REFRESH_INTERVAL_MS)
+        }
+    }.distinctUntilChanged()
 }
 
 private const val DEFAULT_DAILY_GOAL: Int = 8
+private const val DATE_REFRESH_INTERVAL_MS: Long = 60_000L
