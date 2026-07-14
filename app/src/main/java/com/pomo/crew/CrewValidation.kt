@@ -44,7 +44,16 @@ public object CrewValidation {
             }
         ) return false
         if (snapshot.dailyAggregates != snapshot.dailyAggregates.sortedByDescending { it.localDate }) return false
+        if (!isValidPresence(snapshot.presence)) return false
         return isValidStatsExtras(snapshot.stats)
+    }
+
+    private fun isValidPresence(presence: CrewPresence?): Boolean {
+        if (presence == null) return true
+        if (presence.phase != CrewPresence.PHASE_WORK && presence.phase != CrewPresence.PHASE_BREAK) return false
+        if (presence.startedAtEpochSeconds <= 0L) return false
+        val length = presence.endsAtEpochSeconds - presence.startedAtEpochSeconds
+        return length > 0L && length <= CrewPresence.MAX_SESSION_SECONDS
     }
 
     /**

@@ -16,6 +16,10 @@ import com.pomo.cues.CuePreviewOutcome
 import com.pomo.cues.CueVariant
 import com.pomo.cues.StateCueEngine
 import com.pomo.cues.StateCueEvent
+import com.pomo.R
+import com.pomo.crew.CrewActivityEvent
+import com.pomo.crew.CrewActivityTracker
+import com.pomo.crew.CrewPresence
 import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneServer
@@ -24,7 +28,9 @@ import com.pomo.timer.TimerObserver
 import com.pomo.timer.TimerState
 import com.pomo.util.UtilPreferenceManager
 import com.pomo.widget.TimerWidgetProvider
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
@@ -47,6 +53,7 @@ public class PomodoroService : Service(), TimerObserver {
     private var activePhoneServerPort: Int = PhoneServer.DEFAULT_PORT
     private lateinit var cueEngine: StateCueEngine
     private lateinit var crewRepository: CrewRepository
+    private var crewActivityJob: Job? = null
     private val gson = Gson()
 
     private var lastSavedState: TimerState? = null
@@ -151,6 +158,8 @@ public class PomodoroService : Service(), TimerObserver {
         if (shouldCompleteRestoredTimer) {
             offlineTimer.completeExpiredTimer()
         }
+
+        syncCrewActivityWatcher()
     }
 
     private fun saveCurrentState() {
@@ -314,6 +323,7 @@ public class PomodoroService : Service(), TimerObserver {
         if (completedPhase == TimerState.PHASE_WORK) {
             publishCrewSnapshot("work block complete")
         }
+        syncCrewActivityWatcher()
     }
 
     override fun onPartialWorkBlockRecorded() {
@@ -411,6 +421,12 @@ public class PomodoroService : Service(), TimerObserver {
             if (event != null && didStateChange(before, currentState)) {
                 cueEngine.playManual(event)
             }
+            // Starting, pausing, or skipping changes what the crew should see about us right now.
+            // Publishing here (not only on completion) is what makes their board live.
+            if (before.status != currentState.status || before.phase != currentState.phase) {
+                publishCrewSnapshot("timer ${currentState.status}")
+                syncCrewActivityWatcher()
+            }
             currentState.copy()
         }
     }
@@ -473,12 +489,92 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private fun publishCrewSnapshot(reason: String) {
+        val presence = currentPresence()
         serviceScope.launch(Dispatchers.IO) {
             runCatching {
-                crewRepository.publishCurrentSnapshot()
+                crewRepository.publishCurrentSnapshot(presence)
             }.onFailure { error ->
                 Log.w(TAG, "Failed to publish Crew snapshot after $reason", error)
             }
+        }
+    }
+
+    /**
+     * What the crew should see us doing at this instant. Null whenever the timer is not running,
+     * which is how a pause or a reset clears our presence from everyone else's board.
+     */
+    private fun currentPresence(): CrewPresence? {
+        val state = currentState
+        if (state.status != TimerState.STATUS_RUNNING) return null
+        val remaining = state.remaining.toLong()
+        if (remaining <= 0L) return null
+        val elapsed = (state.duration - state.remaining).toLong().coerceAtLeast(0L)
+        val nowSeconds = System.currentTimeMillis() / 1000L
+        return CrewPresence(
+            phase = if (state.phase == TimerState.PHASE_WORK) {
+                CrewPresence.PHASE_WORK
+            } else {
+                CrewPresence.PHASE_BREAK
+            },
+            startedAtEpochSeconds = nowSeconds - elapsed,
+            endsAtEpochSeconds = nowSeconds + remaining,
+        )
+    }
+
+    /**
+     * The relay subscription only lives as long as our own session does. Focusing together is the
+     * moment the crew matters; outside it, a socket held open all day would cost battery for news
+     * nobody asked for.
+     */
+    private fun syncCrewActivityWatcher() {
+        val shouldWatch = currentState.status == TimerState.STATUS_RUNNING &&
+            prefs.isCrewActivityNotificationsEnabled
+        if (shouldWatch) startCrewActivityWatcher() else stopCrewActivityWatcher()
+    }
+
+    private fun startCrewActivityWatcher() {
+        if (crewActivityJob?.isActive == true) return
+        crewActivityJob = serviceScope.launch(Dispatchers.IO) {
+            runCatching {
+                val tracker = CrewActivityTracker(crewRepository.identity().publicKey)
+                // Seed from the board already on disk so the first live snapshot reads as a change,
+                // not as a whole crew suddenly appearing.
+                crewRepository.currentBoard()?.rows?.let(tracker::seed)
+                crewRepository.observeLiveSnapshots().collect { snapshot ->
+                    val nowSeconds = System.currentTimeMillis() / 1000L
+                    tracker.observe(snapshot, nowSeconds).forEach { event ->
+                        withContext(Dispatchers.Main) { notifyCrewActivity(event) }
+                    }
+                }
+            }.onFailure { error ->
+                if (error !is CancellationException) {
+                    Log.w(TAG, "Crew activity watcher stopped", error)
+                }
+            }
+        }
+    }
+
+    private fun stopCrewActivityWatcher() {
+        crewActivityJob?.cancel()
+        crewActivityJob = null
+    }
+
+    private fun notifyCrewActivity(event: CrewActivityEvent) {
+        when (event) {
+            is CrewActivityEvent.StartedFocus -> notificationHelper.notifyCrewActivity(
+                memberKey = event.identityPublicKey,
+                title = getString(R.string.crew_activity_started_title, event.displayName),
+                text = getString(R.string.crew_activity_started_text),
+            )
+            is CrewActivityEvent.CompletedBlock -> notificationHelper.notifyCrewActivity(
+                memberKey = event.identityPublicKey,
+                title = getString(R.string.crew_activity_completed_title, event.displayName),
+                text = resources.getQuantityString(
+                    R.plurals.crew_activity_completed_text,
+                    event.todayWorkBlocks,
+                    event.todayWorkBlocks,
+                ),
+            )
         }
     }
 
@@ -505,6 +601,7 @@ public class PomodoroService : Service(), TimerObserver {
     public fun syncConfig() {
         updateDailyGoal()
         restartPhoneServerIfNeeded()
+        syncCrewActivityWatcher()
         broadcastStateUpdate()
     }
 

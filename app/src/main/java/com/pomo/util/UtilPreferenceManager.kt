@@ -100,6 +100,9 @@ public class UtilPreferenceManager(context: Context) {
     public val isPhoneServerWifiOnly: Boolean
         get() = prefs.getBoolean("phone_server_wifi_only", true)
 
+    public val isCrewActivityNotificationsEnabled: Boolean
+        get() = prefs.getBoolean("crew_activity_notifications", true)
+
     public val isVibrateEnabled: Boolean
         get() = prefs.getBoolean("vibrate_enabled", true)
 

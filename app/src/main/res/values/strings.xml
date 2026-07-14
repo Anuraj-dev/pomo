@@ -24,8 +24,15 @@
     <string name="category_connection">Connection</string>
     <string name="category_notifications">Notifications</string>
     <string name="category_state_cues">State Cues</string>
+    <string name="category_crew">Crew</string>
     <string name="category_theme">Theme</string>
     <string name="category_info">Info</string>
+
+    <string name="crew_activity_notifications_title">Crew activity</string>
+    <string name="crew_activity_notifications_summary">While you focus, get a quiet notification when a crew mate starts or finishes a block</string>
+    <string name="crew_activity_started_title">%1$s is focusing</string>
+    <string name="crew_activity_started_text">They just started a block.</string>
+    <string name="crew_activity_completed_title">%1$s finished a block</string>
     
     <string name="ip_address_summary">Desktop clients connect to the phone URL shown in pairing.</string>
     
@@ -162,4 +169,9 @@
     <string name="about_features">• Phone-owned timer state\n• Local session history\n• Paired desktop API\n• Detailed statistics &amp; analytics\n• Home screen widget</string>
     <string name="about_created_by">Created by Snehit</string>
     <string name="about_made_with">Made with ❤️ and Kotlin</string>
+
+    <plurals name="crew_activity_completed_text">
+        <item quantity="one">That\'s %1$d block today.</item>
+        <item quantity="other">That\'s %1$d blocks today.</item>
+    </plurals>
 </resources>
