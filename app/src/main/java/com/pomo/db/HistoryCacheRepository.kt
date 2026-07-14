@@ -26,6 +26,8 @@ public class HistoryCacheRepository(context: Context) {
 
     public suspend fun getCachedDayStats(): List<DayStatsEntity> = dao.getAllDayStatsSnapshot()
 
+    public suspend fun getCachedSessions(): List<SessionEntity> = dao.getAllSessionsSnapshot()
+
     public suspend fun getHistoryPayload(): Map<String, ServerDayEntry> = withContext(Dispatchers.IO) {
         val days = dao.getAllDayStatsSnapshot()
         val sessionsByDate = if (days.isEmpty()) {

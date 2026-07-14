@@ -49,6 +49,9 @@ public class AchievementsFragment : Fragment() {
         val ctx = requireContext()
         val repo = HistoryCacheRepository(ctx)
 
+        // Reaching this page is what "seen" means; clear the Profile-tab dot (ADR 0005 decision 8).
+        mainActivity?.markAchievementsSeen()
+
         val snapshotFlow: Flow<StatsSnapshot> =
             combine(
                 repo.observeDayStats(),

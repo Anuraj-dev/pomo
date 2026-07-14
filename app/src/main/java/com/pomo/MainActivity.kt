@@ -17,9 +17,11 @@ import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.NavigationUI
 import androidx.navigation.ui.setupWithNavController
 import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.pomo.notifications.AlertsNotifier
 import com.pomo.service.PomodoroService
 import com.pomo.service.PomodoroServiceStarter
 import com.pomo.ui.TimerFragment
+import com.pomo.update.ForegroundUpdateCheck
 import com.pomo.util.UtilPreferenceManager
 import kotlinx.coroutines.launch
 
@@ -31,6 +33,10 @@ public class MainActivity : AppCompatActivity() {
 
     public lateinit var prefs: UtilPreferenceManager
         private set
+
+    private lateinit var navView: BottomNavigationView
+    private val alertsNotifier: AlertsNotifier by lazy { AlertsNotifier(this) }
+    private val foregroundUpdateCheck = ForegroundUpdateCheck()
 
     private val connection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
@@ -51,6 +57,7 @@ public class MainActivity : AppCompatActivity() {
     private val stateReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             updateCurrentFragment()
+            refreshProfileBadge()
         }
     }
 
@@ -69,7 +76,7 @@ public class MainActivity : AppCompatActivity() {
         val navHostFragment = supportFragmentManager
             .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
-        val navView: BottomNavigationView = findViewById(R.id.nav_view)
+        navView = findViewById(R.id.nav_view)
         navView.setupWithNavController(navController)
         navView.setOnItemSelectedListener { item ->
             val changedTab = navController.currentDestination?.id != item.itemId
@@ -82,6 +89,52 @@ public class MainActivity : AppCompatActivity() {
 
         startService()
         requestNotificationPermission()
+        handleNavIntent(intent)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleNavIntent(intent)
+    }
+
+    /** A tapped achievement/update notification carries a nav target; open that screen. */
+    private fun handleNavIntent(intent: Intent?) {
+        val target = intent?.getStringExtra(AlertsNotifier.EXTRA_NAV_TARGET) ?: return
+        // Consume it so a later config change or resume doesn't navigate a second time.
+        intent.removeExtra(AlertsNotifier.EXTRA_NAV_TARGET)
+        val navController = (
+            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
+            )?.navController ?: return
+        val destination = when (target) {
+            AlertsNotifier.NAV_TARGET_ACHIEVEMENTS -> R.id.navigation_achievements
+            AlertsNotifier.NAV_TARGET_UPDATE -> R.id.navigation_settings
+            else -> return
+        }
+        runCatching { navController.navigate(destination) }
+            .onFailure { Log.w(TAG, "Could not open notification target '$target'", it) }
+    }
+
+    /** The Achievements page opened, so the member has seen whatever earned the dot; clear it. */
+    public fun markAchievementsSeen() {
+        prefs.hasUnseenAchievement = false
+        refreshProfileBadge()
+    }
+
+    private fun refreshProfileBadge() {
+        if (!::navView.isInitialized) return
+        if (prefs.hasUnseenAchievement) {
+            navView.getOrCreateBadge(R.id.navigation_profile)
+        } else {
+            navView.removeBadge(R.id.navigation_profile)
+        }
+    }
+
+    private fun maybeCheckForUpdate() {
+        if (BuildConfig.APPLICATION_ID != CANONICAL_APPLICATION_ID) return
+        lifecycleScope.launch {
+            foregroundUpdateCheck.runIfDue(prefs, BuildConfig.VERSION_NAME, alertsNotifier)
+        }
     }
 
     private fun updateCurrentFragment() {
@@ -186,6 +239,8 @@ public class MainActivity : AppCompatActivity() {
         if (isBound) {
             updateCurrentFragment()
         }
+        refreshProfileBadge()
+        maybeCheckForUpdate()
     }
 
     override fun onPause() {
@@ -204,5 +259,6 @@ public class MainActivity : AppCompatActivity() {
     public companion object {
         private const val TAG: String = "PomoMainActivity"
         private const val NOTIFICATION_PERMISSION_REQUEST_CODE: Int = 1
+        private const val CANONICAL_APPLICATION_ID: String = "com.pomo"
     }
 }
