@@ -247,14 +247,6 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
         addManualHapticItems()
 
-        add(SettingsItem.Section(getString(R.string.category_crew)))
-        add(SettingsItem.BoolPref(
-            key = "crew_activity_notifications",
-            title = getString(R.string.crew_activity_notifications_title),
-            summary = getString(R.string.crew_activity_notifications_summary),
-            default = true,
-        ))
-
         add(SettingsItem.Section(getString(R.string.category_theme)))
         add(SettingsItem.SegmentedPref(
             key = THEME_MODE_PREF_KEY,
@@ -376,9 +368,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 activity.service?.syncConfig()
             }
             "pomodoro_duration", "short_break_duration", "long_break_duration",
-            "long_break_after", "phone_server_port", "phone_server_enabled", "phone_server_wifi_only",
-            "crew_activity_notifications",
-            -> {
+            "long_break_after", "phone_server_port", "phone_server_enabled", "phone_server_wifi_only" -> {
                 activity.service?.syncConfig()
             }
         }

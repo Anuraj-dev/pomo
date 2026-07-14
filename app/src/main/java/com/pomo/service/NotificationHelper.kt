@@ -42,45 +42,8 @@ public class NotificationHelper(private val context: Context) {
             ringChannel.setSound(null, null)
             ringChannel.enableVibration(false)
             notificationManager.createNotificationChannel(ringChannel)
-
-            // Crew activity arrives while you are focusing, so it lands in the shade quietly:
-            // knowing a crew mate started is worth a glance, never worth breaking a block for.
-            val crewChannel = NotificationChannel(
-                CREW_CHANNEL_ID,
-                "Crew activity",
-                NotificationManager.IMPORTANCE_LOW,
-            )
-            crewChannel.description = "Crew mates starting and finishing focus blocks"
-            crewChannel.setShowBadge(false)
-            notificationManager.createNotificationChannel(crewChannel)
         }
     }
-
-    /** One notification per member, replaced in place, so a busy crew cannot flood the shade. */
-    public fun notifyCrewActivity(memberKey: String, title: String, text: String) {
-        val openAppIntent = Intent(context, MainActivity::class.java)
-        val pendingOpenApp = PendingIntent.getActivity(
-            context,
-            0,
-            openAppIntent,
-            PendingIntent.FLAG_IMMUTABLE,
-        )
-        val notification = NotificationCompat.Builder(context, CREW_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle(title)
-            .setContentText(text)
-            .setContentIntent(pendingOpenApp)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-            .setSilent(true)
-            .setAutoCancel(true)
-            .build()
-        runCatching {
-            notificationManager.notify(crewNotificationId(memberKey), notification)
-        }
-    }
-
-    private fun crewNotificationId(memberKey: String): Int =
-        CREW_NOTIFICATION_ID_BASE + (memberKey.hashCode() and CREW_NOTIFICATION_ID_MASK)
 
     public fun buildNotification(state: TimerState, isServing: Boolean): Notification {
         val openAppIntent = Intent(context, MainActivity::class.java)
@@ -206,10 +169,7 @@ public class NotificationHelper(private val context: Context) {
     public companion object {
         public const val CHANNEL_ID: String = "pomodoro_channel"
         public const val RING_CHANNEL_ID: String = "pomodoro_ring_channel"
-        public const val CREW_CHANNEL_ID: String = "pomodoro_crew_channel"
         public const val NOTIFICATION_ID: Int = 1
         public const val RING_NOTIFICATION_ID: Int = 2
-        private const val CREW_NOTIFICATION_ID_BASE: Int = 1000
-        private const val CREW_NOTIFICATION_ID_MASK: Int = 0xFF
     }
 }

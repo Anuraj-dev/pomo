@@ -90,7 +90,6 @@ public object CrewLeaderboardAggregator {
             isInactive = isInactive,
             localDate = snapshot.localDate,
             stats = snapshot.stats,
-            presence = snapshot.presence,
         )
 
     private fun CrewSnapshot.focusMinutesOn(localDate: String): Int =

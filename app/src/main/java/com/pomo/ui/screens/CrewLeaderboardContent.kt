@@ -34,10 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -72,7 +70,6 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import java.util.Locale
 import kotlin.math.abs
-import kotlinx.coroutines.delay
 
 @Composable
 internal fun CrewBoardContent(
@@ -93,7 +90,6 @@ internal fun CrewBoardContent(
     var pendingHide by remember { mutableStateOf<CrewBoardRow?>(null) }
     var statsMember by remember { mutableStateOf<CrewBoardRow?>(null) }
     var showDayPicker by remember { mutableStateOf(false) }
-    val nowSeconds by rememberNowSeconds()
 
     statsMember?.let { row ->
         CrewMemberStatsScreen(row = row, onBack = { statsMember = null })
@@ -187,7 +183,6 @@ internal fun CrewBoardContent(
                 row = row,
                 showFingerprint = row.displayName.trim().lowercase(Locale.ROOT) in duplicateNames,
                 isTied = row.rank in tiedRanks,
-                nowSeconds = nowSeconds,
                 onClick = { selectedMember = row },
             )
             HorizontalDivider(color = PomoTokens.colors.outline)
@@ -214,13 +209,7 @@ internal fun CrewBoardContent(
             }
             if (showInactive) {
                 items(inactiveRows, key = { "inactive-${it.identityPublicKey}" }) { row ->
-                    CrewRow(
-                        row = row,
-                        showFingerprint = false,
-                        isTied = false,
-                        nowSeconds = nowSeconds,
-                        onClick = { selectedMember = row },
-                    )
+                    CrewRow(row, showFingerprint = false, isTied = false, onClick = { selectedMember = row })
                     HorizontalDivider(color = PomoTokens.colors.outline)
                 }
             }
@@ -470,15 +459,8 @@ private fun YourStanding(rows: List<CrewBoardRow>, tiedRanks: Set<Int>) {
 }
 
 @Composable
-private fun CrewRow(
-    row: CrewBoardRow,
-    showFingerprint: Boolean,
-    isTied: Boolean,
-    nowSeconds: Long,
-    onClick: () -> Unit,
-) {
+private fun CrewRow(row: CrewBoardRow, showFingerprint: Boolean, isTied: Boolean, onClick: () -> Unit) {
     val rankLabel = row.rank?.let { if (isTied) "=$it" else "#$it" } ?: "—"
-    val isFocusing = row.isFocusingAt(nowSeconds)
     val displayLabel = if (showFingerprint) {
         "${row.displayName} · ${row.identityPublicKey.take(4).uppercase(Locale.ROOT)}"
     } else {
@@ -504,27 +486,17 @@ private fun CrewRow(
             fontWeight = FontWeight.SemiBold,
         )
         Column(modifier = Modifier.weight(1f)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (isFocusing) {
-                    LiveDot()
-                    Spacer(Modifier.width(6.dp))
-                }
-                Text(
-                    text = if (row.isSelf) "$displayLabel · YOU" else displayLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = PomoTokens.colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
             Text(
-                text = if (isFocusing) {
-                    "Focusing now · ${formatRemaining(row.focusRemainingSecondsAt(nowSeconds))} left"
-                } else {
-                    rowMeta(row)
-                },
+                text = if (row.isSelf) "$displayLabel · YOU" else displayLabel,
+                style = MaterialTheme.typography.titleMedium,
+                color = PomoTokens.colors.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = rowMeta(row),
                 style = MaterialTheme.typography.bodySmall,
-                color = if (isFocusing) PomoTokens.colors.accent else PomoTokens.colors.onSurfaceMuted,
+                color = PomoTokens.colors.onSurfaceMuted,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -539,33 +511,6 @@ private fun CrewRow(
             textAlign = TextAlign.End,
         )
     }
-}
-
-/**
- * Whether someone is mid-block only stays true for as long as their session lasts, so the board
- * needs its own clock — a snapshot that arrived twenty minutes ago must stop claiming they are live.
- */
-@Composable
-private fun rememberNowSeconds(): State<Long> = produceState(System.currentTimeMillis() / 1000L) {
-    while (true) {
-        delay(LIVE_TICK_MILLIS)
-        value = System.currentTimeMillis() / 1000L
-    }
-}
-
-@Composable
-private fun LiveDot() {
-    Box(
-        modifier = Modifier
-            .size(8.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(PomoTokens.colors.accent),
-    )
-}
-
-private fun formatRemaining(seconds: Long): String {
-    val minutes = ((seconds + 59L) / 60L).toInt()
-    return if (minutes <= 1) "under a minute" else "${minutes}m"
 }
 
 @Composable
@@ -609,7 +554,6 @@ private fun MemberDetailSheet(
 ) {
     val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
     val blocks = row.dailyAggregates.sumOf { it.completedWorkBlocks }
-    val nowSeconds by rememberNowSeconds()
     PomoSheet(title = row.displayName, onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -618,9 +562,6 @@ private fun MemberDetailSheet(
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             MemberIdentityStrip(row)
-            if (row.isFocusingAt(nowSeconds)) {
-                FocusingNowBanner(row.focusRemainingSecondsAt(nowSeconds))
-            }
             MemberHistoryBars(row)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(formatMinutes(row.thirtyDayFocusMinutes), "30 DAY", Modifier.weight(1f))
@@ -638,33 +579,6 @@ private fun MemberDetailSheet(
             }
             Spacer(Modifier.height(20.dp))
         }
-    }
-}
-
-@Composable
-private fun FocusingNowBanner(remainingSeconds: Long) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(PomoTokens.colors.surfaceElevated)
-            .padding(horizontal = 14.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        LiveDot()
-        Spacer(Modifier.width(10.dp))
-        Text(
-            text = "Focusing right now",
-            style = MaterialTheme.typography.bodyMedium,
-            color = PomoTokens.colors.onSurface,
-        )
-        Spacer(Modifier.weight(1f))
-        Text(
-            text = "${formatRemaining(remainingSeconds)} left",
-            style = MaterialTheme.typography.bodyMedium,
-            color = PomoTokens.colors.accent,
-            fontFamily = FontFamily.Monospace,
-        )
     }
 }
 
@@ -849,6 +763,5 @@ private fun ComparisonBar(label: String, deltaMinutes: Int, fraction: Float, val
     }
 }
 
-private const val LIVE_TICK_MILLIS = 15_000L
 private const val HISTORY_BAR_DAYS = 30
 private const val MIN_BAR_FRACTION = 0.04f

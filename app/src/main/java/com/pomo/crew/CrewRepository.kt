@@ -47,14 +47,10 @@ public class CrewRepository(context: Context) {
                 )
             }
 
-    /**
-     * Push our numbers, and — when [presence] is given — what we are doing right now, so crew
-     * mates see the session as it starts rather than only once it lands in history.
-     */
-    public suspend fun publishCurrentSnapshot(presence: CrewPresence? = null): Boolean {
+    public suspend fun publishCurrentSnapshot(): Boolean {
         val memberships = crewStore.loadMemberships()
         if (memberships.isEmpty()) return false
-        memberships.forEach { membership -> publishSelfSnapshot(membership, presence) }
+        memberships.forEach { membership -> publishSelfSnapshot(membership) }
         return true
     }
 
@@ -225,10 +221,7 @@ public class CrewRepository(context: Context) {
         }
     }
 
-    private suspend fun publishSelfSnapshot(
-        membership: CrewMembership,
-        presence: CrewPresence? = null,
-    ) {
+    private suspend fun publishSelfSnapshot(membership: CrewMembership) {
         val identity = identity()
         val history = historyRepository.getHistoryPayload()
         val today = historyRepository.getEffectiveDateString()
@@ -267,7 +260,6 @@ public class CrewRepository(context: Context) {
             currentStreak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
             lastFocusedAtEpochSeconds = lastFocusedAt,
             stats = buildStatsExtras(history, today, zoneId),
-            presence = presence,
         )
         relayStore.publish(
             snapshot = snapshot,

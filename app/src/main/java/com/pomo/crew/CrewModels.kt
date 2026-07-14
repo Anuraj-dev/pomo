@@ -56,33 +56,6 @@ public data class CrewStatsExtras(
     val bestWeekWorkBlocks: Int? = null,
 )
 
-/**
- * What a member is doing right now, pushed the moment a session starts and cleared when it ends.
- * Carries its own end time so a reader can tell "focusing" from "left the app mid-session" without
- * waiting for another snapshot: once [endsAtEpochSeconds] passes, presence simply expires.
- *
- * Optional, like [CrewStatsExtras], and for the same reason — older builds must keep accepting us.
- */
-public data class CrewPresence(
-    val phase: String,
-    val startedAtEpochSeconds: Long,
-    val endsAtEpochSeconds: Long,
-) {
-    public val isWork: Boolean get() = phase == PHASE_WORK
-
-    public fun isLiveAt(nowEpochSeconds: Long): Boolean =
-        nowEpochSeconds in startedAtEpochSeconds..(endsAtEpochSeconds + GRACE_SECONDS)
-
-    public companion object {
-        public const val PHASE_WORK: String = "work"
-        public const val PHASE_BREAK: String = "break"
-
-        /** A phone that dies mid-session never clears presence; the end time plus this does. */
-        public const val GRACE_SECONDS: Long = 120L
-        public const val MAX_SESSION_SECONDS: Long = 6L * 60L * 60L
-    }
-}
-
 public data class CrewSnapshot(
     val crewId: String,
     val identityPublicKey: String,
@@ -96,7 +69,6 @@ public data class CrewSnapshot(
     val lastFocusedAtEpochSeconds: Long,
     val version: Int = CrewDefaults.PROTOCOL_VERSION,
     val stats: CrewStatsExtras? = null,
-    val presence: CrewPresence? = null,
 ) {
     public val todayFocusMinutes: Int
         get() = dailyAggregates.firstOrNull { it.localDate == localDate }?.focusMinutes ?: 0
@@ -124,19 +96,7 @@ public data class CrewBoardRow(
     /** The member's own calendar date when they published — their "today", not yours. */
     val localDate: String = "",
     val stats: CrewStatsExtras? = null,
-    val presence: CrewPresence? = null,
-) {
-    /** Are they in a focus block at this instant, as far as their last snapshot can tell us? */
-    public fun isFocusingAt(nowEpochSeconds: Long): Boolean =
-        presence?.let { it.isWork && it.isLiveAt(nowEpochSeconds) } == true
-
-    public fun focusRemainingSecondsAt(nowEpochSeconds: Long): Long =
-        if (isFocusingAt(nowEpochSeconds)) {
-            (presence!!.endsAtEpochSeconds - nowEpochSeconds).coerceAtLeast(0L)
-        } else {
-            0L
-        }
-}
+)
 
 /**
  * The window the leaderboard ranks over. [Day] covers any single past date; snapshots carry
