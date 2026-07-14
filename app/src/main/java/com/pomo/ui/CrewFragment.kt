@@ -24,6 +24,7 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.crew.CrewRankingMode
 import com.pomo.crew.CrewRepository
+import com.pomo.profile.ProfileStore
 import com.pomo.ui.screens.CrewScreen
 import com.pomo.ui.screens.CrewScreenState
 import com.pomo.ui.theme.PomoTheme
@@ -36,7 +37,9 @@ public class CrewFragment : Fragment() {
     private val screenState = MutableStateFlow(CrewScreenState(isLoading = true))
     private val rankingMode = MutableStateFlow<CrewRankingMode>(CrewRankingMode.Today)
     private val initialJoinCode = MutableStateFlow<String?>(null)
+    private val profileDisplayName = MutableStateFlow("")
     private lateinit var repository: CrewRepository
+    private lateinit var profileStore: ProfileStore
     private var liveBoardJob: Job? = null
     private var pendingRecoveryExport: PendingRecoveryExport? = null
 
@@ -94,6 +97,7 @@ public class CrewFragment : Fragment() {
         enterTransition = MaterialFadeThrough()
         exitTransition = MaterialFadeThrough()
         repository = CrewRepository(requireContext())
+        profileStore = ProfileStore(requireContext())
         initialJoinCode.value = arguments?.getString("crewJoinPayload")
             ?.let { payload -> "pomo://crew/join/v2/$payload" }
     }
@@ -108,13 +112,14 @@ public class CrewFragment : Fragment() {
             PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                 val currentState by screenState.collectAsState()
                 val currentInitialJoinCode by initialJoinCode.collectAsState()
+                val currentProfileDisplayName by profileDisplayName.collectAsState()
                 CrewScreen(
                     state = currentState,
+                    profileDisplayName = currentProfileDisplayName,
                     onCreateCrew = { crewName, displayName -> createCrew(crewName, displayName) },
                     onJoinCrew = { joinCode, displayName -> joinCrew(joinCode, displayName) },
                     onSwitchCrew = { crewId -> switchCrew(crewId) },
                     onLeaveCrew = { crewId -> leaveCrew(crewId) },
-                    onDisplayNameChange = { displayName -> updateDisplayName(displayName) },
                     onRankingModeChange = { mode -> rankingMode.value = mode },
                     onMemberHiddenChange = { identityPublicKey, hidden ->
                         setMemberHidden(identityPublicKey, hidden)
@@ -131,6 +136,8 @@ public class CrewFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // The member may have renamed themselves on Profile since this screen was last shown.
+        profileDisplayName.value = profileStore.displayName()
         refreshBoard()
         startLiveBoard()
     }
@@ -149,6 +156,7 @@ public class CrewFragment : Fragment() {
     }
 
     private fun createCrew(crewName: String, displayName: String) {
+        rememberName(displayName)
         viewLifecycleOwner.lifecycleScope.launch {
             screenState.value = screenState.value.copy(isLoading = true)
             publishBoard(repository.createSoloCrew(displayName, crewName))
@@ -157,6 +165,7 @@ public class CrewFragment : Fragment() {
     }
 
     private fun joinCrew(joinCode: String, displayName: String) {
+        rememberName(displayName)
         viewLifecycleOwner.lifecycleScope.launch {
             screenState.value = screenState.value.copy(isLoading = true)
             val board = repository.joinCrew(joinCode, displayName)
@@ -183,11 +192,14 @@ public class CrewFragment : Fragment() {
         }
     }
 
-    private fun updateDisplayName(displayName: String) {
-        viewLifecycleOwner.lifecycleScope.launch {
-            screenState.value = screenState.value.copy(isLoading = true)
-            publishBoard(repository.updateDisplayName(displayName))
-            startLiveBoard()
+    /**
+     * A member with no name yet is asked for one by the create/join sheet. The answer is theirs, not
+     * that Crew's, so it lands on the Profile — the Crew gets it because the repository writes it
+     * into the membership it is about to create. Renaming afterwards happens on Profile only.
+     */
+    private fun rememberName(displayName: String) {
+        profileStore.updateDisplayName(displayName)?.let { saved ->
+            profileDisplayName.value = saved
         }
     }
 

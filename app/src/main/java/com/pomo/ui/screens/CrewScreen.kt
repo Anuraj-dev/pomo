@@ -52,11 +52,11 @@ public data class CrewScreenState(
 @Composable
 public fun CrewScreen(
     state: CrewScreenState,
+    profileDisplayName: String,
     onCreateCrew: (String, String) -> Unit,
     onJoinCrew: (String, String) -> Unit,
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
-    onDisplayNameChange: (String) -> Unit,
     onRankingModeChange: (CrewRankingMode) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
     loadJoinPreview: suspend (String) -> CrewJoinPreview?,
@@ -67,7 +67,8 @@ public fun CrewScreen(
 ) {
     var pendingJoin by remember { mutableStateOf<PendingJoin?>(null) }
     var createRequest by remember { mutableStateOf<CreateCrewRequest?>(null) }
-    val initialDisplayName = state.board?.displayName.orEmpty()
+    // The name comes from the Profile, not from the board this member happens to be looking at.
+    val initialDisplayName = profileDisplayName
     val requestJoin: (String) -> Unit = { joinCode ->
         val payload = CrewJoinCodeCodec.decode(joinCode.trim())
         if (payload == null) {
@@ -76,9 +77,8 @@ public fun CrewScreen(
             pendingJoin = PendingJoin(joinCode.trim(), initialDisplayName, payload)
         }
     }
-    LaunchedEffect(initialJoinCode, state.isLoading, initialDisplayName) {
+    LaunchedEffect(initialJoinCode, initialDisplayName) {
         val joinCode = initialJoinCode ?: return@LaunchedEffect
-        if (state.isLoading && initialDisplayName.isBlank()) return@LaunchedEffect
         val trimmedJoinCode = joinCode.trim()
         CrewJoinCodeCodec.decode(trimmedJoinCode)?.let { payload ->
             pendingJoin = PendingJoin(trimmedJoinCode, initialDisplayName, payload)
@@ -101,11 +101,11 @@ public fun CrewScreen(
             else -> CrewBoardContent(
                 isSyncing = state.isSyncing,
                 board = state.board,
+                profileDisplayName = profileDisplayName,
                 onCreateCrew = onCreateCrew,
                 onJoinCrew = { joinCode, _ -> requestJoin(joinCode) },
                 onSwitchCrew = onSwitchCrew,
                 onLeaveCrew = onLeaveCrew,
-                onDisplayNameChange = onDisplayNameChange,
                 onRankingModeChange = onRankingModeChange,
                 onMemberHiddenChange = onMemberHiddenChange,
                 onExportRecovery = onExportRecovery,

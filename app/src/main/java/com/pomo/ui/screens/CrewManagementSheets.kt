@@ -63,21 +63,20 @@ import java.util.Locale
 @Composable
 internal fun ManageCrewScreen(
     board: CrewBoard,
+    profileDisplayName: String,
     onBack: () -> Unit,
     onCreateCrew: (String, String) -> Unit,
     onReviewJoin: (String) -> Unit,
     onSwitchCrew: (String) -> Unit,
     onLeaveCrew: (String) -> Unit,
-    onDisplayNameChange: (String) -> Unit,
     onMemberHiddenChange: (String, Boolean) -> Unit,
     onExportRecovery: () -> Unit,
     onImportRecovery: () -> Unit,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
-    var displayName by remember(board.displayName) { mutableStateOf(board.displayName) }
     var joinCode by remember { mutableStateOf("") }
-    var createRequest by remember(board.displayName) { mutableStateOf<CreateCrewRequest?>(null) }
+    var createRequest by remember(profileDisplayName) { mutableStateOf<CreateCrewRequest?>(null) }
     var pendingHide by remember { mutableStateOf<CrewBoardRow?>(null) }
     val payload = remember(board.joinCode) { com.pomo.crew.CrewJoinCodeCodec.decode(board.joinCode) }
     val shareUri = payload?.let(com.pomo.crew.CrewJoinCodeCodec::encodeUri) ?: board.joinCode
@@ -142,13 +141,6 @@ internal fun ManageCrewScreen(
                         Spacer(Modifier.width(6.dp))
                         Text("Copy code")
                     }
-                }
-            }
-            item { SectionHeader("Identity") }
-            item { NameField(displayName, onValueChange = { displayName = it }) }
-            item {
-                PomoButton(onClick = { onDisplayNameChange(displayName) }, variant = PomoButtonVariant.Tonal) {
-                    Text("Save name")
                 }
             }
             if (board.memberships.count { !it.isArchived } > 1) {
@@ -225,7 +217,7 @@ internal fun ManageCrewScreen(
             item {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PomoButton(
-                        onClick = { createRequest = CreateCrewRequest(displayName) },
+                        onClick = { createRequest = CreateCrewRequest(profileDisplayName) },
                         variant = PomoButtonVariant.Tonal,
                     ) { Text("Create") }
                     PomoButton(
@@ -364,6 +356,12 @@ private fun CrewQrCode(value: String) {
     }
 }
 
+/**
+ * The name belongs to the Profile, not to this Crew. A member who already has one is told which
+ * name they are joining under and is not asked again; only a member who has never named themselves
+ * is asked, and the caller writes that answer to the Profile.
+ * See docs/adr/0004-profile-replaces-settings-in-the-nav.md.
+ */
 @Composable
 internal fun JoinConfirmationSheet(
     pending: PendingJoin,
@@ -372,6 +370,7 @@ internal fun JoinConfirmationSheet(
     onConfirm: (String) -> Unit,
 ) {
     var preview by remember(pending.joinCode) { mutableStateOf<CrewJoinPreview?>(null) }
+    val alreadyNamed = pending.initialDisplayName.isNotBlank()
     var displayName by remember(pending.joinCode) { mutableStateOf(pending.initialDisplayName) }
     LaunchedEffect(pending.joinCode) {
         preview = loadPreview(pending.joinCode)
@@ -406,7 +405,15 @@ internal fun JoinConfirmationSheet(
             preview?.let { stats ->
                 JoinPreviewStats(stats)
             }
-            NameField(value = displayName, onValueChange = { displayName = it })
+            if (alreadyNamed) {
+                Text(
+                    text = "Joining as ${pending.initialDisplayName}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            } else {
+                NameField(value = displayName, onValueChange = { displayName = it })
+            }
             if (duplicateName) {
                 Text(
                     text = "Name already in use in this Crew. Your key will still distinguish you.",
@@ -430,6 +437,7 @@ internal fun CreateCrewSheet(
     onConfirm: (String, String) -> Unit,
 ) {
     var crewName by remember(initialDisplayName) { mutableStateOf("") }
+    val alreadyNamed = initialDisplayName.isNotBlank()
     var displayName by remember(initialDisplayName) { mutableStateOf(initialDisplayName) }
     val normalizedCrewName = remember(crewName) { CrewValidation.normalizeCrewName(crewName) }
     val normalizedDisplayName = remember(displayName) { CrewValidation.normalizeDisplayName(displayName) }
@@ -453,7 +461,15 @@ internal fun CreateCrewSheet(
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
-            NameField(value = displayName, onValueChange = { displayName = it })
+            if (alreadyNamed) {
+                Text(
+                    text = "Creating as $initialDisplayName",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            } else {
+                NameField(value = displayName, onValueChange = { displayName = it })
+            }
             PomoButton(
                 onClick = {
                     val name = normalizedCrewName
