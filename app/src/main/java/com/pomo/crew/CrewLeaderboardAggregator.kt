@@ -88,6 +88,8 @@ public object CrewLeaderboardAggregator {
             isSelf = snapshot.identityPublicKey == selfIdentityPublicKey,
             isStale = isStale,
             isInactive = isInactive,
+            localDate = snapshot.localDate,
+            stats = snapshot.stats,
         )
 
     private fun CrewSnapshot.focusMinutesOn(localDate: String): Int =

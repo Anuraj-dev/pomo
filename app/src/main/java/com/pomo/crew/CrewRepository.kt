@@ -1,7 +1,9 @@
 package com.pomo.crew
 
 import android.content.Context
+import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.stats.StatsAggregator
 import com.pomo.timer.TimerState
 import com.pomo.util.DateLogic
 import java.time.Instant
@@ -257,11 +259,77 @@ public class CrewRepository(context: Context) {
             dailyAggregates = dailyAggregates,
             currentStreak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
             lastFocusedAtEpochSeconds = lastFocusedAt,
+            stats = buildStatsExtras(history, today, zoneId),
         )
         relayStore.publish(
             snapshot = snapshot,
             payload = CrewSnapshotCodec.encodeEncrypted(snapshot, membership.key, identity),
             relays = membership.relays,
+        )
+    }
+
+    /**
+     * The optional half of the snapshot: enough for a crew mate to draw our stats page at full
+     * fidelity. Records are sent whole rather than left to be re-derived, because the shared
+     * history window only reaches back [CrewValidation.MAX_HISTORY_DAYS] days and a personal best
+     * older than that would otherwise silently shrink on their screen.
+     */
+    private fun buildStatsExtras(
+        history: Map<String, HistoryCacheRepository.ServerDayEntry>,
+        today: String,
+        zoneId: ZoneId,
+    ): CrewStatsExtras {
+        val workSessions = history.values
+            .flatMap { it.sessions }
+            .filter { it.type == TimerState.PHASE_WORK }
+        val hourBuckets = IntArray(24)
+        val weekdayBuckets = IntArray(7)
+        for (session in workSessions) {
+            val at = Instant.ofEpochSecond(session.start).atZone(zoneId)
+            // Round part-minutes up, exactly as StatsAggregator does for our own rhythm.
+            val minutes = ((session.duration + 59) / 60).coerceAtLeast(1)
+            hourBuckets[at.hour] += minutes
+            weekdayBuckets[at.dayOfWeek.value - 1] += minutes
+        }
+
+        val days = history.map { (date, entry) ->
+            DayStatsEntity(
+                date = date,
+                completed = entry.completed,
+                workMinutes = entry.work_minutes,
+                breakMinutes = entry.break_minutes,
+            )
+        }
+        val bestDay = StatsAggregator.bestDayOf(days)
+        val bestWeek = StatsAggregator.bestWeekOf(days)
+        val activeDates = history.filterValues { it.completed > 0 }.keys.toSet()
+        val firstFocusDate = history.filterValues { it.work_minutes > 0 }.keys.minOrNull()
+
+        val todayDate = LocalDate.parse(today)
+        val windowFloor = todayDate.minusDays((CrewValidation.MAX_HISTORY_DAYS - 1).toLong())
+        val historyStart = firstFocusDate
+            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+            ?.let { maxOf(it, windowFloor) }
+            ?: todayDate
+        val historyDates = generateSequence(historyStart) { it.plusDays(1) }
+            .takeWhile { !it.isAfter(todayDate) }
+            .toList()
+
+        return CrewStatsExtras(
+            hourBuckets = hourBuckets.toList(),
+            weekdayBuckets = weekdayBuckets.toList(),
+            allTimeWorkBlocks = history.values.sumOf { it.completed },
+            bestStreak = DateLogic.bestStreak(activeDates),
+            firstFocusLocalDate = firstFocusDate,
+            historyStartDate = historyStart.toString(),
+            historyFocusMinutes = historyDates.map { history[it.toString()]?.work_minutes ?: 0 },
+            historyWorkBlocks = historyDates.map { history[it.toString()]?.completed ?: 0 },
+            bestDayLocalDate = bestDay?.date,
+            bestDayFocusMinutes = bestDay?.minutes,
+            bestDayWorkBlocks = bestDay?.sessions,
+            bestWeekStartDate = bestWeek?.weekStart,
+            bestWeekFocusMinutes = bestWeek?.minutes,
+            bestWeekWorkBlocks = bestWeek?.sessions,
         )
     }
 

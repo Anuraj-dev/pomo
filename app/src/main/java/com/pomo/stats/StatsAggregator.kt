@@ -113,11 +113,25 @@ public object StatsAggregator {
             val minutes = (s.duration + 59) / 60
             buckets[h] += minutes.coerceAtLeast(1)
         }
+        return rhythmFromBuckets(buckets)
+    }
+
+    /**
+     * Classify an already-bucketed 24-hour minute distribution. Crew members ship their rhythm
+     * as buckets rather than raw sessions, so the reading of it has to live apart from the
+     * session walk above.
+     */
+    public fun rhythmFromBuckets(buckets: IntArray): HourRhythm {
         val total = buckets.sum()
         if (total == 0) return HourRhythm(buckets, null, RhythmPattern.None)
         val peak = buckets.indices.maxBy { buckets[it] }
-        val pattern = classifyPattern(buckets, peak, total)
-        return HourRhythm(buckets, peak, pattern)
+        return HourRhythm(buckets, peak, classifyPattern(buckets, peak, total))
+    }
+
+    /** Same idea as [rhythmFromBuckets], for the 7 weekday buckets (index 0 = Monday). */
+    public fun weekShapeFromBuckets(buckets: IntArray): WeekShape {
+        if (buckets.sum() == 0) return WeekShape(buckets, null)
+        return WeekShape(buckets, buckets.indices.maxBy { buckets[it] })
     }
 
     private fun classifyPattern(buckets: IntArray, peak: Int, total: Int): RhythmPattern {
@@ -147,9 +161,7 @@ public object StatsAggregator {
             val minutes = (s.duration + 59) / 60
             buckets[idx] += minutes.coerceAtLeast(1)
         }
-        if (buckets.sum() == 0) return WeekShape(buckets, null)
-        val strongest = buckets.indices.maxBy { buckets[it] }
-        return WeekShape(buckets, strongest)
+        return weekShapeFromBuckets(buckets)
     }
 
     private fun computeHabitWindow(
@@ -234,20 +246,25 @@ public object StatsAggregator {
     private fun computeRecords(
         days: List<DayStatsEntity>,
         bestStreak: Int,
-    ): Records {
-        // Rank by focus minutes. Use workMinutes (not completed) as the eligibility
-        // filter so the pre-midnight segment of a split block — which carries the
-        // minutes but no completed count — can still win as the best focus day.
-        val bestDay = days
-            .filter { it.workMinutes > 0 }
-            .maxByOrNull { it.workMinutes }
-            ?.let { BestDay(date = it.date, sessions = it.completed, minutes = it.workMinutes) }
+    ): Records = Records(
+        bestDay = bestDayOf(days),
+        bestWeek = if (days.isEmpty()) null else computeBestWeek(days),
+        longestStreak = bestStreak,
+    )
 
-        // Best week: group sessions by Sunday-anchored week (week start = Sunday).
-        val bestWeek = if (days.isEmpty()) null else computeBestWeek(days)
+    /**
+     * Rank by focus minutes. Use workMinutes (not completed) as the eligibility filter so the
+     * pre-midnight segment of a split block — which carries the minutes but no completed count —
+     * can still win as the best focus day.
+     */
+    public fun bestDayOf(days: List<DayStatsEntity>): BestDay? = days
+        .filter { it.workMinutes > 0 }
+        .maxByOrNull { it.workMinutes }
+        ?.let { BestDay(date = it.date, sessions = it.completed, minutes = it.workMinutes) }
 
-        return Records(bestDay = bestDay, bestWeek = bestWeek, longestStreak = bestStreak)
-    }
+    /** Best week over the whole of [days], grouped into Sunday-anchored weeks. */
+    public fun bestWeekOf(days: List<DayStatsEntity>): BestWeek? =
+        if (days.isEmpty()) null else computeBestWeek(days)
 
     private fun computeBestWeek(days: List<DayStatsEntity>): BestWeek? {
         val df = SimpleDateFormat(DATE_PATTERN, Locale.US)

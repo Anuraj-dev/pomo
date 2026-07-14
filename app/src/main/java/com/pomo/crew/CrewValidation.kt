@@ -12,6 +12,14 @@ public object CrewValidation {
     public const val MAX_RELAYS: Int = 8
     public const val MAX_SNAPSHOT_BYTES: Int = 32 * 1024
 
+    /**
+     * Days of dense daily history a snapshot may carry in [CrewStatsExtras]. Covers the 12-week
+     * consistency heatmap with room to spare, and costs about a kilobyte on the wire.
+     */
+    public const val MAX_HISTORY_DAYS: Int = 120
+    public const val HOUR_BUCKETS: Int = 24
+    public const val WEEKDAY_BUCKETS: Int = 7
+
     public fun normalizeDisplayName(value: String): String? =
         normalizeName(value, MAX_DISPLAY_NAME_GRAPHEMES)
 
@@ -35,7 +43,49 @@ public object CrewValidation {
                     aggregate.completedWorkBlocks < 0
             }
         ) return false
-        return snapshot.dailyAggregates == snapshot.dailyAggregates.sortedByDescending { it.localDate }
+        if (snapshot.dailyAggregates != snapshot.dailyAggregates.sortedByDescending { it.localDate }) return false
+        return isValidStatsExtras(snapshot.stats)
+    }
+
+    /**
+     * Optional extras are validated only when present: a snapshot from a build that never sends
+     * them is still a perfectly good snapshot, and a malformed one must not cost us the member.
+     */
+    private fun isValidStatsExtras(stats: CrewStatsExtras?): Boolean {
+        if (stats == null) return true
+        if (!isValidBuckets(stats.hourBuckets, HOUR_BUCKETS)) return false
+        if (!isValidBuckets(stats.weekdayBuckets, WEEKDAY_BUCKETS)) return false
+        if (stats.allTimeWorkBlocks != null && stats.allTimeWorkBlocks < 0) return false
+        if (stats.bestStreak != null && stats.bestStreak < 0) return false
+        if (stats.firstFocusLocalDate != null && !isIsoDate(stats.firstFocusLocalDate)) return false
+        if (stats.bestDayLocalDate != null && !isIsoDate(stats.bestDayLocalDate)) return false
+        if (stats.bestWeekStartDate != null && !isIsoDate(stats.bestWeekStartDate)) return false
+        if (listOf(
+                stats.bestDayFocusMinutes,
+                stats.bestDayWorkBlocks,
+                stats.bestWeekFocusMinutes,
+                stats.bestWeekWorkBlocks,
+            ).any { it != null && it < 0 }
+        ) return false
+        return isValidHistory(stats)
+    }
+
+    private fun isValidHistory(stats: CrewStatsExtras): Boolean {
+        val minutes = stats.historyFocusMinutes
+        val blocks = stats.historyWorkBlocks
+        val start = stats.historyStartDate
+        // The three history fields only mean anything together, so treat a partial set as absent.
+        if (minutes == null && blocks == null && start == null) return true
+        if (minutes == null || blocks == null || start == null) return false
+        if (!isIsoDate(start)) return false
+        if (minutes.size != blocks.size) return false
+        if (minutes.size > MAX_HISTORY_DAYS) return false
+        return minutes.all { it >= 0 } && blocks.all { it >= 0 }
+    }
+
+    private fun isValidBuckets(buckets: List<Int>?, expectedSize: Int): Boolean {
+        if (buckets == null) return true
+        return buckets.size == expectedSize && buckets.all { it >= 0 }
     }
 
     public fun isLowerHex(value: String, expectedLength: Int): Boolean =

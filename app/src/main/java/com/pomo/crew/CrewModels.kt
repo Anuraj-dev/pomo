@@ -26,6 +26,36 @@ public data class CrewDailyAggregate(
     val completedWorkBlocks: Int,
 )
 
+/**
+ * Everything a member shares beyond the leaderboard's own needs, so their stats page can be
+ * drawn at the same fidelity as your own.
+ *
+ * Every field is optional and rides inside protocol version 2: builds that predate it ignore the
+ * whole object (Gson drops unknown keys), and builds that postdate a member's build see nulls.
+ * Bumping [CrewDefaults.PROTOCOL_VERSION] instead would make older clients reject the snapshot
+ * outright and silently drop that member from their board.
+ */
+public data class CrewStatsExtras(
+    /** All-time focus minutes bucketed by hour of day, 24 slots, member's local clock. */
+    val hourBuckets: List<Int>? = null,
+    /** All-time focus minutes by weekday, 7 slots, Monday first. */
+    val weekdayBuckets: List<Int>? = null,
+    val allTimeWorkBlocks: Int? = null,
+    val bestStreak: Int? = null,
+    val firstFocusLocalDate: String? = null,
+    /** Dense daily history: index 0 is [historyStartDate], one entry per day up to today. */
+    val historyStartDate: String? = null,
+    val historyFocusMinutes: List<Int>? = null,
+    val historyWorkBlocks: List<Int>? = null,
+    /** All-time records, sent whole because the shared history window may not contain them. */
+    val bestDayLocalDate: String? = null,
+    val bestDayFocusMinutes: Int? = null,
+    val bestDayWorkBlocks: Int? = null,
+    val bestWeekStartDate: String? = null,
+    val bestWeekFocusMinutes: Int? = null,
+    val bestWeekWorkBlocks: Int? = null,
+)
+
 public data class CrewSnapshot(
     val crewId: String,
     val identityPublicKey: String,
@@ -38,6 +68,7 @@ public data class CrewSnapshot(
     val currentStreak: Int,
     val lastFocusedAtEpochSeconds: Long,
     val version: Int = CrewDefaults.PROTOCOL_VERSION,
+    val stats: CrewStatsExtras? = null,
 ) {
     public val todayFocusMinutes: Int
         get() = dailyAggregates.firstOrNull { it.localDate == localDate }?.focusMinutes ?: 0
@@ -62,6 +93,9 @@ public data class CrewBoardRow(
     val isSelf: Boolean,
     val isStale: Boolean = false,
     val isInactive: Boolean = false,
+    /** The member's own calendar date when they published — their "today", not yours. */
+    val localDate: String = "",
+    val stats: CrewStatsExtras? = null,
 )
 
 /**

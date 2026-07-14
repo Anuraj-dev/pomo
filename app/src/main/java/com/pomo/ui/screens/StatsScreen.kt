@@ -86,6 +86,55 @@ public fun StatsScreen(
     onExport: () -> Unit,
     onShare: () -> Unit,
 ) {
+    StatsContent(
+        snapshot = snapshot,
+        emptyBody = "Finish a focus session and the stats will start to fill in here.",
+        header = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Statistics",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                IconButton(onClick = onShare) {
+                    Icon(
+                        Icons.Outlined.Share,
+                        contentDescription = "Share statistics screenshot",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                IconButton(onClick = onExport) {
+                    Icon(
+                        Icons.Outlined.Download,
+                        contentDescription = "Export statistics",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+    )
+}
+
+/**
+ * The stats page itself, minus whose page it is. A crew member's snapshot rebuilds into a real
+ * [StatsSnapshot], so their page is this same screen under a different header — consistency by
+ * construction rather than by hand-matching a second layout.
+ *
+ * [showTodayRange] and [rhythmSection] exist because a member shares daily totals and a bucketed
+ * rhythm, never raw session times: there is no hour-by-hour "today" series to plot, and on builds
+ * that predate the shared rhythm there is no rhythm to name either.
+ */
+@Composable
+internal fun StatsContent(
+    snapshot: StatsSnapshot,
+    emptyBody: String,
+    header: @Composable () -> Unit,
+    rhythmTitle: String = "When you focus",
+    rhythmSection: Boolean = true,
+    showTodayRange: Boolean = true,
+    footer: (@Composable () -> Unit)? = null,
+) {
     val scroll = rememberScrollState()
 
     Column(
@@ -95,34 +144,13 @@ public fun StatsScreen(
             .verticalScroll(scroll)
             .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                "Statistics",
-                modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.displayMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-            IconButton(onClick = onShare) {
-                Icon(
-                    Icons.Outlined.Share,
-                    contentDescription = "Share statistics screenshot",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            IconButton(onClick = onExport) {
-                Icon(
-                    Icons.Outlined.Download,
-                    contentDescription = "Export statistics",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
+        header()
 
         if (snapshot.isEmpty) {
             Spacer(Modifier.height(24.dp))
             EmptyState(
                 headline = "No sessions yet",
-                body = "Finish a focus session and the stats will start to fill in here.",
+                body = emptyBody,
                 icon = Icons.Outlined.QueryStats,
                 modifier = Modifier.fillMaxWidth().padding(top = 32.dp),
             )
@@ -132,7 +160,7 @@ public fun StatsScreen(
         Spacer(Modifier.height(12.dp))
         SectionHeader("Trend")
         Spacer(Modifier.height(14.dp))
-        PerDayLineChart(snapshot.chartTrend)
+        PerDayLineChart(snapshot.chartTrend, showTodayRange = showTodayRange)
 
         Spacer(Modifier.height(24.dp))
         TodayWeekStrip(snapshot.habit)
@@ -140,17 +168,19 @@ public fun StatsScreen(
         Spacer(Modifier.height(24.dp))
         LifetimeHeroBlock(snapshot.lifetime)
 
-        Spacer(Modifier.height(32.dp))
-        SectionHeader("When you focus")
-        Spacer(Modifier.height(14.dp))
-        HourBarChart24(snapshot.rhythm)
-        Spacer(Modifier.height(10.dp))
-        Text(
-            text = rhythmCaption(snapshot.rhythm),
-            style = MaterialTheme.typography.bodyMedium,
-            color = PomoTokens.colors.onSurfaceMuted,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (rhythmSection) {
+            Spacer(Modifier.height(32.dp))
+            SectionHeader(rhythmTitle)
+            Spacer(Modifier.height(14.dp))
+            HourBarChart24(snapshot.rhythm)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                text = rhythmCaption(snapshot.rhythm),
+                style = MaterialTheme.typography.bodyMedium,
+                color = PomoTokens.colors.onSurfaceMuted,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
 
         Spacer(Modifier.height(36.dp))
         SectionHeader("Consistency")
@@ -171,6 +201,10 @@ public fun StatsScreen(
 
         Spacer(Modifier.height(28.dp))
         SinceFooter(snapshot.lifetime.firstDate)
+        if (footer != null) {
+            Spacer(Modifier.height(16.dp))
+            footer()
+        }
         Spacer(Modifier.height(40.dp))
     }
 }
@@ -462,9 +496,13 @@ private enum class TrendRange(val label: String) {
 }
 
 @Composable
-private fun TrendRangePills(selected: TrendRange, onSelect: (TrendRange) -> Unit) {
+private fun TrendRangePills(
+    ranges: List<TrendRange>,
+    selected: TrendRange,
+    onSelect: (TrendRange) -> Unit,
+) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        TrendRange.entries.forEach { r ->
+        ranges.forEach { r ->
             val active = r == selected
             Box(
                 modifier = Modifier
@@ -486,7 +524,10 @@ private fun TrendRangePills(selected: TrendRange, onSelect: (TrendRange) -> Unit
 }
 
 @Composable
-private fun PerDayLineChart(trend: ChartTrend) {
+private fun PerDayLineChart(trend: ChartTrend, showTodayRange: Boolean = true) {
+    val ranges = remember(showTodayRange) {
+        TrendRange.entries.filter { showTodayRange || it != TrendRange.Today }
+    }
     var range by remember { mutableStateOf(TrendRange.Days7) }
     val series = when (range) {
         TrendRange.Today -> trend.today
@@ -495,7 +536,6 @@ private fun PerDayLineChart(trend: ChartTrend) {
         TrendRange.AllTime -> trend.allTime
     }
     val points = series.points
-    if (points.isEmpty()) return
 
     val accent = PomoTokens.colors.accent
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
@@ -508,10 +548,13 @@ private fun PerDayLineChart(trend: ChartTrend) {
         chartReady = true
     }
 
+    // Pills stay put even when a range has nothing to draw: losing them would strand the reader
+    // on an empty chart with no way back to a range that does have data.
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-        TrendRangePills(selected = range, onSelect = { range = it })
+        TrendRangePills(ranges = ranges, selected = range, onSelect = { range = it })
     }
     Spacer(Modifier.height(10.dp))
+    if (points.isEmpty()) return
 
     val areaShader = verticalGradient(arrayOf(accent.copy(alpha = 0.25f), Color.Transparent))
     val spec = lineSpec(lineColor = accent, lineThickness = 2.dp, lineBackgroundShader = areaShader)
