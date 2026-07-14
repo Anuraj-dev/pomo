@@ -62,6 +62,7 @@ public fun CrewScreen(
     loadJoinPreview: suspend (String) -> CrewJoinPreview?,
     onExportRecovery: () -> Unit,
     onImportRecovery: () -> Unit,
+    onOpenOwnStats: () -> Unit,
     initialJoinCode: String? = null,
     onInitialJoinCodeConsumed: () -> Unit = {},
 ) {
@@ -110,6 +111,7 @@ public fun CrewScreen(
                 onMemberHiddenChange = onMemberHiddenChange,
                 onExportRecovery = onExportRecovery,
                 onImportRecovery = onImportRecovery,
+                onOpenOwnStats = onOpenOwnStats,
             )
         }
     }

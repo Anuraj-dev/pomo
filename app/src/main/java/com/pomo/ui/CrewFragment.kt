@@ -20,8 +20,10 @@ import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
+import com.pomo.R
 import com.pomo.crew.CrewRankingMode
 import com.pomo.crew.CrewRepository
 import com.pomo.profile.ProfileStore
@@ -131,6 +133,9 @@ public class CrewFragment : Fragment() {
                     loadJoinPreview = { joinCode -> repository.previewJoin(joinCode) },
                     onExportRecovery = ::requestRecoveryExport,
                     onImportRecovery = ::requestRecoveryImport,
+                    onOpenOwnStats = {
+                        findNavController().navigate(R.id.navigation_stats)
+                    },
                     initialJoinCode = currentInitialJoinCode,
                     onInitialJoinCodeConsumed = { initialJoinCode.value = null },
                 )
