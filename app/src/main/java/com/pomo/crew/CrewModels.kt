@@ -64,11 +64,22 @@ public data class CrewBoardRow(
     val isInactive: Boolean = false,
 )
 
-public enum class CrewRankingMode {
-    Today,
-    SevenDays,
-    ThirtyDays,
-    AllTime,
+/**
+ * The window the leaderboard ranks over. [Day] covers any single past date; snapshots carry
+ * [CrewValidation.MAX_DAILY_AGGREGATES] days of history, so dates older than that rank as zero.
+ */
+public sealed interface CrewRankingMode {
+    public data object Today : CrewRankingMode
+
+    public data object Yesterday : CrewRankingMode
+
+    public data object SevenDays : CrewRankingMode
+
+    public data object ThirtyDays : CrewRankingMode
+
+    public data object AllTime : CrewRankingMode
+
+    public data class Day(val localDate: String) : CrewRankingMode
 }
 
 public data class CrewBoard(
