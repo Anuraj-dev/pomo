@@ -165,12 +165,34 @@ public class UtilPreferenceManager(context: Context) {
             prefs.edit().putString("daily_goal", sanitizeIntPreference("daily_goal", value, 8).toString()).apply()
         }
 
+    /**
+     * Epoch millis of the last foreground update check that reached a definitive online answer.
+     * 0 means "never checked". The foreground gate throttles to one check per 24h off this value.
+     */
+    public var lastUpdateCheckAt: Long
+        get() = prefs.getLong(LAST_UPDATE_CHECK_AT_KEY, 0L)
+        set(value) {
+            prefs.edit().putLong(LAST_UPDATE_CHECK_AT_KEY, value).apply()
+        }
+
+    /**
+     * True while at least one achievement has been earned that the member has not yet seen on the
+     * Achievements page. Drives the dot on the Profile tab; cleared when that page opens.
+     */
+    public var hasUnseenAchievement: Boolean
+        get() = prefs.getBoolean(ACHIEVEMENT_UNSEEN_KEY, false)
+        set(value) {
+            prefs.edit().putBoolean(ACHIEVEMENT_UNSEEN_KEY, value).apply()
+        }
+
     public companion object {
         public const val RING_SOUND_SYSTEM_ALARM: String = "system_alarm"
         public const val RING_SOUND_POMO_CUE: String = "pomo_cue"
 
         private const val PAIRING_PREFS_NAME: String = "pairing_prefs"
         private const val PAIRING_TOKEN_KEY: String = "pairing_token"
+        private const val LAST_UPDATE_CHECK_AT_KEY: String = "last_update_check_at"
+        private const val ACHIEVEMENT_UNSEEN_KEY: String = "achievement_unseen"
         private const val CREW_IDENTITY_PRIVATE_KEY: String = "crew_identity_private_key"
         private const val CREW_IDENTITY_PUBLIC_KEY: String = "crew_identity_public_key"
         private const val CREW_NOSTR_PRIVATE_KEY: String = "crew_nostr_private_key"

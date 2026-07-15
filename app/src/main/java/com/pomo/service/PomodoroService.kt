@@ -10,6 +10,8 @@ import android.content.Intent
 import android.os.*
 import android.util.Log
 import com.google.gson.Gson
+import com.pomo.achievements.AchievementCatalog
+import com.pomo.achievements.AchievementEvaluator
 import com.pomo.cues.CompletionCueFamily
 import com.pomo.cues.CuePreviewChannel
 import com.pomo.cues.CuePreviewOutcome
@@ -19,6 +21,8 @@ import com.pomo.cues.StateCueEvent
 import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneServer
+import com.pomo.notifications.AlertsNotifier
+import com.pomo.stats.StatsAggregator
 import com.pomo.timer.OfflineTimer
 import com.pomo.timer.TimerObserver
 import com.pomo.timer.TimerState
@@ -47,7 +51,13 @@ public class PomodoroService : Service(), TimerObserver {
     private var activePhoneServerPort: Int = PhoneServer.DEFAULT_PORT
     private lateinit var cueEngine: StateCueEngine
     private lateinit var crewRepository: CrewRepository
+    private lateinit var alertsNotifier: AlertsNotifier
     private val gson = Gson()
+
+    // Earned-achievement ids as of the last observation, seeded on start. Null until that first read
+    // completes, so a work block that races startup seeds the baseline instead of firing a
+    // notification for every already-earned tile.
+    private var knownEarnedIds: Set<String>? = null
 
     private var lastSavedState: TimerState? = null
 
@@ -93,7 +103,9 @@ public class PomodoroService : Service(), TimerObserver {
         crewRepository = CrewRepository(this)
         currentState.goal = prefs.dailyGoal
         notificationHelper = NotificationHelper(this)
+        alertsNotifier = AlertsNotifier(this)
         historyCacheRepository = HistoryCacheRepository(this)
+        seedAchievementBaseline()
 
         offlineTimer = OfflineTimer(this, prefs, historyCacheRepository, serviceScope)
         activePhoneServerPort = prefs.phoneServerPort
@@ -316,6 +328,7 @@ public class PomodoroService : Service(), TimerObserver {
         StateCueEvent.forCompletedPhase(completedPhase)?.let { cueEngine.playCompletion(it) }
         if (completedPhase == TimerState.PHASE_WORK) {
             publishCrewSnapshot("work block complete")
+            checkForNewAchievements()
         }
     }
 
@@ -323,6 +336,47 @@ public class PomodoroService : Service(), TimerObserver {
         // Partial skip minutes count toward Crew ranking, so refresh the snapshot now
         // rather than waiting for the next completed block (ADR-0002).
         publishCrewSnapshot("partial work block")
+        // Partial focus counts toward lifetime minutes too, so it can cross a Focus rung.
+        checkForNewAchievements()
+    }
+
+    private fun seedAchievementBaseline() {
+        serviceScope.launch(Dispatchers.IO) {
+            knownEarnedIds = currentEarnedIds()
+        }
+    }
+
+    private suspend fun currentEarnedIds(): Set<String> {
+        val snapshot = StatsAggregator.aggregate(
+            days = historyCacheRepository.getCachedDayStats(),
+            sessions = historyCacheRepository.getCachedSessions(),
+            dailyGoal = prefs.dailyGoal,
+            today = historyCacheRepository.getEffectiveDateString(),
+            nowMs = System.currentTimeMillis(),
+        )
+        return AchievementEvaluator.earnedOnly(snapshot).map { it.id }.toSet()
+    }
+
+    /**
+     * A work block just committed to Room. Diff the evaluator across the commit (ADR 0005 decision 8)
+     * and, for anything newly earned, post a quiet notification and light the Profile-tab dot.
+     */
+    private fun checkForNewAchievements() {
+        serviceScope.launch(Dispatchers.IO) {
+            val nowEarned = currentEarnedIds()
+            val previous = knownEarnedIds
+            knownEarnedIds = nowEarned
+            // Baseline not yet established: this read becomes the baseline, nothing is "new" yet.
+            if (previous == null) return@launch
+            val newly = nowEarned - previous
+            if (newly.isEmpty()) return@launch
+            prefs.hasUnseenAchievement = true
+            AchievementCatalog.all
+                .filter { it.id in newly }
+                .forEach { alertsNotifier.notifyAchievement(it) }
+            // Nudge any foreground UI so the Profile-tab dot appears now, not on the next resume.
+            sendBroadcast(Intent("com.pomo.STATE_UPDATE"))
+        }
     }
 
     private fun broadcastStateUpdate() {
