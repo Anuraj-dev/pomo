@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pomo.achievements.Achievement
 import com.pomo.crew.CrewValidation
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
@@ -51,7 +52,11 @@ public fun ProfileScreen(
     lifetimeFocusMinutes: Int,
     currentStreak: Int,
     blocks: Int,
+    achievementHighlights: List<Achievement>,
+    achievementsEarned: Int,
+    achievementsTotal: Int,
     onDisplayNameChange: (String) -> Unit,
+    onOpenAchievements: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
     val scroll = rememberScrollState()
@@ -83,6 +88,14 @@ public fun ProfileScreen(
             currentStreak = currentStreak,
             blocks = blocks,
         )
+
+        AchievementHighlightsRow(
+            highlights = achievementHighlights,
+            earnedCount = achievementsEarned,
+            total = achievementsTotal,
+            onClick = onOpenAchievements,
+        )
+        Hairline()
 
         SettingsRow(onOpenSettings = onOpenSettings)
     }

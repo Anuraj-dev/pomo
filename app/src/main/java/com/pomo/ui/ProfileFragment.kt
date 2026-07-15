@@ -17,6 +17,8 @@ import androidx.navigation.fragment.findNavController
 import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.R
+import com.pomo.achievements.AchievementCatalog
+import com.pomo.achievements.AchievementEvaluator
 import com.pomo.crew.CrewIdentityStore
 import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
@@ -99,6 +101,12 @@ public class ProfileFragment : Fragment() {
                         lifetimeFocusMinutes = snapshot.lifetime.focusMinutes,
                         currentStreak = snapshot.habit.currentStreak,
                         blocks = snapshot.lifetime.sessions,
+                        achievementHighlights = AchievementEvaluator.highlights(snapshot),
+                        achievementsEarned = AchievementEvaluator.earnedCount(snapshot),
+                        achievementsTotal = AchievementCatalog.size,
+                        onOpenAchievements = {
+                            findNavController().navigate(R.id.navigation_achievements)
+                        },
                         onDisplayNameChange = { requested ->
                             profileStore.updateDisplayName(requested)?.let { saved ->
                                 name = saved
