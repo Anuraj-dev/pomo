@@ -140,6 +140,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                         sharedPreferences = prefs,
                         items = items,
                         showUpdateSection = BuildConfig.APPLICATION_ID == "com.pomo",
+                        onBack = { findNavController().popBackStack() },
                     )
 
                     pairingDialog.value?.let { data ->
