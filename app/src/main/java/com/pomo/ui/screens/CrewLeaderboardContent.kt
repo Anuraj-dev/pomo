@@ -84,6 +84,7 @@ internal fun CrewBoardContent(
     onMemberHiddenChange: (String, Boolean) -> Unit,
     onExportRecovery: () -> Unit,
     onImportRecovery: () -> Unit,
+    onOpenOwnStats: () -> Unit,
 ) {
     var showManage by remember { mutableStateOf(false) }
     var selectedMember by remember { mutableStateOf<CrewBoardRow?>(null) }
@@ -223,7 +224,10 @@ internal fun CrewBoardContent(
             rankingMode = board.rankingMode,
             onDismiss = { selectedMember = null },
             onViewStats = {
-                statsMember = row
+                // Your own stats live in Room at full fidelity. CrewMemberStatsScreen can only
+                // rebuild them from the snapshot you published, which is lossy and can disagree
+                // with the Stats tab, so send yourself to the real thing.
+                if (row.isSelf) onOpenOwnStats() else statsMember = row
                 selectedMember = null
             },
             onHide = { pendingHide = row },
