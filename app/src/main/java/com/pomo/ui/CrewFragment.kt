@@ -137,7 +137,9 @@ public class CrewFragment : Fragment() {
                         onExportRecovery = ::requestRecoveryExport,
                         onImportRecovery = ::requestRecoveryImport,
                         onOpenOwnStats = {
-                            findNavController().navigate(R.id.navigation_stats)
+                            val navController = findNavController()
+                            navController.popBackStack(R.id.navigation_timer, false)
+                            navController.navigate(R.id.navigation_stats)
                         },
                         initialJoinCode = currentInitialJoinCode,
                         onInitialJoinCodeConsumed = { initialJoinCode.value = null },
