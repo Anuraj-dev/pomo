@@ -600,14 +600,14 @@ private fun MemberDetailSheet(
                 StatTile(activeDays.toString(), "ACTIVE DAYS", Modifier.weight(1f))
                 StatTile(blocks.toString(), "BLOCKS", Modifier.weight(1f))
             }
-            if (!row.isSelf && self != null) {
-                MemberComparisons(row, self, rankingMode)
-            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PomoButton(onClick = onViewStats, modifier = Modifier.weight(1f)) { Text("View stats") }
                 if (!row.isSelf) {
                     PomoButton(onClick = onHide, variant = PomoButtonVariant.Ghost) { Text("Hide") }
                 }
+            }
+            if (!row.isSelf && self != null) {
+                MemberComparisons(row, self, rankingMode)
             }
             Spacer(Modifier.height(20.dp))
         }
