@@ -83,6 +83,7 @@ public object CrewLeaderboardAggregator {
             rank = rank,
             identityPublicKey = snapshot.identityPublicKey,
             displayName = snapshot.displayName,
+            avatarBase64 = snapshot.avatarBase64,
             allTimeFocusMinutes = snapshot.allTimeFocusMinutes,
             todayFocusMinutes = todayMinutes,
             sevenDayFocusMinutes = sevenDayMinutes,

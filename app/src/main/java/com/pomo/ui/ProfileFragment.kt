@@ -11,6 +11,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -24,6 +25,7 @@ import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.profile.KeyFingerprint
 import com.pomo.profile.ProfileStore
+import com.pomo.profile.AvatarStore
 import com.pomo.stats.StatsAggregator
 import com.pomo.stats.StatsSnapshot
 import com.pomo.ui.screens.ProfileScreen
@@ -41,6 +43,24 @@ import kotlinx.coroutines.withContext
 
 public class ProfileFragment : Fragment() {
     private val displayName = mutableStateOf("")
+    private val avatar = mutableStateOf<String?>(null)
+    private lateinit var avatarStore: AvatarStore
+
+    private val avatarPicker =
+        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+            if (uri == null) return@registerForActivityResult
+            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                val encoded = avatarStore.importImage(requireContext(), uri)
+                withContext(Dispatchers.Main) {
+                    if (encoded != null) {
+                        avatar.value = encoded
+                        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                            CrewRepository(requireContext()).publishCurrentSnapshot()
+                        }
+                    }
+                }
+            }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -58,9 +78,11 @@ public class ProfileFragment : Fragment() {
     ): View {
         val ctx = requireContext()
         val profileStore = ProfileStore(ctx)
+        avatarStore = AvatarStore(ctx)
         val repo = HistoryCacheRepository(ctx)
 
         displayName.value = profileStore.displayName()
+        avatar.value = avatarStore.encoded()
 
         val snapshotFlow: Flow<StatsSnapshot> =
             combine(
@@ -83,6 +105,7 @@ public class ProfileFragment : Fragment() {
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
                     var name by displayName
+                    val currentAvatar by avatar
 
                     // Asking for the public key mints the identity if there isn't one, which means
                     // Keystore crypto and a synchronous commit(). A member who has never opened
@@ -97,6 +120,7 @@ public class ProfileFragment : Fragment() {
 
                     ProfileScreen(
                         displayName = name,
+                        avatarBase64 = currentAvatar,
                         keyFingerprint = fingerprint,
                         lifetimeFocusMinutes = snapshot.lifetime.focusMinutes,
                         currentStreak = snapshot.habit.currentStreak,
@@ -116,6 +140,14 @@ public class ProfileFragment : Fragment() {
                                 viewLifecycleOwner.lifecycleScope.launch {
                                     CrewRepository(ctx).updateDisplayName(saved)
                                 }
+                            }
+                        },
+                        onAvatarPick = { avatarPicker.launch("image/*") },
+                        onAvatarRemove = {
+                            avatarStore.clear()
+                            avatar.value = null
+                            viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
+                                CrewRepository(ctx).publishCurrentSnapshot()
                             }
                         },
                         onOpenSettings = {

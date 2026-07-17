@@ -60,6 +60,7 @@ import com.pomo.crew.CrewValidation
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.PomoSheet
+import com.pomo.ui.components.Avatar
 import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.components.SegmentedToggle
 import com.pomo.ui.components.SegmentedToggleOption
@@ -513,6 +514,12 @@ private fun CrewRow(
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,
         )
+        Avatar(
+            avatarBase64 = row.avatarBase64,
+            displayName = row.displayName,
+            size = 34.dp,
+        )
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (row.isSelf) "$displayLabel · YOU" else displayLabel,

@@ -10,6 +10,7 @@ import com.pomo.db.AppDatabase
 import com.pomo.db.CrewDailyAggregateEntity
 import com.pomo.db.CrewHiddenMemberEntity
 import com.pomo.db.CrewSnapshotEntity
+import com.pomo.profile.AvatarStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,6 +25,7 @@ public class BackupRepository(context: Context) {
     private val crewDao = database.crewDao()
     private val crewStore = CrewStore(appContext)
     private val identityStore = CrewIdentityStore(appContext)
+    private val avatarStore = AvatarStore(appContext)
 
     public suspend fun export(): PomoBackup =
         withContext(Dispatchers.IO) {
@@ -58,6 +60,7 @@ public class BackupRepository(context: Context) {
                         // Reading the identity mints one on a device that has never had it. Only ask for it
                         // when there is a crew it could belong to, so exporting stays free of side effects.
                         identityPrivateKey = if (memberships.isEmpty()) "" else identityStore.identity().privateKey,
+                        profileAvatarBase64 = avatarStore.encoded(),
                         activeCrewId = crewStore.activeCrewId(),
                         memberships =
                             memberships.map { membership ->
@@ -77,6 +80,7 @@ public class BackupRepository(context: Context) {
                                     crewId = snapshot.crewId,
                                     identityPublicKey = snapshot.identityPublicKey,
                                     displayName = snapshot.displayName,
+                                    avatarBase64 = snapshot.avatarBase64,
                                     allTimeFocusMinutes = snapshot.allTimeFocusMinutes,
                                     publishedAtEpochSeconds = snapshot.publishedAtEpochSeconds,
                                     localDate = snapshot.localDate,
@@ -147,6 +151,7 @@ public class BackupRepository(context: Context) {
             if (identityRestored) {
                 identityStore.replaceIdentity(backup.crew.identityPrivateKey)
             }
+            if (!hadMemberships) avatarStore.restore(backup.crew.profileAvatarBase64)
 
             val membershipsAdded =
                 crewStore.mergeMemberships(
@@ -172,6 +177,7 @@ public class BackupRepository(context: Context) {
                             crewId = snapshot.crewId,
                             identityPublicKey = snapshot.identityPublicKey,
                             displayName = snapshot.displayName,
+                            avatarBase64 = snapshot.avatarBase64,
                             allTimeFocusMinutes = snapshot.allTimeFocusMinutes,
                             publishedAtEpochSeconds = snapshot.publishedAtEpochSeconds,
                             localDate = snapshot.localDate,

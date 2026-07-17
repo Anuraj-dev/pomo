@@ -21,6 +21,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,6 +39,7 @@ import com.pomo.crew.CrewValidation
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.PomoDialog
+import com.pomo.ui.components.Avatar
 import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoTokens
 
@@ -48,6 +50,7 @@ import com.pomo.ui.theme.PomoTokens
 @Composable
 public fun ProfileScreen(
     displayName: String,
+    avatarBase64: String?,
     keyFingerprint: String,
     lifetimeFocusMinutes: Int,
     currentStreak: Int,
@@ -56,6 +59,8 @@ public fun ProfileScreen(
     achievementsEarned: Int,
     achievementsTotal: Int,
     onDisplayNameChange: (String) -> Unit,
+    onAvatarPick: () -> Unit,
+    onAvatarRemove: () -> Unit,
     onOpenAchievements: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -79,8 +84,11 @@ public fun ProfileScreen(
         Spacer(Modifier.height(20.dp))
         IdentityHeader(
             displayName = displayName,
+            avatarBase64 = avatarBase64,
             keyFingerprint = keyFingerprint,
             onEdit = { editing = true },
+            onAvatarPick = onAvatarPick,
+            onAvatarRemove = onAvatarRemove,
         )
 
         Spacer(Modifier.height(28.dp))
@@ -116,8 +124,11 @@ public fun ProfileScreen(
 @Composable
 private fun IdentityHeader(
     displayName: String,
+    avatarBase64: String?,
     keyFingerprint: String,
     onEdit: () -> Unit,
+    onAvatarPick: () -> Unit,
+    onAvatarRemove: () -> Unit,
 ) {
     val named = displayName.isNotBlank()
 
@@ -129,7 +140,12 @@ private fun IdentityHeader(
                 .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LetterTile(displayName = displayName)
+        Avatar(
+            avatarBase64 = avatarBase64,
+            displayName = displayName,
+            size = 52.dp,
+            modifier = Modifier.clickable(onClick = onAvatarPick),
+        )
         Spacer(Modifier.width(14.dp))
         Column {
             Text(
@@ -151,30 +167,18 @@ private fun IdentityHeader(
                     color = PomoTokens.colors.onSurfaceFaint,
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onAvatarPick) {
+                    Text(if (avatarBase64 == null) "Add photo" else "Change photo")
+                }
+                if (avatarBase64 != null) {
+                    TextButton(onClick = onAvatarRemove) { Text("Remove") }
+                }
+            }
         }
     }
 }
 
-/** No avatars: the tile is generated from the name, so nothing has to be picked, stored, or sent. */
-@Composable
-private fun LetterTile(displayName: String) {
-    val initial = displayName.trim().firstOrNull()?.uppercase() ?: "?"
-
-    Box(
-        modifier =
-            Modifier
-                .size(52.dp)
-                .background(PomoTokens.colors.accent, RoundedCornerShape(14.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initial,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-        )
-    }
-}
 
 @Composable
 private fun StatStrip(

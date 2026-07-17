@@ -3,6 +3,7 @@ package com.pomo.crew
 import android.content.Context
 import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.profile.AvatarStore
 import com.pomo.stats.StatsAggregator
 import com.pomo.timer.TimerState
 import com.pomo.util.DateLogic
@@ -22,6 +23,7 @@ public class CrewRepository(context: Context) {
     private val historyRepository = HistoryCacheRepository(appContext)
     private val crewStore = CrewStore(appContext)
     private val relayStore = LocalCrewRelayStore(appContext)
+    private val avatarStore = AvatarStore(appContext)
 
     public fun identity(): CrewIdentity = identityStore.identity()
 
@@ -276,6 +278,7 @@ public class CrewRepository(context: Context) {
                 crewId = membership.crewId,
                 identityPublicKey = identity.publicKey,
                 displayName = membership.displayName,
+                avatarBase64 = avatarStore.encoded(),
                 allTimeFocusMinutes = focusMinutes,
                 publishedAtEpochSeconds = nowSeconds,
                 localDate = today,

@@ -4,6 +4,7 @@ import java.text.BreakIterator
 import java.text.Normalizer
 import java.time.LocalDate
 import java.util.Locale
+import java.util.Base64
 
 public object CrewValidation {
     public const val MAX_DISPLAY_NAME_GRAPHEMES: Int = 24
@@ -11,6 +12,7 @@ public object CrewValidation {
     public const val MAX_DAILY_AGGREGATES: Int = 30
     public const val MAX_RELAYS: Int = 8
     public const val MAX_SNAPSHOT_BYTES: Int = 32 * 1024
+    public const val MAX_AVATAR_BYTES: Int = 10 * 1024
 
     /**
      * Days of dense daily history a snapshot may carry in [CrewStatsExtras]. Covers the 12-week
@@ -29,6 +31,7 @@ public object CrewValidation {
         if (!isLowerHex(snapshot.crewId, expectedLength = 32)) return false
         if (!isLowerHex(snapshot.identityPublicKey, expectedLength = 64)) return false
         if (normalizeDisplayName(snapshot.displayName) != snapshot.displayName) return false
+        if (!isValidAvatar(snapshot.avatarBase64)) return false
         if (snapshot.allTimeFocusMinutes < 0 || snapshot.currentStreak < 0) return false
         if (snapshot.publishedAtEpochSeconds <= 0L || snapshot.lastFocusedAtEpochSeconds < 0L) return false
         if (snapshot.utcOffsetMinutes !in MIN_UTC_OFFSET_MINUTES..MAX_UTC_OFFSET_MINUTES) return false
@@ -45,6 +48,12 @@ public object CrewValidation {
         }
         if (snapshot.dailyAggregates != snapshot.dailyAggregates.sortedByDescending { it.localDate }) return false
         return isValidStatsExtras(snapshot.stats)
+    }
+
+    private fun isValidAvatar(value: String?): Boolean {
+        if (value == null) return true
+        if (value.isBlank()) return false
+        return runCatching { Base64.getDecoder().decode(value).size <= MAX_AVATAR_BYTES }.getOrDefault(false)
     }
 
     /**
