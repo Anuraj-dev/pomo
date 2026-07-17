@@ -1,5 +1,6 @@
 package com.pomo.crew
 
+import android.graphics.BitmapFactory
 import java.text.BreakIterator
 import java.text.Normalizer
 import java.time.LocalDate
@@ -13,6 +14,7 @@ public object CrewValidation {
     public const val MAX_RELAYS: Int = 8
     public const val MAX_SNAPSHOT_BYTES: Int = 32 * 1024
     public const val MAX_AVATAR_BYTES: Int = 10 * 1024
+    public const val MAX_AVATAR_DIMENSION: Int = 1024
 
     /**
      * Days of dense daily history a snapshot may carry in [CrewStatsExtras]. Covers the 12-week
@@ -53,7 +55,13 @@ public object CrewValidation {
     private fun isValidAvatar(value: String?): Boolean {
         if (value == null) return true
         if (value.isBlank()) return false
-        return runCatching { Base64.getDecoder().decode(value).size <= MAX_AVATAR_BYTES }.getOrDefault(false)
+        return runCatching {
+            val bytes = Base64.getDecoder().decode(value)
+            if (bytes.size > MAX_AVATAR_BYTES) return@runCatching false
+            val options = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+            BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+            options.outWidth <= MAX_AVATAR_DIMENSION && options.outHeight <= MAX_AVATAR_DIMENSION
+        }.getOrDefault(false)
     }
 
     /**

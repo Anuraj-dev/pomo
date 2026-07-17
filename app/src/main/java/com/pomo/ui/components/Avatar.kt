@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
+import com.pomo.crew.CrewValidation
 import com.pomo.ui.theme.PomoTokens
 
 @Composable
@@ -33,7 +34,12 @@ public fun Avatar(
             avatarBase64?.let {
                 runCatching {
                     val bytes = Base64.decode(it, Base64.DEFAULT)
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    val sample =
+                        calculateSampleSize(bounds.outWidth, bounds.outHeight, CrewValidation.MAX_AVATAR_DIMENSION)
+                    val options = BitmapFactory.Options().apply { inSampleSize = sample }
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                 }
                     .getOrNull()
             }
@@ -58,4 +64,16 @@ public fun Avatar(
             )
         }
     }
+}
+
+private fun calculateSampleSize(
+    width: Int,
+    height: Int,
+    maxDim: Int,
+): Int {
+    var sample = 1
+    while (width / sample > maxDim || height / sample > maxDim) {
+        sample *= 2
+    }
+    return sample
 }
