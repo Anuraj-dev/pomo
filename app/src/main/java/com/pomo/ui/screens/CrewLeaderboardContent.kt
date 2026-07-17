@@ -57,10 +57,10 @@ import com.pomo.crew.CrewBoard
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewRankingMode
 import com.pomo.crew.CrewValidation
+import com.pomo.ui.components.Avatar
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.PomoSheet
-import com.pomo.ui.components.Avatar
 import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.components.SegmentedToggle
 import com.pomo.ui.components.SegmentedToggleOption

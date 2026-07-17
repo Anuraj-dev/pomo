@@ -30,7 +30,10 @@ public class AvatarStore(context: Context) {
     }
 
     /** Compresses a picked image and persists its transport-safe Base64 representation. */
-    public fun importImage(context: Context, uri: Uri): String? {
+    public fun importImage(
+        context: Context,
+        uri: Uri,
+    ): String? {
         val bytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() } ?: return null
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
@@ -71,7 +74,10 @@ public class AvatarStore(context: Context) {
         )
     }
 
-    private fun calculateSample(width: Int, height: Int): Int {
+    private fun calculateSample(
+        width: Int,
+        height: Int,
+    ): Int {
         var sample = 1
         while (max(width / sample, height / sample) > MAX_DECODE_DIMENSION) sample *= 2
         return sample

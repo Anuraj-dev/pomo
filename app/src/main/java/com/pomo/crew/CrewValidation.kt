@@ -3,8 +3,8 @@ package com.pomo.crew
 import java.text.BreakIterator
 import java.text.Normalizer
 import java.time.LocalDate
-import java.util.Locale
 import java.util.Base64
+import java.util.Locale
 
 public object CrewValidation {
     public const val MAX_DISPLAY_NAME_GRAPHEMES: Int = 24

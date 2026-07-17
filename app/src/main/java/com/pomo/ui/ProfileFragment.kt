@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -11,7 +12,6 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -23,9 +23,9 @@ import com.pomo.achievements.AchievementEvaluator
 import com.pomo.crew.CrewIdentityStore
 import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.profile.AvatarStore
 import com.pomo.profile.KeyFingerprint
 import com.pomo.profile.ProfileStore
-import com.pomo.profile.AvatarStore
 import com.pomo.stats.StatsAggregator
 import com.pomo.stats.StatsSnapshot
 import com.pomo.ui.screens.ProfileScreen

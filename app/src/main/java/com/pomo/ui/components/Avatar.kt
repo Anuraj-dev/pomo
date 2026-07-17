@@ -28,15 +28,16 @@ public fun Avatar(
     size: Dp,
     modifier: Modifier = Modifier,
 ) {
-    val bitmap = remember(avatarBase64) {
-        avatarBase64?.let {
-            runCatching {
-                val bytes = Base64.decode(it, Base64.DEFAULT)
-                BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    val bitmap =
+        remember(avatarBase64) {
+            avatarBase64?.let {
+                runCatching {
+                    val bytes = Base64.decode(it, Base64.DEFAULT)
+                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                }
+                    .getOrNull()
             }
-                .getOrNull()
         }
-    }
     Box(
         modifier = modifier.size(size).clip(CircleShape).background(PomoTokens.colors.accent),
         contentAlignment = Alignment.Center,
