@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
@@ -44,14 +43,16 @@ public fun HourBarChart24(
     val description = rhythmCaption(rhythm)
 
     Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .semantics { contentDescription = "Hour of day chart. $description" },
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .semantics { contentDescription = "Hour of day chart. $description" },
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(140.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(140.dp),
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
@@ -75,11 +76,12 @@ public fun HourBarChart24(
                     val barH = if (rhythm.buckets[hr] == 0) minBarH else (minBarH + frac * (maxBarH - minBarH))
                     val left = hr * (barW + gapPx)
                     val top = baseline - barH
-                    val color = when {
-                        rhythm.buckets[hr] == 0 -> outline
-                        peak == hr -> signal
-                        else -> muted
-                    }
+                    val color =
+                        when {
+                            rhythm.buckets[hr] == 0 -> outline
+                            peak == hr -> signal
+                            else -> muted
+                        }
                     drawRoundRect(
                         color = color,
                         topLeft = Offset(left, top),
@@ -111,22 +113,24 @@ internal fun rhythmCaption(rhythm: HourRhythm): String {
     // captioned "scattered". The period is derived straight from the peak hour.
     val peak = rhythm.peakHour ?: return "Not enough data yet"
     val hourLabel = formatHour(peak)
-    val period = when (peak) {
-        in 5..11 -> "morning focus"
-        in 12..16 -> "afternoon focus"
-        in 17..20 -> "evening focus"
-        else -> "late-night focus"
-    }
+    val period =
+        when (peak) {
+            in 5..11 -> "morning focus"
+            in 12..16 -> "afternoon focus"
+            in 17..20 -> "evening focus"
+            else -> "late-night focus"
+        }
     return "Peak $hourLabel — $period"
 }
 
 private fun formatHour(h: Int): String {
     val period = if (h < 12) "am" else "pm"
-    val twelve = when {
-        h == 0 -> 12
-        h > 12 -> h - 12
-        else -> h
-    }
+    val twelve =
+        when {
+            h == 0 -> 12
+            h > 12 -> h - 12
+            else -> h
+        }
     return "$twelve$period"
 }
 

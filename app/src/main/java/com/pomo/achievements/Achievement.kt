@@ -42,11 +42,12 @@ public data class Achievement(
      */
     public fun isEarnedBy(snapshot: StatsSnapshot): Boolean = currentValue(snapshot) >= threshold
 
-    private fun currentValue(snapshot: StatsSnapshot): Int = when (axis) {
-        AchievementAxis.Focus -> snapshot.lifetime.focusMinutes
-        AchievementAxis.Streak -> snapshot.records.longestStreak
-        AchievementAxis.BestDay -> snapshot.records.bestDay?.minutes ?: 0
-        AchievementAxis.Milestone ->
-            if (snapshot.lifetime.focusMinutes > 0 || snapshot.lifetime.sessions > 0) 1 else 0
-    }
+    private fun currentValue(snapshot: StatsSnapshot): Int =
+        when (axis) {
+            AchievementAxis.Focus -> snapshot.lifetime.focusMinutes
+            AchievementAxis.Streak -> snapshot.records.longestStreak
+            AchievementAxis.BestDay -> snapshot.records.bestDay?.minutes ?: 0
+            AchievementAxis.Milestone ->
+                if (snapshot.lifetime.focusMinutes > 0 || snapshot.lifetime.sessions > 0) 1 else 0
+        }
 }

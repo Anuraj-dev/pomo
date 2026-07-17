@@ -18,7 +18,6 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 public class UtilPreferenceManagerTest {
-
     private lateinit var prefs: UtilPreferenceManager
 
     @Before
@@ -191,15 +190,16 @@ public class UtilPreferenceManagerTest {
 
     @Test
     public fun timerState_savesAndLoads() {
-        val state = TimerState().apply {
-            status = TimerState.STATUS_RUNNING
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1234.0
-            completed = 3
-            goal = 10
-            date = "2026-05-07"
-        }
+        val state =
+            TimerState().apply {
+                status = TimerState.STATUS_RUNNING
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1234.0
+                completed = 3
+                goal = 10
+                date = "2026-05-07"
+            }
         prefs.saveTimerState(state)
         val loaded = prefs.loadTimerState()
         assertNotNull(loaded)

@@ -53,8 +53,7 @@ internal class CrewSecretCipher {
         return generator.generateKey()
     }
 
-    private fun encode(bytes: ByteArray): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    private fun encode(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
     private fun decode(value: String): ByteArray = Base64.getUrlDecoder().decode(value)
 

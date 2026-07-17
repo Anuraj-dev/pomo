@@ -16,6 +16,7 @@ public data class CrewSnapshotEntity(
     val crewId: String,
     val identityPublicKey: String,
     val displayName: String,
+    val avatarBase64: String? = null,
     val allTimeFocusMinutes: Int,
     val publishedAtEpochSeconds: Long,
     val localDate: String,

@@ -12,10 +12,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import com.pomo.ui.theme.PomoSpacing
 import com.pomo.ui.theme.PomoTokens
-import androidx.compose.ui.unit.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -30,20 +30,22 @@ public fun PomoDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false),
     ) {
         Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = PomoSpacing.Lg)
-                .widthIn(max = 360.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = PomoSpacing.Lg)
+                    .widthIn(max = 360.dp),
             shape = MaterialTheme.shapes.large,
             color = PomoTokens.colors.surfaceElevated,
         ) {
             Column(
-                modifier = Modifier.padding(
-                    start = PomoSpacing.Xl,
-                    top = PomoSpacing.Lg,
-                    end = PomoSpacing.Xl,
-                    bottom = PomoSpacing.M,
-                ),
+                modifier =
+                    Modifier.padding(
+                        start = PomoSpacing.Xl,
+                        top = PomoSpacing.Lg,
+                        end = PomoSpacing.Xl,
+                        bottom = PomoSpacing.M,
+                    ),
                 verticalArrangement = Arrangement.spacedBy(PomoSpacing.M),
             ) {
                 title()

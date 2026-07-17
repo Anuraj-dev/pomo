@@ -7,7 +7,6 @@ package com.pomo.profile
  * identifies; it does not authenticate — a member is still only as real as their signature.
  */
 public object KeyFingerprint {
-
     private const val GROUP: Int = 4
     private const val GROUPS: Int = 2
     private const val SEPARATOR: String = " · "

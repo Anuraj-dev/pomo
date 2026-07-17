@@ -10,7 +10,6 @@ import java.util.Calendar
 import java.util.Locale
 
 public class HistoryCacheRepository(context: Context) {
-
     public companion object {
         private const val TAG: String = "HistoryCacheRepo"
     }
@@ -28,40 +27,42 @@ public class HistoryCacheRepository(context: Context) {
 
     public suspend fun getCachedSessions(): List<SessionEntity> = dao.getAllSessionsSnapshot()
 
-    public suspend fun getHistoryPayload(): Map<String, ServerDayEntry> = withContext(Dispatchers.IO) {
-        val days = dao.getAllDayStatsSnapshot()
-        val sessionsByDate = if (days.isEmpty()) {
-            emptyMap()
-        } else {
-            // Chunk dates to avoid SQLite's 999 parameter limit on older Android builds
-            days.map { it.date }
-                .chunked(500)
-                .flatMap { chunk -> dao.getSessionsForDates(chunk) }
-                .groupBy { it.date }
-        }
+    public suspend fun getHistoryPayload(): Map<String, ServerDayEntry> =
+        withContext(Dispatchers.IO) {
+            val days = dao.getAllDayStatsSnapshot()
+            val sessionsByDate =
+                if (days.isEmpty()) {
+                    emptyMap()
+                } else {
+                    // Chunk dates to avoid SQLite's 999 parameter limit on older Android builds
+                    days.map { it.date }
+                        .chunked(500)
+                        .flatMap { chunk -> dao.getSessionsForDates(chunk) }
+                        .groupBy { it.date }
+                }
 
-        days.associate { day ->
-            day.date to ServerDayEntry(
-                completed = day.completed,
-                work_minutes = day.workMinutes,
-                break_minutes = day.breakMinutes,
-                sessions = sessionsByDate[day.date].orEmpty().map {
-                    ServerSession(
-                        type = it.type,
-                        start = it.start,
-                        duration = it.duration,
-                        completed = it.completed,
+            days.associate { day ->
+                day.date to
+                    ServerDayEntry(
+                        completed = day.completed,
+                        work_minutes = day.workMinutes,
+                        break_minutes = day.breakMinutes,
+                        sessions =
+                            sessionsByDate[day.date].orEmpty().map {
+                                ServerSession(
+                                    type = it.type,
+                                    start = it.start,
+                                    duration = it.duration,
+                                    completed = it.completed,
+                                )
+                            },
                     )
-                },
-            )
+            }
         }
-    }
 
-    public suspend fun getSessionsForDate(date: String): List<SessionEntity> =
-        dao.getSessionsForDate(date)
+    public suspend fun getSessionsForDate(date: String): List<SessionEntity> = dao.getSessionsForDate(date)
 
-    public fun observeSessionsForDate(date: String): Flow<List<SessionEntity>> =
-        dao.getSessionsForDateFlow(date)
+    public fun observeSessionsForDate(date: String): Flow<List<SessionEntity>> = dao.getSessionsForDateFlow(date)
 
     public fun observeAllSessions(): Flow<List<SessionEntity>> = dao.getAllSessionsFlow()
 
@@ -69,14 +70,15 @@ public class HistoryCacheRepository(context: Context) {
         val segments = splitSessionByCalendarDay(session)
         segments.forEachIndexed { index, segment ->
             val segmentCompleted = session.completed && index == 0
-            val entity = SessionEntity(
-                start = segment.start,
-                date = segment.date,
-                type = session.type,
-                duration = segment.duration,
-                completed = segmentCompleted,
-                synced = true,
-            )
+            val entity =
+                SessionEntity(
+                    start = segment.start,
+                    date = segment.date,
+                    type = session.type,
+                    duration = segment.duration,
+                    completed = segmentCompleted,
+                    synced = true,
+                )
             dao.insertSessionWithDayStats(
                 date = segment.date,
                 session = entity,
@@ -92,8 +94,7 @@ public class HistoryCacheRepository(context: Context) {
         return dao.getTodayCompletedCount(date)
     }
 
-    public suspend fun getCompletedCountForDate(date: String): Int =
-        dao.getTodayCompletedCount(date)
+    public suspend fun getCompletedCountForDate(date: String): Int = dao.getTodayCompletedCount(date)
 
     public fun getEffectiveDateString(): String {
         val calendar = java.util.Calendar.getInstance()
@@ -115,11 +116,12 @@ public class HistoryCacheRepository(context: Context) {
             val nextMidnight = nextLocalMidnightEpochSecond(segmentStart)
             val segmentEnd = minOf(endExclusive, nextMidnight)
             val seconds = (segmentEnd - segmentStart).coerceAtLeast(0)
-            segments += SessionSegment(
-                start = segmentStart,
-                date = dateForEpochSecond(segmentStart),
-                duration = ceilSecondsToMinutes(seconds) * 60,
-            )
+            segments +=
+                SessionSegment(
+                    start = segmentStart,
+                    date = dateForEpochSecond(segmentStart),
+                    duration = ceilSecondsToMinutes(seconds) * 60,
+                )
             segmentStart = segmentEnd
         }
         return segments
@@ -131,14 +133,15 @@ public class HistoryCacheRepository(context: Context) {
     }
 
     private fun nextLocalMidnightEpochSecond(epochSecond: Long): Long {
-        val calendar = Calendar.getInstance().apply {
-            timeInMillis = epochSecond * 1000L
-            add(Calendar.DAY_OF_YEAR, 1)
-            set(Calendar.HOUR_OF_DAY, 0)
-            set(Calendar.MINUTE, 0)
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-        }
+        val calendar =
+            Calendar.getInstance().apply {
+                timeInMillis = epochSecond * 1000L
+                add(Calendar.DAY_OF_YEAR, 1)
+                set(Calendar.HOUR_OF_DAY, 0)
+                set(Calendar.MINUTE, 0)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
         return calendar.timeInMillis / 1000L
     }
 
@@ -169,5 +172,4 @@ public class HistoryCacheRepository(context: Context) {
         val date: String,
         val duration: Int,
     )
-
 }

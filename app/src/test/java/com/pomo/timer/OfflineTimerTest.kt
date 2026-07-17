@@ -20,13 +20,14 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 public class OfflineTimerTest {
-
     private class RecordingObserver : TimerObserver {
         public val updates: MutableList<TimerState> = mutableListOf()
         public val completions: MutableList<TimerState> = mutableListOf()
+
         override fun onTimerUpdate(state: TimerState) {
             updates += state.copy()
         }
+
         override fun onTimerComplete(state: TimerState) {
             completions += state.copy()
         }
@@ -59,12 +60,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun toggle_fromStopped_startsRunning() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1500.0
-            status = TimerState.STATUS_STOPPED
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1500.0
+                status = TimerState.STATUS_STOPPED
+            }
         timer.updateState(initial)
 
         timer.toggle()
@@ -75,12 +77,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun toggle_fromRunning_pauses() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1000.0
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1000.0
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
         observer.updates.clear()
 
@@ -91,11 +94,12 @@ public class OfflineTimerTest {
 
     @Test
     public fun skip_workToShortBreak_swapsPhase() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 800.0
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 800.0
+            }
         timer.updateState(initial)
 
         timer.skip()
@@ -111,11 +115,12 @@ public class OfflineTimerTest {
 
     @Test
     public fun skip_breakToWork_swapsPhase() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_SHORT
-            duration = 300.0
-            remaining = 100.0
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_SHORT
+                duration = 300.0
+                remaining = 100.0
+            }
         timer.updateState(initial)
 
         timer.skip()
@@ -128,12 +133,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun skip_workWithCompletedThreeAndLongBreakAfterFour_predictsLongBreakNext() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1500.0
-            completed = 3
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1500.0
+                completed = 3
+            }
         timer.updateState(initial)
 
         timer.skip()
@@ -145,12 +151,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun reset_restoresRemainingToDuration() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 200.0
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 200.0
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
 
         timer.reset()
@@ -162,12 +169,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun extend_runningWork_addsSecondsToDurationAndRemaining() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1000.0
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1000.0
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
 
         timer.extend(300)
@@ -178,14 +186,15 @@ public class OfflineTimerTest {
 
     @Test
     public fun extend_doesNotChangeCompletedPhaseOrNextPhase() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1000.0
-            completed = 3
-            next_phase = TimerState.PHASE_LONG
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1000.0
+                completed = 3
+                next_phase = TimerState.PHASE_LONG
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
 
         timer.extend(60)
@@ -197,13 +206,14 @@ public class OfflineTimerTest {
 
     @Test
     public fun extend_runningBreak_addsSecondsToDurationAndRemaining() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_SHORT
-            duration = 300.0
-            remaining = 120.0
-            next_phase = TimerState.PHASE_WORK
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_SHORT
+                duration = 300.0
+                remaining = 120.0
+                next_phase = TimerState.PHASE_WORK
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
 
         timer.extend(90)
@@ -216,12 +226,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun extend_repeatedCallsAccumulate() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 900.0
-            status = TimerState.STATUS_RUNNING
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 900.0
+                status = TimerState.STATUS_RUNNING
+            }
         timer.updateState(initial)
 
         timer.extend(60)
@@ -233,12 +244,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun extend_stoppedTimerDoesNotChangeDefaults() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1500.0
-            status = TimerState.STATUS_STOPPED
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1500.0
+                status = TimerState.STATUS_STOPPED
+            }
         timer.updateState(initial)
 
         timer.extend(60)
@@ -249,12 +261,13 @@ public class OfflineTimerTest {
 
     @Test
     public fun toggle_fromWork_setsNextPhaseShortByDefault() {
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 1500.0
-            status = TimerState.STATUS_STOPPED
-        }
+        val initial =
+            TimerState().apply {
+                phase = TimerState.PHASE_WORK
+                duration = 1500.0
+                remaining = 1500.0
+                status = TimerState.STATUS_STOPPED
+            }
         timer.updateState(initial)
 
         timer.toggle()
@@ -265,23 +278,25 @@ public class OfflineTimerTest {
     }
 
     @Test
-    public fun completeExpiredTimer_recordsWorkSessionAndAdvancesPhase(): Unit = runBlocking {
-        val startTime = System.currentTimeMillis() / 1000 - 1500
-        val initial = TimerState().apply {
-            phase = TimerState.PHASE_WORK
-            duration = 1500.0
-            remaining = 0.0
-            status = TimerState.STATUS_RUNNING
-            start_time = startTime.toDouble()
+    public fun completeExpiredTimer_recordsWorkSessionAndAdvancesPhase(): Unit =
+        runBlocking {
+            val startTime = System.currentTimeMillis() / 1000 - 1500
+            val initial =
+                TimerState().apply {
+                    phase = TimerState.PHASE_WORK
+                    duration = 1500.0
+                    remaining = 0.0
+                    status = TimerState.STATUS_RUNNING
+                    start_time = startTime.toDouble()
+                }
+            timer.updateState(initial)
+
+            timer.completeExpiredTimer().join()
+
+            assertEquals(1, repo.getTodayCompletedCount())
+            assertEquals(TimerState.PHASE_SHORT, timer.state.phase)
+            assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
+            assertEquals(300.0, timer.state.remaining, 0.001)
+            assertEquals(1, observer.completions.size)
         }
-        timer.updateState(initial)
-
-        timer.completeExpiredTimer().join()
-
-        assertEquals(1, repo.getTodayCompletedCount())
-        assertEquals(TimerState.PHASE_SHORT, timer.state.phase)
-        assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
-        assertEquals(300.0, timer.state.remaining, 0.001)
-        assertEquals(1, observer.completions.size)
-    }
 }

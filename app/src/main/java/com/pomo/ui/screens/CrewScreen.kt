@@ -92,27 +92,29 @@ public fun CrewScreen(
     CompositionLocalProvider(LocalContentColor provides PomoTokens.colors.onSurface) {
         when {
             state.isLoading && state.board == null -> CrewLoadingState()
-            state.board == null -> CrewEmptyState(
-                archivedMemberships = state.archivedMemberships,
-                errorMessage = state.errorMessage,
-                onJoinCrew = requestJoin,
-                onCreateCrew = { createRequest = CreateCrewRequest(initialDisplayName) },
-                onImportRecovery = onImportRecovery,
-            )
-            else -> CrewBoardContent(
-                isSyncing = state.isSyncing,
-                board = state.board,
-                profileDisplayName = profileDisplayName,
-                onCreateCrew = onCreateCrew,
-                onJoinCrew = { joinCode, _ -> requestJoin(joinCode) },
-                onSwitchCrew = onSwitchCrew,
-                onLeaveCrew = onLeaveCrew,
-                onRankingModeChange = onRankingModeChange,
-                onMemberHiddenChange = onMemberHiddenChange,
-                onExportRecovery = onExportRecovery,
-                onImportRecovery = onImportRecovery,
-                onOpenOwnStats = onOpenOwnStats,
-            )
+            state.board == null ->
+                CrewEmptyState(
+                    archivedMemberships = state.archivedMemberships,
+                    errorMessage = state.errorMessage,
+                    onJoinCrew = requestJoin,
+                    onCreateCrew = { createRequest = CreateCrewRequest(initialDisplayName) },
+                    onImportRecovery = onImportRecovery,
+                )
+            else ->
+                CrewBoardContent(
+                    isSyncing = state.isSyncing,
+                    board = state.board,
+                    profileDisplayName = profileDisplayName,
+                    onCreateCrew = onCreateCrew,
+                    onJoinCrew = { joinCode, _ -> requestJoin(joinCode) },
+                    onSwitchCrew = onSwitchCrew,
+                    onLeaveCrew = onLeaveCrew,
+                    onRankingModeChange = onRankingModeChange,
+                    onMemberHiddenChange = onMemberHiddenChange,
+                    onExportRecovery = onExportRecovery,
+                    onImportRecovery = onImportRecovery,
+                    onOpenOwnStats = onOpenOwnStats,
+                )
         }
     }
     pendingJoin?.let { pending ->
@@ -141,10 +143,11 @@ public fun CrewScreen(
 @Composable
 private fun CrewLoadingState() {
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(20.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(20.dp),
         contentAlignment = Alignment.Center,
     ) {
         EmptyState(
@@ -165,20 +168,22 @@ private fun CrewEmptyState(
 ) {
     var joinCode by remember { mutableStateOf("") }
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(12.dp),
     ) {
         item {
             EmptyState(
                 headline = if (archivedMemberships.isEmpty()) "No Crew yet" else "Crew v2 required",
-                body = if (archivedMemberships.isEmpty()) {
-                    "Create a private leaderboard or join one shared by a friend."
-                } else {
-                    "Older Crew memberships were archived locally. Create or join a v2 Crew for active rankings."
-                },
+                body =
+                    if (archivedMemberships.isEmpty()) {
+                        "Create a private leaderboard or join one shared by a friend."
+                    } else {
+                        "Older Crew memberships were archived locally. Create or join a v2 Crew for active rankings."
+                    },
                 icon = Icons.Outlined.Groups,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -246,14 +251,20 @@ private fun CrewEmptyState(
     }
 }
 
-internal fun CrewBoardRow.matchesSearch(query: String, duplicateNames: Set<String>): Boolean {
+internal fun CrewBoardRow.matchesSearch(
+    query: String,
+    duplicateNames: Set<String>,
+): Boolean {
     val normalized = query.trim().lowercase(Locale.ROOT)
     if (normalized.isEmpty()) return true
     return displayName.lowercase(Locale.ROOT).contains(normalized) ||
         (displayName.trim().lowercase(Locale.ROOT) in duplicateNames && identityPublicKey.startsWith(normalized))
 }
 
-internal fun standingContext(self: CrewBoardRow, rows: List<CrewBoardRow>): String {
+internal fun standingContext(
+    self: CrewBoardRow,
+    rows: List<CrewBoardRow>,
+): String {
     val rank = self.rank ?: return "UNRANKED"
     val tied = rows.count { it.rank == rank }
     if (tied > 1) return "TIED WITH ${tied - 1}"
@@ -265,21 +276,26 @@ internal fun standingContext(self: CrewBoardRow, rows: List<CrewBoardRow>): Stri
     return "${formatMinutes(next.selectedFocusMinutes - self.selectedFocusMinutes)} TO #${next.rank}"
 }
 
-internal fun rowMeta(row: CrewBoardRow): String = buildList {
-    add("${row.currentStreak}d streak")
-    add("${row.todaySessionCount} blocks today")
-    if (row.isStale) add("stale")
-    if (row.isInactive) add("inactive")
-}.joinToString(" · ")
+internal fun rowMeta(row: CrewBoardRow): String =
+    buildList {
+        add("${row.currentStreak}d streak")
+        add("${row.todaySessionCount} blocks today")
+        if (row.isStale) add("stale")
+        if (row.isInactive) add("inactive")
+    }.joinToString(" · ")
 
-internal fun freshnessLabel(board: CrewBoard, isSyncing: Boolean): String {
+internal fun freshnessLabel(
+    board: CrewBoard,
+    isSyncing: Boolean,
+): String {
     val updated = board.lastUpdatedEpochSeconds ?: return "NO SNAPSHOTS"
     val ageSeconds = ((System.currentTimeMillis() / 1000L) - updated).coerceAtLeast(0L)
-    val age = when {
-        ageSeconds < 60 -> "NOW"
-        ageSeconds < 3600 -> "${ageSeconds / 60}m AGO"
-        else -> "${ageSeconds / 3600}h AGO"
-    }
+    val age =
+        when {
+            ageSeconds < 60 -> "NOW"
+            ageSeconds < 3600 -> "${ageSeconds / 60}m AGO"
+            else -> "${ageSeconds / 3600}h AGO"
+        }
     val syncPrefix = if (isSyncing) "SYNCING · " else ""
     return when {
         board.successfulRelayCount == 0 -> "${syncPrefix}OFFLINE · UPDATED $age"
@@ -290,22 +306,25 @@ internal fun freshnessLabel(board: CrewBoard, isSyncing: Boolean): String {
 }
 
 @Composable
-internal fun freshnessColor(board: CrewBoard, isSyncing: Boolean) =
-    when {
-        isSyncing -> PomoTokens.colors.accent
-        board.successfulRelayCount == 0 -> PomoTokens.colors.warn
-        else -> PomoTokens.colors.onSurfaceMuted
-    }
+internal fun freshnessColor(
+    board: CrewBoard,
+    isSyncing: Boolean,
+) = when {
+    isSyncing -> PomoTokens.colors.accent
+    board.successfulRelayCount == 0 -> PomoTokens.colors.warn
+    else -> PomoTokens.colors.onSurfaceMuted
+}
 
 internal val CrewRankingMode.label: String
-    get() = when (this) {
-        CrewRankingMode.Today -> "Today"
-        CrewRankingMode.Yesterday -> "Yesterday"
-        CrewRankingMode.SevenDays -> "7 day"
-        CrewRankingMode.ThirtyDays -> "30 day"
-        CrewRankingMode.AllTime -> "All time"
-        is CrewRankingMode.Day -> formatDayLabel(localDate)
-    }
+    get() =
+        when (this) {
+            CrewRankingMode.Today -> "Today"
+            CrewRankingMode.Yesterday -> "Yesterday"
+            CrewRankingMode.SevenDays -> "7 day"
+            CrewRankingMode.ThirtyDays -> "30 day"
+            CrewRankingMode.AllTime -> "All time"
+            is CrewRankingMode.Day -> formatDayLabel(localDate)
+        }
 
 /** "2026-06-23" -> "Tue 23 Jun", falling back to the raw date if it cannot be parsed. */
 internal fun formatDayLabel(localDate: String): String =
@@ -316,23 +335,26 @@ internal fun formatDayLabel(localDate: String): String =
 private val DAY_LABEL_FORMAT: DateTimeFormatter =
     DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault())
 
-internal fun comparisonLabel(deltaMinutes: Int): String = when {
-    deltaMinutes > 0 -> "+${formatMinutes(deltaMinutes)}"
-    deltaMinutes < 0 -> "-${formatMinutes(-deltaMinutes)}"
-    else -> "Even"
-}
+internal fun comparisonLabel(deltaMinutes: Int): String =
+    when {
+        deltaMinutes > 0 -> "+${formatMinutes(deltaMinutes)}"
+        deltaMinutes < 0 -> "-${formatMinutes(-deltaMinutes)}"
+        else -> "Even"
+    }
 
-internal fun comparisonDaysLabel(deltaDays: Int): String = when {
-    deltaDays > 0 -> "+${deltaDays}d"
-    deltaDays < 0 -> "-${-deltaDays}d"
-    else -> "Even"
-}
+internal fun comparisonDaysLabel(deltaDays: Int): String =
+    when {
+        deltaDays > 0 -> "+${deltaDays}d"
+        deltaDays < 0 -> "-${-deltaDays}d"
+        else -> "Even"
+    }
 
-internal fun formatMinutes(minutes: Int): String = when {
-    minutes < 60 -> "${minutes}m"
-    minutes % 60 == 0 -> "${minutes / 60}h"
-    else -> "${minutes / 60}h ${minutes % 60}m"
-}
+internal fun formatMinutes(minutes: Int): String =
+    when {
+        minutes < 60 -> "${minutes}m"
+        minutes % 60 == 0 -> "${minutes / 60}h"
+        else -> "${minutes / 60}h ${minutes % 60}m"
+    }
 
 internal fun List<Int>.median(): Int {
     if (isEmpty()) return 0

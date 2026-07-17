@@ -19,7 +19,6 @@ import com.pomo.achievements.AchievementCatalog
  * are a separate concern owned by [com.pomo.service.NotificationHelper].
  */
 public class AlertsNotifier(private val context: Context) {
-
     private val notificationManager: NotificationManager =
         context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
@@ -29,59 +28,67 @@ public class AlertsNotifier(private val context: Context) {
 
     private fun createChannels() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
-        val achievements = NotificationChannel(
-            ACHIEVEMENT_CHANNEL_ID,
-            "Achievements",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "A quiet note when you earn an achievement"
-            setSound(null, null)
-            enableVibration(false)
-        }
-        val updates = NotificationChannel(
-            UPDATE_CHANNEL_ID,
-            "App updates",
-            NotificationManager.IMPORTANCE_LOW,
-        ).apply {
-            description = "A quiet note when a newer version of Pomo is available"
-            setSound(null, null)
-            enableVibration(false)
-        }
+        val achievements =
+            NotificationChannel(
+                ACHIEVEMENT_CHANNEL_ID,
+                "Achievements",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "A quiet note when you earn an achievement"
+                setSound(null, null)
+                enableVibration(false)
+            }
+        val updates =
+            NotificationChannel(
+                UPDATE_CHANNEL_ID,
+                "App updates",
+                NotificationManager.IMPORTANCE_LOW,
+            ).apply {
+                description = "A quiet note when a newer version of Pomo is available"
+                setSound(null, null)
+                enableVibration(false)
+            }
         notificationManager.createNotificationChannel(achievements)
         notificationManager.createNotificationChannel(updates)
     }
 
     /** A quiet note that [achievement] was just earned. Tapping it opens the Achievements page. */
     public fun notifyAchievement(achievement: Achievement) {
-        val notification = NotificationCompat.Builder(context, ACHIEVEMENT_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Achievement earned")
-            .setContentText("${achievement.title} — ${achievement.fact}")
-            .setContentIntent(openApp(NAV_TARGET_ACHIEVEMENTS, requestCode = achievementRequestCode(achievement)))
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .build()
+        val notification =
+            NotificationCompat.Builder(context, ACHIEVEMENT_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("Achievement earned")
+                .setContentText("${achievement.title} — ${achievement.fact}")
+                .setContentIntent(openApp(NAV_TARGET_ACHIEVEMENTS, requestCode = achievementRequestCode(achievement)))
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                .build()
         notificationManager.notify(achievementNotificationId(achievement), notification)
     }
 
     /** A quiet note that [versionName] is available. Tapping it opens the Settings update section. */
     public fun notifyUpdate(versionName: String) {
-        val notification = NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("Update available")
-            .setContentText("Version $versionName is ready to install.")
-            .setContentIntent(openApp(NAV_TARGET_UPDATE, requestCode = UPDATE_REQUEST_CODE))
-            .setAutoCancel(true)
-            .setOnlyAlertOnce(true)
-            .build()
+        val notification =
+            NotificationCompat.Builder(context, UPDATE_CHANNEL_ID)
+                .setSmallIcon(R.mipmap.ic_launcher)
+                .setContentTitle("Update available")
+                .setContentText("Version $versionName is ready to install.")
+                .setContentIntent(openApp(NAV_TARGET_UPDATE, requestCode = UPDATE_REQUEST_CODE))
+                .setAutoCancel(true)
+                .setOnlyAlertOnce(true)
+                .build()
         notificationManager.notify(UPDATE_NOTIFICATION_ID, notification)
     }
 
-    private fun openApp(navTarget: String, requestCode: Int): PendingIntent {
-        val intent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(EXTRA_NAV_TARGET, navTarget)
-        }
+    private fun openApp(
+        navTarget: String,
+        requestCode: Int,
+    ): PendingIntent {
+        val intent =
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(EXTRA_NAV_TARGET, navTarget)
+            }
         return PendingIntent.getActivity(
             context,
             requestCode,

@@ -54,10 +54,11 @@ public fun HistoryScreen(
     var selected by remember { mutableStateOf<HistoryItem?>(null) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = 20.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(horizontal = 20.dp),
     ) {
         Spacer(Modifier.height(16.dp))
         Text(
@@ -85,9 +86,10 @@ public fun HistoryScreen(
             grouped.forEach { (monthLabel, entries) ->
                 stickyHeader(key = "header_$monthLabel") {
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(MaterialTheme.colorScheme.background),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .background(MaterialTheme.colorScheme.background),
                     ) {
                         Spacer(Modifier.height(20.dp))
                         MonthHeader(monthLabel, entries)
@@ -111,7 +113,10 @@ public fun HistoryScreen(
 }
 
 @Composable
-private fun MonthHeader(label: String, entries: List<HistoryItem>) {
+private fun MonthHeader(
+    label: String,
+    entries: List<HistoryItem>,
+) {
     val focusMinutes = entries.sumOf { it.entry.work_minutes }
     val blocks = entries.sumOf { it.entry.completed }
     Row(
@@ -133,14 +138,18 @@ private fun MonthHeader(label: String, entries: List<HistoryItem>) {
 }
 
 @Composable
-private fun HistoryRow(item: HistoryItem, onClick: () -> Unit) {
+private fun HistoryRow(
+    item: HistoryItem,
+    onClick: () -> Unit,
+) {
     val displayDate = remember(item.date) { formatDate(item.date) }
     val blocks = item.entry.completed
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -174,9 +183,10 @@ private fun DayDetailSheet(
     }
     PomoSheet(title = formatFullDate(item.date), onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -219,18 +229,20 @@ private fun groupByMonth(items: List<HistoryItem>): List<Pair<String, List<Histo
     return out.map { it.first to it.second.toList() }
 }
 
-private fun formatDate(iso: String): String = try {
-    val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val output = SimpleDateFormat("EEE, MMM d", Locale.US)
-    input.parse(iso)?.let { output.format(it) } ?: iso
-} catch (_: Exception) {
-    iso
-}
+private fun formatDate(iso: String): String =
+    try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("EEE, MMM d", Locale.US)
+        input.parse(iso)?.let { output.format(it) } ?: iso
+    } catch (_: Exception) {
+        iso
+    }
 
-private fun formatFullDate(iso: String): String = try {
-    val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val output = SimpleDateFormat("EEEE, MMMM d", Locale.US)
-    input.parse(iso)?.let { output.format(it) } ?: iso
-} catch (_: Exception) {
-    iso
-}
+private fun formatFullDate(iso: String): String =
+    try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("EEEE, MMMM d", Locale.US)
+        input.parse(iso)?.let { output.format(it) } ?: iso
+    } catch (_: Exception) {
+        iso
+    }

@@ -138,11 +138,12 @@ internal fun StatsContent(
     val scroll = rememberScrollState()
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scroll)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(scroll)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         header()
 
@@ -222,13 +223,14 @@ private fun LifetimeHeroBlock(lifetime: Lifetime) {
             color = MaterialTheme.colorScheme.onSurface,
         )
         Spacer(Modifier.height(6.dp))
-        val sub = buildString {
-            append(lifetime.sessions)
-            append(if (lifetime.sessions == 1) " block" else " blocks")
-            append("  ·  ")
-            append(lifetime.daysWithApp)
-            append(if (lifetime.daysWithApp == 1) " day with Pomo" else " days with Pomo")
-        }
+        val sub =
+            buildString {
+                append(lifetime.sessions)
+                append(if (lifetime.sessions == 1) " block" else " blocks")
+                append("  ·  ")
+                append(lifetime.daysWithApp)
+                append(if (lifetime.daysWithApp == 1) " day with Pomo" else " days with Pomo")
+            }
         Text(
             text = sub,
             style = MaterialTheme.typography.bodyMedium,
@@ -252,10 +254,11 @@ private fun HabitHeatmap(habit: HabitWindow) {
     // stays meaningful for both light and heavy users instead of saturating to solid.
     val peakMinutes = habit.cells.maxOfOrNull { it.minutes } ?: 0
     Canvas(
-        modifier = Modifier.size(
-            width = (cell + gap) * weeks + gap,
-            height = (cell + gap) * 7 + gap,
-        ),
+        modifier =
+            Modifier.size(
+                width = (cell + gap) * weeks + gap,
+                height = (cell + gap) * 7 + gap,
+            ),
     ) {
         val cellPx = cell.toPx()
         val gapPx = gap.toPx()
@@ -277,7 +280,12 @@ private fun HabitHeatmap(habit: HabitWindow) {
     HeatmapLegend(focus = focus, empty = empty)
 }
 
-private fun colorFor(minutes: Int, peakMinutes: Int, focus: Color, empty: Color): Color {
+private fun colorFor(
+    minutes: Int,
+    peakMinutes: Int,
+    focus: Color,
+    empty: Color,
+): Color {
     // Key the empty state off focus minutes: a split-block's pre-midnight cell has
     // minutes > 0 but sessions == 0, yet still represents recorded focus.
     if (minutes == 0) return empty
@@ -292,7 +300,10 @@ private fun colorFor(minutes: Int, peakMinutes: Int, focus: Color, empty: Color)
 }
 
 @Composable
-private fun HeatmapLegend(focus: Color, empty: Color) {
+private fun HeatmapLegend(
+    focus: Color,
+    empty: Color,
+) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -326,19 +337,23 @@ private fun HabitFooterFacts(snapshot: StatsSnapshot) {
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     val current = snapshot.habit.currentStreak
     val best = snapshot.habit.bestStreak
-    val streakLine = buildString {
-        append("current streak ")
-        append(current)
-        append(if (current == 1) " day" else " days")
-        if (best > 0) {
-            append("  ·  best ")
-            append(best)
+    val streakLine =
+        buildString {
+            append("current streak ")
+            append(current)
+            append(if (current == 1) " day" else " days")
+            if (best > 0) {
+                append("  ·  best ")
+                append(best)
+            }
         }
-    }
     val goal = snapshot.goal
-    val goalLine = if (goal.dailyGoal > 0) {
-        "goal hit ${goal.daysHit} of last ${goal.totalDays} days"
-    } else null
+    val goalLine =
+        if (goal.dailyGoal > 0) {
+            "goal hit ${goal.daysHit} of last ${goal.totalDays} days"
+        } else {
+            null
+        }
 
     Text(streakLine, style = MaterialTheme.typography.bodyMedium, color = muted)
     if (goalLine != null) {
@@ -371,12 +386,13 @@ private fun WeekShapeStrip(week: WeekShape) {
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height((4 + (frac * 84)).dp)
-                            .background(
-                                if (v > 0) (if (isPeak) signal else bar) else empty,
-                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .height((4 + (frac * 84)).dp)
+                                .background(
+                                    if (v > 0) (if (isPeak) signal else bar) else empty,
+                                ),
                     )
                 }
             }
@@ -413,10 +429,16 @@ private fun WeekShapeStrip(week: WeekShape) {
 
 private fun weekCaption(week: WeekShape): String? {
     val idx = week.strongestDayIndex ?: return null
-    val day = when (idx) {
-        0 -> "Mondays"; 1 -> "Tuesdays"; 2 -> "Wednesdays"; 3 -> "Thursdays"
-        4 -> "Fridays"; 5 -> "Saturdays"; else -> "Sundays"
-    }
+    val day =
+        when (idx) {
+            0 -> "Mondays"
+            1 -> "Tuesdays"
+            2 -> "Wednesdays"
+            3 -> "Thursdays"
+            4 -> "Fridays"
+            5 -> "Saturdays"
+            else -> "Sundays"
+        }
     return "$day are your strongest day"
 }
 
@@ -427,15 +449,21 @@ private fun RecordsList(records: Records) {
         RecordRow(label = "best week", value = records.bestWeek?.let { formatBestWeek(it) } ?: "—")
         RecordRow(
             label = "longest streak",
-            value = if (records.longestStreak > 0) {
-                "${records.longestStreak} day" + if (records.longestStreak == 1) "" else "s"
-            } else "—",
+            value =
+                if (records.longestStreak > 0) {
+                    "${records.longestStreak} day" + if (records.longestStreak == 1) "" else "s"
+                } else {
+                    "—"
+                },
         )
     }
 }
 
 @Composable
-private fun RecordRow(label: String, value: String) {
+private fun RecordRow(
+    label: String,
+    value: String,
+) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             label,
@@ -462,13 +490,14 @@ private fun formatBestWeek(w: BestWeek): String {
     return "${formatMinutes(w.minutes)}  ·  wk of $pretty"
 }
 
-private fun formatPrettyDate(iso: String): String = try {
-    val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val output = SimpleDateFormat("MMM d", Locale.US)
-    input.parse(iso)?.let { output.format(it) } ?: iso
-} catch (_: Exception) {
-    iso
-}
+private fun formatPrettyDate(iso: String): String =
+    try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("MMM d", Locale.US)
+        input.parse(iso)?.let { output.format(it) } ?: iso
+    } catch (_: Exception) {
+        iso
+    }
 
 @Composable
 private fun SinceFooter(firstDate: String?) {
@@ -483,16 +512,20 @@ private fun SinceFooter(firstDate: String?) {
     )
 }
 
-private fun formatSinceDate(iso: String): String = try {
-    val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-    val output = SimpleDateFormat("MMM d, yyyy", Locale.US)
-    input.parse(iso)?.let { output.format(it) } ?: iso
-} catch (_: Exception) {
-    iso
-}
+private fun formatSinceDate(iso: String): String =
+    try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("MMM d, yyyy", Locale.US)
+        input.parse(iso)?.let { output.format(it) } ?: iso
+    } catch (_: Exception) {
+        iso
+    }
 
 private enum class TrendRange(val label: String) {
-    Today("1D"), Days7("7D"), Days28("28D"), AllTime("ALL"),
+    Today("1D"),
+    Days7("7D"),
+    Days28("28D"),
+    AllTime("ALL"),
 }
 
 @Composable
@@ -505,12 +538,13 @@ private fun TrendRangePills(
         ranges.forEach { r ->
             val active = r == selected
             Box(
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .background(if (active) PomoTokens.colors.accent else Color.Transparent)
-                    .border(1.dp, if (active) PomoTokens.colors.accent else PomoTokens.colors.outline, RoundedCornerShape(4.dp))
-                    .clickable { onSelect(r) }
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (active) PomoTokens.colors.accent else Color.Transparent)
+                        .border(1.dp, if (active) PomoTokens.colors.accent else PomoTokens.colors.outline, RoundedCornerShape(4.dp))
+                        .clickable { onSelect(r) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -524,17 +558,22 @@ private fun TrendRangePills(
 }
 
 @Composable
-private fun PerDayLineChart(trend: ChartTrend, showTodayRange: Boolean = true) {
-    val ranges = remember(showTodayRange) {
-        TrendRange.entries.filter { showTodayRange || it != TrendRange.Today }
-    }
+private fun PerDayLineChart(
+    trend: ChartTrend,
+    showTodayRange: Boolean = true,
+) {
+    val ranges =
+        remember(showTodayRange) {
+            TrendRange.entries.filter { showTodayRange || it != TrendRange.Today }
+        }
     var range by remember { mutableStateOf(TrendRange.Days7) }
-    val series = when (range) {
-        TrendRange.Today -> trend.today
-        TrendRange.Days7 -> trend.week
-        TrendRange.Days28 -> trend.month
-        TrendRange.AllTime -> trend.allTime
-    }
+    val series =
+        when (range) {
+            TrendRange.Today -> trend.today
+            TrendRange.Days7 -> trend.week
+            TrendRange.Days28 -> trend.month
+            TrendRange.AllTime -> trend.allTime
+        }
     val points = series.points
 
     val accent = PomoTokens.colors.accent
@@ -560,12 +599,15 @@ private fun PerDayLineChart(trend: ChartTrend, showTodayRange: Boolean = true) {
     val spec = lineSpec(lineColor = accent, lineThickness = 2.dp, lineBackgroundShader = areaShader)
 
     val labels = points.map { it.label }
-    val labelFormatter = remember(labels) {
-        object : AxisValueFormatter<AxisPosition.Horizontal.Bottom> {
-            override fun formatValue(value: Float, chartValues: ChartValues): CharSequence =
-                labels.getOrElse(value.toInt()) { "" }
+    val labelFormatter =
+        remember(labels) {
+            object : AxisValueFormatter<AxisPosition.Horizontal.Bottom> {
+                override fun formatValue(
+                    value: Float,
+                    chartValues: ChartValues,
+                ): CharSequence = labels.getOrElse(value.toInt()) { "" }
+            }
         }
-    }
 
     // Entry values are minutes; render the Y axis in whole hours on a "nice" scale so
     // ticks land on round numbers (0h / 2h / 4h …) instead of fractional minutes.
@@ -574,25 +616,30 @@ private fun PerDayLineChart(trend: ChartTrend, showTodayRange: Boolean = true) {
     val steps = ceil((maxMinutes / 60f) / stepHours).toInt().coerceAtLeast(1)
     val niceMaxMinutes = (steps * stepHours * 60).toFloat()
     val tickCount = steps + 1
-    val hourFormatter = remember {
-        object : AxisValueFormatter<AxisPosition.Vertical.Start> {
-            override fun formatValue(value: Float, chartValues: ChartValues): CharSequence =
-                "${(value / 60f).roundToInt()}h"
+    val hourFormatter =
+        remember {
+            object : AxisValueFormatter<AxisPosition.Vertical.Start> {
+                override fun formatValue(
+                    value: Float,
+                    chartValues: ChartValues,
+                ): CharSequence = "${(value / 60f).roundToInt()}h"
+            }
         }
-    }
 
     if (chartReady) {
         Chart(
             modifier = Modifier.fillMaxWidth().height(160.dp),
-            chart = lineChart(
-                lines = listOf(spec),
-                axisValuesOverrider = AxisValuesOverrider.fixed(minY = 0f, maxY = niceMaxMinutes),
-            ),
+            chart =
+                lineChart(
+                    lines = listOf(spec),
+                    axisValuesOverrider = AxisValuesOverrider.fixed(minY = 0f, maxY = niceMaxMinutes),
+                ),
             chartModelProducer = modelProducer,
-            startAxis = rememberStartAxis(
-                valueFormatter = hourFormatter,
-                itemPlacer = AxisItemPlacer.Vertical.default(maxItemCount = tickCount),
-            ),
+            startAxis =
+                rememberStartAxis(
+                    valueFormatter = hourFormatter,
+                    itemPlacer = AxisItemPlacer.Vertical.default(maxItemCount = tickCount),
+                ),
             bottomAxis = rememberBottomAxis(valueFormatter = labelFormatter),
         )
     } else {
@@ -601,12 +648,13 @@ private fun PerDayLineChart(trend: ChartTrend, showTodayRange: Boolean = true) {
 
     Spacer(Modifier.height(8.dp))
     val maxVal = points.maxOfOrNull { it.value.toInt() }?.coerceAtLeast(1) ?: 1
-    val rangeDesc = when (range) {
-        TrendRange.Today -> "today by hour"
-        TrendRange.Days7 -> "last 7 days"
-        TrendRange.Days28 -> "last 4 weeks"
-        TrendRange.AllTime -> "all time by month"
-    }
+    val rangeDesc =
+        when (range) {
+            TrendRange.Today -> "today by hour"
+            TrendRange.Days7 -> "last 7 days"
+            TrendRange.Days28 -> "last 4 weeks"
+            TrendRange.AllTime -> "all time by month"
+        }
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
         Text(rangeDesc, style = MaterialTheme.typography.labelSmall, color = muted)
         Text("max ${formatMinutes(maxVal)}", style = MaterialTheme.typography.labelSmall, color = muted)
@@ -618,17 +666,17 @@ private fun niceHourStep(maxHours: Float): Int {
     if (maxHours <= 1f) return 1
     val raw = maxHours / 5f
     val mag = 10.0.pow(floor(log10(raw.toDouble()))).toFloat()
-    val niceNorm = when {
-        raw / mag <= 1f -> 1f
-        raw / mag <= 2f -> 2f
-        raw / mag <= 5f -> 5f
-        else -> 10f
-    }
+    val niceNorm =
+        when {
+            raw / mag <= 1f -> 1f
+            raw / mag <= 2f -> 2f
+            raw / mag <= 5f -> 5f
+            else -> 10f
+        }
     return (niceNorm * mag).roundToInt().coerceAtLeast(1)
 }
 
-private fun nowFormatted(): String =
-    SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+private fun nowFormatted(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
 private data class Kpi(val minutes: Int, val sessions: Int)
 
@@ -640,11 +688,12 @@ private fun computeKpis(habit: HabitWindow): Triple<Kpi, Kpi, Kpi> {
     val todayKpi = Kpi(todayCell?.minutes ?: 0, todayCell?.sessions ?: 0)
 
     val todayIdx = cells.indexOfLast { it.date == today }
-    val weekSlice = if (todayIdx >= 0) {
-        cells.subList((todayIdx - 6).coerceAtLeast(0), todayIdx + 1)
-    } else {
-        cells.takeLast(7)
-    }
+    val weekSlice =
+        if (todayIdx >= 0) {
+            cells.subList((todayIdx - 6).coerceAtLeast(0), todayIdx + 1)
+        } else {
+            cells.takeLast(7)
+        }
     val weekKpi = Kpi(minutes = weekSlice.sumOf { it.minutes }, sessions = weekSlice.sumOf { it.sessions })
 
     val monthCells = cells.filter { it.date.startsWith(thisMonthPrefix) }
@@ -679,14 +728,20 @@ private fun TodayWeekStrip(habit: HabitWindow) {
 }
 
 @Composable
-private fun KpiCell(label: String, kpi: Kpi, modifier: Modifier = Modifier, delta: Int? = null) {
+private fun KpiCell(
+    label: String,
+    kpi: Kpi,
+    modifier: Modifier = Modifier,
+    delta: Int? = null,
+) {
     val hours = kpi.minutes / 60
     val mins = kpi.minutes % 60
-    val value = when {
-        kpi.minutes == 0 -> "0m"
-        hours > 0 -> "${hours}h ${mins}m"
-        else -> "${mins}m"
-    }
+    val value =
+        when {
+            kpi.minutes == 0 -> "0m"
+            hours > 0 -> "${hours}h ${mins}m"
+            else -> "${mins}m"
+        }
     val sessionSub = "${kpi.sessions} " + if (kpi.sessions == 1) "block" else "blocks"
     Column(modifier = modifier) {
         Text(

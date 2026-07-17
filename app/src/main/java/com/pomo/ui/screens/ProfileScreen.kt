@@ -14,13 +14,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,13 +28,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pomo.achievements.Achievement
 import com.pomo.crew.CrewValidation
+import com.pomo.ui.components.Avatar
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.PomoDialog
@@ -48,6 +47,7 @@ import com.pomo.ui.theme.PomoTokens
 @Composable
 public fun ProfileScreen(
     displayName: String,
+    avatarBase64: String?,
     keyFingerprint: String,
     lifetimeFocusMinutes: Int,
     currentStreak: Int,
@@ -56,6 +56,8 @@ public fun ProfileScreen(
     achievementsEarned: Int,
     achievementsTotal: Int,
     onDisplayNameChange: (String) -> Unit,
+    onAvatarPick: () -> Unit,
+    onAvatarRemove: () -> Unit,
     onOpenAchievements: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
@@ -63,11 +65,12 @@ public fun ProfileScreen(
     var editing by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scroll)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(scroll)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
             text = "Profile",
@@ -78,8 +81,11 @@ public fun ProfileScreen(
         Spacer(Modifier.height(20.dp))
         IdentityHeader(
             displayName = displayName,
+            avatarBase64 = avatarBase64,
             keyFingerprint = keyFingerprint,
             onEdit = { editing = true },
+            onAvatarPick = onAvatarPick,
+            onAvatarRemove = onAvatarRemove,
         )
 
         Spacer(Modifier.height(28.dp))
@@ -115,29 +121,39 @@ public fun ProfileScreen(
 @Composable
 private fun IdentityHeader(
     displayName: String,
+    avatarBase64: String?,
     keyFingerprint: String,
     onEdit: () -> Unit,
+    onAvatarPick: () -> Unit,
+    onAvatarRemove: () -> Unit,
 ) {
     val named = displayName.isNotBlank()
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onEdit)
-            .padding(vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onEdit)
+                .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        LetterTile(displayName = displayName)
+        Avatar(
+            avatarBase64 = avatarBase64,
+            displayName = displayName,
+            size = 52.dp,
+            modifier = Modifier.clickable(onClick = onAvatarPick),
+        )
         Spacer(Modifier.width(14.dp))
         Column {
             Text(
                 text = if (named) displayName else "Set your name",
                 style = MaterialTheme.typography.headlineLarge,
-                color = if (named) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    PomoTokens.colors.onSurfaceFaint
-                },
+                color =
+                    if (named) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        PomoTokens.colors.onSurfaceFaint
+                    },
             )
             if (keyFingerprint.isNotEmpty()) {
                 Spacer(Modifier.height(2.dp))
@@ -148,27 +164,15 @@ private fun IdentityHeader(
                     color = PomoTokens.colors.onSurfaceFaint,
                 )
             }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                TextButton(onClick = onAvatarPick) {
+                    Text(if (avatarBase64 == null) "Add photo" else "Change photo")
+                }
+                if (avatarBase64 != null) {
+                    TextButton(onClick = onAvatarRemove) { Text("Remove") }
+                }
+            }
         }
-    }
-}
-
-/** No avatars: the tile is generated from the name, so nothing has to be picked, stored, or sent. */
-@Composable
-private fun LetterTile(displayName: String) {
-    val initial = displayName.trim().firstOrNull()?.uppercase() ?: "?"
-
-    Box(
-        modifier = Modifier
-            .size(52.dp)
-            .background(PomoTokens.colors.accent, RoundedCornerShape(14.dp)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = initial,
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = Color.White,
-        )
     }
 }
 
@@ -182,9 +186,10 @@ private fun StatStrip(
 
     Hairline()
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -225,30 +230,33 @@ private fun StatColumn(
 @Composable
 private fun StatDivider() {
     Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(34.dp)
-            .background(PomoTokens.colors.outline),
+        modifier =
+            Modifier
+                .width(1.dp)
+                .height(34.dp)
+                .background(PomoTokens.colors.outline),
     )
 }
 
 @Composable
 private fun Hairline() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(PomoTokens.colors.outline),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(PomoTokens.colors.outline),
     )
 }
 
 @Composable
 private fun SettingsRow(onOpenSettings: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenSettings)
-            .padding(vertical = 18.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenSettings)
+                .padding(vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -282,8 +290,9 @@ private fun DisplayNameDialog(
         body = {
             Column {
                 Text(
-                    text = "This is the name your crews see. You have one name, and it is the " +
-                        "same in every crew.",
+                    text =
+                        "This is the name your crews see. You have one name, and it is the " +
+                            "same in every crew.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = PomoTokens.colors.onSurfaceMuted,
                 )
@@ -294,9 +303,10 @@ private fun DisplayNameDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = { normalized?.let(onSave) },
-                    ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onDone = { normalized?.let(onSave) },
+                        ),
                 )
             }
         },

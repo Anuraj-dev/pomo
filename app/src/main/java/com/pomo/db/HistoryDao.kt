@@ -12,7 +12,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 public interface HistoryDao {
-
     @Query("SELECT * FROM day_stats ORDER BY date DESC")
     public fun getAllDayStats(): Flow<List<DayStatsEntity>>
 
@@ -58,31 +57,34 @@ public interface HistoryDao {
         session: SessionEntity,
         countCompletedSession: Boolean = true,
     ) {
-        val currentStats = getDayStats(date) ?: DayStatsEntity(
-            date = date,
-            completed = 0,
-            workMinutes = 0,
-            breakMinutes = 0,
-            lastUpdated = System.currentTimeMillis(),
-        )
+        val currentStats =
+            getDayStats(date) ?: DayStatsEntity(
+                date = date,
+                completed = 0,
+                workMinutes = 0,
+                breakMinutes = 0,
+                lastUpdated = System.currentTimeMillis(),
+            )
 
         val isWork = session.type == TimerState.PHASE_WORK
         val isBreak = session.type == TimerState.PHASE_SHORT || session.type == TimerState.PHASE_LONG
         val durationMinutes = (session.duration + 59) / 60
 
-        val newStats = currentStats.copy(
-            // `completed` gates the earned block count only. Work minutes are
-            // time-honest: a partial (skipped) block contributes minutes but no
-            // block (ADR-0002).
-            completed = if (isWork && session.completed && countCompletedSession) {
-                currentStats.completed + 1
-            } else {
-                currentStats.completed
-            },
-            workMinutes = if (isWork) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
-            breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + durationMinutes else currentStats.breakMinutes,
-            lastUpdated = System.currentTimeMillis(),
-        )
+        val newStats =
+            currentStats.copy(
+                // `completed` gates the earned block count only. Work minutes are
+                // time-honest: a partial (skipped) block contributes minutes but no
+                // block (ADR-0002).
+                completed =
+                    if (isWork && session.completed && countCompletedSession) {
+                        currentStats.completed + 1
+                    } else {
+                        currentStats.completed
+                    },
+                workMinutes = if (isWork) currentStats.workMinutes + durationMinutes else currentStats.workMinutes,
+                breakMinutes = if (isBreak && session.completed) currentStats.breakMinutes + durationMinutes else currentStats.breakMinutes,
+                lastUpdated = System.currentTimeMillis(),
+            )
 
         insertDayStats(newStats)
         insertSession(session)
@@ -148,6 +150,9 @@ public interface HistoryDao {
  * Chunk-safe wrapper for [HistoryDao.markAsSynced].
  * SQLite caps host parameters at 999 on older Android versions; chunking prevents overflow.
  */
-public suspend fun HistoryDao.markAsSyncedChunked(startTimes: List<Long>, chunkSize: Int = 500) {
+public suspend fun HistoryDao.markAsSyncedChunked(
+    startTimes: List<Long>,
+    chunkSize: Int = 500,
+) {
     startTimes.chunked(chunkSize).forEach { markAsSynced(it) }
 }

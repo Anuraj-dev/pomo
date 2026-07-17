@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    id("org.jlleitschuh.gradle.ktlint")
 }
 
 android {
@@ -16,6 +17,22 @@ android {
         versionName = "2.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        val gitSha: String =
+            System.getenv("CI_COMMIT_SHA")
+                ?: providers.exec {
+                    commandLine("git", "rev-parse", "--short", "HEAD")
+                }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+
+        val gitBranch: String =
+            System.getenv("CI_REF_NAME")
+                ?: providers.exec {
+                    commandLine("git", "rev-parse", "--abbrev-ref", "HEAD")
+                }.standardOutput.asText.get().trim().ifEmpty { "unknown" }
+
+        buildConfigField("String", "BUILD_COMMIT", "\"$gitSha\"")
+        buildConfigField("String", "BUILD_BRANCH", "\"$gitBranch\"")
+        buildConfigField("String", "BUILD_TIME", "\"${System.currentTimeMillis()}\"")
 
         ksp {
             arg("room.schemaLocation", "$projectDir/schemas")
@@ -63,10 +80,11 @@ android {
     kotlinOptions {
         jvmTarget = "17"
         allWarningsAsErrors = true
-        freeCompilerArgs = freeCompilerArgs + listOf(
-            "-Xexplicit-api=strict",
-            "-Xjsr305=strict",
-        )
+        freeCompilerArgs = freeCompilerArgs +
+            listOf(
+                "-Xexplicit-api=strict",
+                "-Xjsr305=strict",
+            )
     }
 
     buildFeatures {
@@ -89,6 +107,9 @@ android {
         unitTests.isIncludeAndroidResources = true
         unitTests.isReturnDefaultValues = true
     }
+}
+
+ktlint {
 }
 
 dependencies {

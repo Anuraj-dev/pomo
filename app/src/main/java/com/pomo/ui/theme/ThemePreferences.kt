@@ -13,15 +13,17 @@ public fun SharedPreferences.themeMode(): ThemeMode {
 }
 
 public val ThemeMode.preferenceValue: String
-    get() = when (this) {
-        ThemeMode.System -> "system"
-        ThemeMode.Light -> "light"
-        ThemeMode.Dark -> "dark"
-    }
+    get() =
+        when (this) {
+            ThemeMode.System -> "system"
+            ThemeMode.Light -> "light"
+            ThemeMode.Dark -> "dark"
+        }
 
 public val ThemeMode.displayName: String
-    get() = when (this) {
-        ThemeMode.System -> "System"
-        ThemeMode.Light -> "Light"
-        ThemeMode.Dark -> "Dark"
-    }
+    get() =
+        when (this) {
+            ThemeMode.System -> "System"
+            ThemeMode.Light -> "Light"
+            ThemeMode.Dark -> "Dark"
+        }

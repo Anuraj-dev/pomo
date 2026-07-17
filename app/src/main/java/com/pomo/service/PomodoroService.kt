@@ -1,24 +1,25 @@
 package com.pomo.service
 
 import android.app.Service
+import android.content.Context
+import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
-import android.content.Context
-import android.content.Intent
-import android.os.*
+import android.os.Binder
+import android.os.IBinder
 import android.util.Log
 import com.google.gson.Gson
 import com.pomo.achievements.AchievementCatalog
 import com.pomo.achievements.AchievementEvaluator
+import com.pomo.crew.CrewRepository
 import com.pomo.cues.CompletionCueFamily
 import com.pomo.cues.CuePreviewChannel
 import com.pomo.cues.CuePreviewOutcome
 import com.pomo.cues.CueVariant
 import com.pomo.cues.StateCueEngine
 import com.pomo.cues.StateCueEvent
-import com.pomo.crew.CrewRepository
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneServer
 import com.pomo.notifications.AlertsNotifier
@@ -35,12 +36,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
 import java.net.Inet4Address
 import java.net.NetworkInterface
+import kotlin.math.abs
 
 public class PomodoroService : Service(), TimerObserver {
-
     private val binder = LocalBinder()
     private lateinit var notificationHelper: NotificationHelper
     private lateinit var offlineTimer: OfflineTimer
@@ -64,20 +64,26 @@ public class PomodoroService : Service(), TimerObserver {
     private val serviceScope = MainScope()
     private val commandMutex = Mutex()
 
-    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            serviceScope.launch { restartPhoneServerIfNeeded() }
-            // A block finished while offline never reached the relay. Coming back online is the
-            // first chance to send it, and it must not wait for the Crew page to be opened.
-            publishCrewCatchUp()
+    private val networkCallback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                serviceScope.launch { restartPhoneServerIfNeeded() }
+                // A block finished while offline never reached the relay. Coming back online is the
+                // first chance to send it, and it must not wait for the Crew page to be opened.
+                publishCrewCatchUp()
+            }
+
+            override fun onLost(network: Network) {
+                serviceScope.launch { restartPhoneServerIfNeeded() }
+            }
+
+            override fun onCapabilitiesChanged(
+                network: Network,
+                networkCapabilities: NetworkCapabilities,
+            ) {
+                serviceScope.launch { restartPhoneServerIfNeeded() }
+            }
         }
-        override fun onLost(network: Network) {
-            serviceScope.launch { restartPhoneServerIfNeeded() }
-        }
-        override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) {
-            serviceScope.launch { restartPhoneServerIfNeeded() }
-        }
-    }
 
     public val pairingToken: String
         get() = prefs.pairingToken
@@ -158,9 +164,10 @@ public class PomodoroService : Service(), TimerObserver {
         restartPhoneServerIfNeeded()
 
         val connectivityManager = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val networkRequest = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-            .build()
+        val networkRequest =
+            NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                .build()
         connectivityManager.registerNetworkCallback(networkRequest, networkCallback)
 
         if (shouldCompleteRestoredTimer) {
@@ -192,7 +199,11 @@ public class PomodoroService : Service(), TimerObserver {
         return false
     }
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(
+        intent: Intent?,
+        flags: Int,
+        startId: Int,
+    ): Int {
         if (intent != null && intent.action != null) {
             handleAction(intent.action!!)
         }
@@ -347,13 +358,14 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private suspend fun currentEarnedIds(): Set<String> {
-        val snapshot = StatsAggregator.aggregate(
-            days = historyCacheRepository.getCachedDayStats(),
-            sessions = historyCacheRepository.getCachedSessions(),
-            dailyGoal = prefs.dailyGoal,
-            today = historyCacheRepository.getEffectiveDateString(),
-            nowMs = System.currentTimeMillis(),
-        )
+        val snapshot =
+            StatsAggregator.aggregate(
+                days = historyCacheRepository.getCachedDayStats(),
+                sessions = historyCacheRepository.getCachedSessions(),
+                dailyGoal = prefs.dailyGoal,
+                today = historyCacheRepository.getEffectiveDateString(),
+                nowMs = System.currentTimeMillis(),
+            )
         return AchievementEvaluator.earnedOnly(snapshot).map { it.id }.toSet()
     }
 
@@ -408,14 +420,17 @@ public class PomodoroService : Service(), TimerObserver {
         serviceScope.launch { addTimeBlocking(secondsDelta) }
     }
 
-    public suspend fun toggleTimerBlocking(): TimerState = executeCommand(TimerCommand.Toggle)
-        .also { Log.i(TAG, "Timer command executed: toggle status=${it.status} remaining=${it.remaining}") }
+    public suspend fun toggleTimerBlocking(): TimerState =
+        executeCommand(TimerCommand.Toggle)
+            .also { Log.i(TAG, "Timer command executed: toggle status=${it.status} remaining=${it.remaining}") }
 
-    public suspend fun skipTimerBlocking(): TimerState = executeCommand(TimerCommand.Skip)
-        .also { Log.i(TAG, "Timer command executed: skip status=${it.status} phase=${it.phase}") }
+    public suspend fun skipTimerBlocking(): TimerState =
+        executeCommand(TimerCommand.Skip)
+            .also { Log.i(TAG, "Timer command executed: skip status=${it.status} phase=${it.phase}") }
 
-    public suspend fun resetTimerBlocking(): TimerState = executeCommand(TimerCommand.Reset)
-        .also { Log.i(TAG, "Timer command executed: reset status=${it.status} remaining=${it.remaining}") }
+    public suspend fun resetTimerBlocking(): TimerState =
+        executeCommand(TimerCommand.Reset)
+            .also { Log.i(TAG, "Timer command executed: reset status=${it.status} remaining=${it.remaining}") }
 
     public suspend fun addTimeBlocking(secondsDelta: Int): TimerState =
         executeCommand(TimerCommand.AddTime(secondsDelta))
@@ -433,53 +448,63 @@ public class PomodoroService : Service(), TimerObserver {
 
     public fun previewManualCue(event: StateCueEvent): CuePreviewOutcome = cueEngine.previewManual(event)
 
-    private suspend fun executeCommand(command: TimerCommand): TimerState = commandMutex.withLock {
-        withContext(Dispatchers.Main) {
-            // Acting on the timer from any surface acknowledges (and silences) a ring.
-            if (cueEngine.isRinging()) cueEngine.stop()
-            val runningAcrossMidnight =
-                currentState.date != historyCacheRepository.getEffectiveDateString() &&
-                    currentState.status == TimerState.STATUS_RUNNING
-            if (!runningAcrossMidnight) {
-                reconcileDayTransitionIfNeeded(notify = false)
-            }
-            val before = currentState.copy()
-            val event = when (command) {
-                TimerCommand.Toggle -> if (currentState.status == TimerState.STATUS_RUNNING) {
-                    StateCueEvent.PauseTapped
-                } else {
-                    StateCueEvent.StartOrResumeTapped
+    private suspend fun executeCommand(command: TimerCommand): TimerState =
+        commandMutex.withLock {
+            withContext(Dispatchers.Main) {
+                // Acting on the timer from any surface acknowledges (and silences) a ring.
+                if (cueEngine.isRinging()) cueEngine.stop()
+                val runningAcrossMidnight =
+                    currentState.date != historyCacheRepository.getEffectiveDateString() &&
+                        currentState.status == TimerState.STATUS_RUNNING
+                if (!runningAcrossMidnight) {
+                    reconcileDayTransitionIfNeeded(notify = false)
                 }
-                TimerCommand.Skip -> StateCueEvent.SkipTapped
-                TimerCommand.Reset -> StateCueEvent.ResetTapped
-                is TimerCommand.AddTime -> null
-            }
-            when (event) {
-                StateCueEvent.StartOrResumeTapped, StateCueEvent.PauseTapped -> offlineTimer.toggle()
-                StateCueEvent.SkipTapped -> offlineTimer.skip()
-                StateCueEvent.ResetTapped -> offlineTimer.reset()
-                else -> if (command is TimerCommand.AddTime) {
-                    offlineTimer.extend(command.secondsDelta)
+                val before = currentState.copy()
+                val event =
+                    when (command) {
+                        TimerCommand.Toggle ->
+                            if (currentState.status == TimerState.STATUS_RUNNING) {
+                                StateCueEvent.PauseTapped
+                            } else {
+                                StateCueEvent.StartOrResumeTapped
+                            }
+                        TimerCommand.Skip -> StateCueEvent.SkipTapped
+                        TimerCommand.Reset -> StateCueEvent.ResetTapped
+                        is TimerCommand.AddTime -> null
+                    }
+                when (event) {
+                    StateCueEvent.StartOrResumeTapped, StateCueEvent.PauseTapped -> offlineTimer.toggle()
+                    StateCueEvent.SkipTapped -> offlineTimer.skip()
+                    StateCueEvent.ResetTapped -> offlineTimer.reset()
+                    else ->
+                        if (command is TimerCommand.AddTime) {
+                            offlineTimer.extend(command.secondsDelta)
+                        }
                 }
+                if (runningAcrossMidnight && currentState.status != TimerState.STATUS_RUNNING) {
+                    adoptCurrentDayAfterCrossMidnightCommand()
+                }
+                if (event != null && didStateChange(before, currentState)) {
+                    cueEngine.playManual(event)
+                }
+                currentState.copy()
             }
-            if (runningAcrossMidnight && currentState.status != TimerState.STATUS_RUNNING) {
-                adoptCurrentDayAfterCrossMidnightCommand()
-            }
-            if (event != null && didStateChange(before, currentState)) {
-                cueEngine.playManual(event)
-            }
-            currentState.copy()
         }
-    }
 
     private sealed class TimerCommand {
         object Toggle : TimerCommand()
+
         object Skip : TimerCommand()
+
         object Reset : TimerCommand()
+
         data class AddTime(val secondsDelta: Int) : TimerCommand()
     }
 
-    private fun didStateChange(before: TimerState, after: TimerState): Boolean {
+    private fun didStateChange(
+        before: TimerState,
+        after: TimerState,
+    ): Boolean {
         return before.status != after.status ||
             before.phase != after.phase ||
             doublesDiffer(before.remaining, after.remaining) ||
@@ -487,8 +512,11 @@ public class PomodoroService : Service(), TimerObserver {
             before.last_action_time != after.last_action_time
     }
 
-    private fun doublesDiffer(before: Double, after: Double, tolerance: Double = 0.001): Boolean =
-        abs(before - after) > tolerance
+    private fun doublesDiffer(
+        before: Double,
+        after: Double,
+        tolerance: Double = 0.001,
+    ): Boolean = abs(before - after) > tolerance
 
     private suspend fun reconcileDayTransitionIfNeeded(notify: Boolean) {
         val today = historyCacheRepository.getEffectiveDateString()
@@ -605,44 +633,47 @@ public class PomodoroService : Service(), TimerObserver {
         return token
     }
 
-    public suspend fun stateSnapshot(): TimerState = commandMutex.withLock {
-        withContext(Dispatchers.Main) {
-            currentState.copy()
+    public suspend fun stateSnapshot(): TimerState =
+        commandMutex.withLock {
+            withContext(Dispatchers.Main) {
+                currentState.copy()
+            }
         }
-    }
 
     public fun getConfigPayload(): ConfigPayload {
         return ConfigPayload(
-            durations = Durations(
-                work = prefs.pomodoroDuration,
-                short_break = prefs.shortBreakDuration,
-                long_break = prefs.longBreakDuration,
-            ),
+            durations =
+                Durations(
+                    work = prefs.pomodoroDuration,
+                    short_break = prefs.shortBreakDuration,
+                    long_break = prefs.longBreakDuration,
+                ),
             long_break_after = prefs.longBreakAfter,
             daily_goal = prefs.dailyGoal,
         )
     }
 
-    public suspend fun applyConfigPayload(body: String): TimerState = withContext(Dispatchers.Main) {
-        val config = TimerConfigPayloads.parseAndMerge(body, currentConfigValues())
-        prefs.pomodoroDuration = config.work
-        prefs.shortBreakDuration = config.shortBreak
-        prefs.longBreakDuration = config.longBreak
-        prefs.longBreakAfter = config.longBreakAfter
-        prefs.dailyGoal = config.dailyGoal
+    public suspend fun applyConfigPayload(body: String): TimerState =
+        withContext(Dispatchers.Main) {
+            val config = TimerConfigPayloads.parseAndMerge(body, currentConfigValues())
+            prefs.pomodoroDuration = config.work
+            prefs.shortBreakDuration = config.shortBreak
+            prefs.longBreakDuration = config.longBreak
+            prefs.longBreakAfter = config.longBreakAfter
+            prefs.dailyGoal = config.dailyGoal
 
-        currentState.goal = prefs.dailyGoal
-        if (currentState.status != TimerState.STATUS_RUNNING) {
-            currentState.duration = getDurationForPhase(currentState.phase)
-            currentState.remaining = currentState.duration
+            currentState.goal = prefs.dailyGoal
+            if (currentState.status != TimerState.STATUS_RUNNING) {
+                currentState.duration = getDurationForPhase(currentState.phase)
+                currentState.remaining = currentState.duration
+            }
+            sanitizeState(currentState)
+            offlineTimer.updateState(currentState)
+            saveCurrentState()
+            updateNotification()
+            broadcastStateUpdate()
+            currentState.copy()
         }
-        sanitizeState(currentState)
-        offlineTimer.updateState(currentState)
-        saveCurrentState()
-        updateNotification()
-        broadcastStateUpdate()
-        currentState.copy()
-    }
 
     private fun currentConfigValues(): TimerConfigPayloads.Values {
         return TimerConfigPayloads.Values(
@@ -659,12 +690,13 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     private fun getDurationForPhase(phase: String): Double {
-        val minutes = when (phase) {
-            TimerState.PHASE_WORK -> prefs.pomodoroDuration
-            TimerState.PHASE_SHORT -> prefs.shortBreakDuration
-            TimerState.PHASE_LONG -> prefs.longBreakDuration
-            else -> prefs.pomodoroDuration
-        }
+        val minutes =
+            when (phase) {
+                TimerState.PHASE_WORK -> prefs.pomodoroDuration
+                TimerState.PHASE_SHORT -> prefs.shortBreakDuration
+                TimerState.PHASE_LONG -> prefs.longBreakDuration
+                else -> prefs.pomodoroDuration
+            }
         return (minutes * 60).toDouble()
     }
 
@@ -737,5 +769,4 @@ public class PomodoroService : Service(), TimerObserver {
         val short_break: Int,
         val long_break: Int,
     )
-
 }

@@ -1,24 +1,24 @@
 package com.pomo.update
 
-import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.util.concurrent.TimeUnit
 
 /**
  * Unit tests for the pure throttle policy behind [ForegroundUpdateCheck]: when a foreground update
  * check is due, and what a completed check does with each [UpdateCheckResult].
  */
 public class UpdateThrottleTest {
-
     private val now: Long = TimeUnit.DAYS.toMillis(365)
-    private val release = LatestRelease(
-        versionName = "1.25.0",
-        apkUrl = "https://example/apk",
-        sha256Url = "https://example/sha",
-        releaseNotes = "notes",
-    )
+    private val release =
+        LatestRelease(
+            versionName = "1.25.0",
+            apkUrl = "https://example/apk",
+            sha256Url = "https://example/sha",
+            releaseNotes = "notes",
+        )
 
     @Test
     public fun isDue_neverChecked_isAlwaysDue() {

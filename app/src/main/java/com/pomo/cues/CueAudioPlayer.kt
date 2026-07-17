@@ -36,7 +36,10 @@ public class CueAudioPlayer(context: Context) {
             audioManager.getStreamVolume(AudioManager.STREAM_ALARM) > 0
     }
 
-    public fun play(family: CompletionCueFamily, variant: CueVariant): Boolean {
+    public fun play(
+        family: CompletionCueFamily,
+        variant: CueVariant,
+    ): Boolean {
         if (!isAvailable()) return false
 
         stop()
@@ -61,11 +64,12 @@ public class CueAudioPlayer(context: Context) {
     ): Boolean {
         if (!isRingAvailable()) return false
         stopRing()
-        val player = if (useSystemAlarm) {
-            createSystemAlarmPlayer()
-        } else {
-            createPlayer(rawResFor(family, variant), AudioAttributes.USAGE_ALARM)
-        } ?: return false
+        val player =
+            if (useSystemAlarm) {
+                createSystemAlarmPlayer()
+            } else {
+                createPlayer(rawResFor(family, variant), AudioAttributes.USAGE_ALARM)
+            } ?: return false
         ringPlayer = player
         return try {
             player.isLooping = true
@@ -109,9 +113,10 @@ public class CueAudioPlayer(context: Context) {
     }
 
     private fun createSystemAlarmPlayer(): MediaPlayer? {
-        val uri = RingtoneManager.getActualDefaultRingtoneUri(appContext, RingtoneManager.TYPE_ALARM)
-            ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-            ?: return null
+        val uri =
+            RingtoneManager.getActualDefaultRingtoneUri(appContext, RingtoneManager.TYPE_ALARM)
+                ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
+                ?: return null
         return try {
             MediaPlayer().apply {
                 setAudioAttributes(alarmAudioAttributes())
@@ -128,35 +133,44 @@ public class CueAudioPlayer(context: Context) {
         rawResId: Int,
         usage: Int = AudioAttributes.USAGE_ASSISTANCE_SONIFICATION,
     ): MediaPlayer? {
-        val audioAttributes = AudioAttributes.Builder()
-            .setUsage(usage)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
+        val audioAttributes =
+            AudioAttributes.Builder()
+                .setUsage(usage)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
         return MediaPlayer.create(appContext, rawResId, audioAttributes, 0)?.apply {
             isLooping = false
         }
     }
 
-    private fun alarmAudioAttributes(): AudioAttributes = AudioAttributes.Builder()
-        .setUsage(AudioAttributes.USAGE_ALARM)
-        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-        .build()
+    private fun alarmAudioAttributes(): AudioAttributes =
+        AudioAttributes.Builder()
+            .setUsage(AudioAttributes.USAGE_ALARM)
+            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+            .build()
 
-    private fun rawResFor(family: CompletionCueFamily, variant: CueVariant): Int = when (family) {
-        CompletionCueFamily.FocusComplete -> when (variant) {
-            CueVariant.Variant1 -> R.raw.cue_focus_complete_v1
-            CueVariant.Variant2 -> R.raw.cue_focus_complete_v2
-            CueVariant.Variant3 -> R.raw.cue_focus_complete_v3
+    private fun rawResFor(
+        family: CompletionCueFamily,
+        variant: CueVariant,
+    ): Int =
+        when (family) {
+            CompletionCueFamily.FocusComplete ->
+                when (variant) {
+                    CueVariant.Variant1 -> R.raw.cue_focus_complete_v1
+                    CueVariant.Variant2 -> R.raw.cue_focus_complete_v2
+                    CueVariant.Variant3 -> R.raw.cue_focus_complete_v3
+                }
+            CompletionCueFamily.ShortBreakComplete ->
+                when (variant) {
+                    CueVariant.Variant1 -> R.raw.cue_short_break_complete_v1
+                    CueVariant.Variant2 -> R.raw.cue_short_break_complete_v2
+                    CueVariant.Variant3 -> R.raw.cue_short_break_complete_v3
+                }
+            CompletionCueFamily.LongBreakComplete ->
+                when (variant) {
+                    CueVariant.Variant1 -> R.raw.cue_long_break_complete_v1
+                    CueVariant.Variant2 -> R.raw.cue_long_break_complete_v2
+                    CueVariant.Variant3 -> R.raw.cue_long_break_complete_v3
+                }
         }
-        CompletionCueFamily.ShortBreakComplete -> when (variant) {
-            CueVariant.Variant1 -> R.raw.cue_short_break_complete_v1
-            CueVariant.Variant2 -> R.raw.cue_short_break_complete_v2
-            CueVariant.Variant3 -> R.raw.cue_short_break_complete_v3
-        }
-        CompletionCueFamily.LongBreakComplete -> when (variant) {
-            CueVariant.Variant1 -> R.raw.cue_long_break_complete_v1
-            CueVariant.Variant2 -> R.raw.cue_long_break_complete_v2
-            CueVariant.Variant3 -> R.raw.cue_long_break_complete_v3
-        }
-    }
 }

@@ -8,15 +8,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.CalendarMonth
@@ -38,7 +39,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -57,6 +57,7 @@ import com.pomo.crew.CrewBoard
 import com.pomo.crew.CrewBoardRow
 import com.pomo.crew.CrewRankingMode
 import com.pomo.crew.CrewValidation
+import com.pomo.ui.components.Avatar
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
 import com.pomo.ui.components.PomoSheet
@@ -117,21 +118,24 @@ internal fun CrewBoardContent(
     var showInactive by remember { mutableStateOf(false) }
     val activeRows = board.rows.filterNot { it.isInactive }
     val inactiveRows = board.rows.filter { it.isInactive }
-    val duplicateNames = activeRows.groupingBy { it.displayName.trim().lowercase(Locale.ROOT) }
-        .eachCount()
-        .filterValues { it > 1 }
-        .keys
+    val duplicateNames =
+        activeRows.groupingBy { it.displayName.trim().lowercase(Locale.ROOT) }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
     val visibleRows = activeRows.filter { row -> row.matchesSearch(search, duplicateNames) }
-    val tiedRanks = activeRows.mapNotNull { it.rank }
-        .groupingBy { it }
-        .eachCount()
-        .filterValues { it > 1 }
-        .keys
+    val tiedRanks =
+        activeRows.mapNotNull { it.rank }
+            .groupingBy { it }
+            .eachCount()
+            .filterValues { it > 1 }
+            .keys
 
     LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 32.dp),
     ) {
         item(key = "header") {
@@ -169,9 +173,10 @@ internal fun CrewBoardContent(
                     onValueChange = { search = it },
                     label = { Text("Search members") },
                     singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 16.dp),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
                 )
             }
         }
@@ -301,15 +306,19 @@ private fun CrewHeader(
 }
 
 @Composable
-private fun RankingWindowControl(mode: CrewRankingMode, onChange: (CrewRankingMode) -> Unit) {
+private fun RankingWindowControl(
+    mode: CrewRankingMode,
+    onChange: (CrewRankingMode) -> Unit,
+) {
     SegmentedToggle(
-        options = listOf(
-            SegmentedToggleOption(TOGGLE_TODAY, "Today"),
-            SegmentedToggleOption(TOGGLE_YESTERDAY, "Yest"),
-            SegmentedToggleOption(TOGGLE_SEVEN_DAYS, "7D"),
-            SegmentedToggleOption(TOGGLE_THIRTY_DAYS, "30D"),
-            SegmentedToggleOption(TOGGLE_ALL_TIME, "All"),
-        ),
+        options =
+            listOf(
+                SegmentedToggleOption(TOGGLE_TODAY, "Today"),
+                SegmentedToggleOption(TOGGLE_YESTERDAY, "Yest"),
+                SegmentedToggleOption(TOGGLE_SEVEN_DAYS, "7D"),
+                SegmentedToggleOption(TOGGLE_THIRTY_DAYS, "30D"),
+                SegmentedToggleOption(TOGGLE_ALL_TIME, "All"),
+            ),
         // A picked day matches no option, so the row shows nothing selected and the
         // day chip below carries the current window instead.
         selectedValue = mode.toggleKey(),
@@ -329,13 +338,17 @@ private fun RankingWindowControl(mode: CrewRankingMode, onChange: (CrewRankingMo
 }
 
 @Composable
-private fun SelectedDayChip(localDate: String, onClear: () -> Unit) {
+private fun SelectedDayChip(
+    localDate: String,
+    onClear: () -> Unit,
+) {
     Row(
-        modifier = Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(PomoTokens.colors.accent.copy(alpha = 0.14f))
-            .clickable(onClick = onClear)
-            .padding(start = 12.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(PomoTokens.colors.accent.copy(alpha = 0.14f))
+                .clickable(onClick = onClear)
+                .padding(start = 12.dp, end = 8.dp, top = 5.dp, bottom = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -353,14 +366,15 @@ private fun SelectedDayChip(localDate: String, onClear: () -> Unit) {
     }
 }
 
-private fun CrewRankingMode.toggleKey(): String = when (this) {
-    CrewRankingMode.Today -> TOGGLE_TODAY
-    CrewRankingMode.Yesterday -> TOGGLE_YESTERDAY
-    CrewRankingMode.SevenDays -> TOGGLE_SEVEN_DAYS
-    CrewRankingMode.ThirtyDays -> TOGGLE_THIRTY_DAYS
-    CrewRankingMode.AllTime -> TOGGLE_ALL_TIME
-    is CrewRankingMode.Day -> TOGGLE_DAY
-}
+private fun CrewRankingMode.toggleKey(): String =
+    when (this) {
+        CrewRankingMode.Today -> TOGGLE_TODAY
+        CrewRankingMode.Yesterday -> TOGGLE_YESTERDAY
+        CrewRankingMode.SevenDays -> TOGGLE_SEVEN_DAYS
+        CrewRankingMode.ThirtyDays -> TOGGLE_THIRTY_DAYS
+        CrewRankingMode.AllTime -> TOGGLE_ALL_TIME
+        is CrewRankingMode.Day -> TOGGLE_DAY
+    }
 
 private const val TOGGLE_TODAY = "TODAY"
 private const val TOGGLE_YESTERDAY = "YESTERDAY"
@@ -379,20 +393,23 @@ private fun PickDayDialog(
     val today = remember { LocalDate.now() }
     // Snapshots only carry MAX_DAILY_AGGREGATES days of history, so earlier days would
     // rank everyone at zero. Don't offer them.
-    val earliest = remember(today) {
-        today.minusDays((CrewValidation.MAX_DAILY_AGGREGATES - 1).toLong())
-    }
-    val state = rememberDatePickerState(
-        initialSelectedDateMillis = (initialDate?.toLocalDateOrNull() ?: today).toUtcMillis(),
-        selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                val date = utcTimeMillis.toUtcLocalDate()
-                return !date.isBefore(earliest) && !date.isAfter(today)
-            }
+    val earliest =
+        remember(today) {
+            today.minusDays((CrewValidation.MAX_DAILY_AGGREGATES - 1).toLong())
+        }
+    val state =
+        rememberDatePickerState(
+            initialSelectedDateMillis = (initialDate?.toLocalDateOrNull() ?: today).toUtcMillis(),
+            selectableDates =
+                object : SelectableDates {
+                    override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                        val date = utcTimeMillis.toUtcLocalDate()
+                        return !date.isBefore(earliest) && !date.isAfter(today)
+                    }
 
-            override fun isSelectableYear(year: Int): Boolean = year in earliest.year..today.year
-        },
-    )
+                    override fun isSelectableYear(year: Int): Boolean = year in earliest.year..today.year
+                },
+        )
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
@@ -407,14 +424,11 @@ private fun PickDayDialog(
     }
 }
 
-private fun String.toLocalDateOrNull(): LocalDate? =
-    runCatching { LocalDate.parse(this) }.getOrNull()
+private fun String.toLocalDateOrNull(): LocalDate? = runCatching { LocalDate.parse(this) }.getOrNull()
 
-private fun LocalDate.toUtcMillis(): Long =
-    atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
+private fun LocalDate.toUtcMillis(): Long = atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli()
 
-private fun Long.toUtcLocalDate(): LocalDate =
-    Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
+private fun Long.toUtcLocalDate(): LocalDate = Instant.ofEpochMilli(this).atZone(ZoneOffset.UTC).toLocalDate()
 
 @Composable
 private fun CrewSummary(rows: List<CrewBoardRow>) {
@@ -429,17 +443,21 @@ private fun CrewSummary(rows: List<CrewBoardRow>) {
 }
 
 @Composable
-private fun YourStanding(rows: List<CrewBoardRow>, tiedRanks: Set<Int>) {
+private fun YourStanding(
+    rows: List<CrewBoardRow>,
+    tiedRanks: Set<Int>,
+) {
     val self = rows.firstOrNull { it.isSelf } ?: return
     val context = standingContext(self, rows)
     val accent = PomoTokens.colors.accent
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(PomoTokens.colors.surfaceElevated)
-            .drawBehind { drawRect(accent, size = Size(3.dp.toPx(), size.height)) }
-            .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(PomoTokens.colors.surfaceElevated)
+                .drawBehind { drawRect(accent, size = Size(3.dp.toPx(), size.height)) }
+                .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
         Text("YOUR STANDING", style = MaterialTheme.typography.labelSmall, color = PomoTokens.colors.onSurfaceMuted)
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.Bottom) {
@@ -463,22 +481,29 @@ private fun YourStanding(rows: List<CrewBoardRow>, tiedRanks: Set<Int>) {
 }
 
 @Composable
-private fun CrewRow(row: CrewBoardRow, showFingerprint: Boolean, isTied: Boolean, onClick: () -> Unit) {
+private fun CrewRow(
+    row: CrewBoardRow,
+    showFingerprint: Boolean,
+    isTied: Boolean,
+    onClick: () -> Unit,
+) {
     val rankLabel = row.rank?.let { if (isTied) "=$it" else "#$it" } ?: "—"
-    val displayLabel = if (showFingerprint) {
-        "${row.displayName} · ${row.identityPublicKey.take(4).uppercase(Locale.ROOT)}"
-    } else {
-        row.displayName
-    }
+    val displayLabel =
+        if (showFingerprint) {
+            "${row.displayName} · ${row.identityPublicKey.take(4).uppercase(Locale.ROOT)}"
+        } else {
+            row.displayName
+        }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .alpha(if (row.isStale) 0.58f else 1f)
-            .semantics {
-                contentDescription = "$rankLabel, $displayLabel, ${formatMinutes(row.selectedFocusMinutes)}"
-            }
-            .padding(vertical = 12.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .alpha(if (row.isStale) 0.58f else 1f)
+                .semantics {
+                    contentDescription = "$rankLabel, $displayLabel, ${formatMinutes(row.selectedFocusMinutes)}"
+                }
+                .padding(vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -489,6 +514,12 @@ private fun CrewRow(row: CrewBoardRow, showFingerprint: Boolean, isTied: Boolean
             fontFamily = FontFamily.Monospace,
             fontWeight = FontWeight.SemiBold,
         )
+        Avatar(
+            avatarBase64 = row.avatarBase64,
+            displayName = row.displayName,
+            size = 34.dp,
+        )
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = if (row.isSelf) "$displayLabel · YOU" else displayLabel,
@@ -522,26 +553,29 @@ private fun SevenDayBars(row: CrewBoardRow) {
     val values = row.dailyAggregates.take(7).reversed().map { it.focusMinutes }
     val max = values.maxOrNull()?.coerceAtLeast(1) ?: 1
     Row(
-        modifier = Modifier
-            .width(46.dp)
-            .height(24.dp),
+        modifier =
+            Modifier
+                .width(46.dp)
+                .height(24.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.Bottom,
     ) {
         repeat(7) { index ->
             val value = values.getOrElse(index) { 0 }
             val height = if (value == 0) 2.dp else (4 + 20 * value / max).dp
-            val barColor = when {
-                value == max && value > 0 -> PomoTokens.colors.accent
-                value == 0 -> PomoTokens.colors.onSurfaceFaint
-                else -> PomoTokens.colors.onSurface
-            }
+            val barColor =
+                when {
+                    value == max && value > 0 -> PomoTokens.colors.accent
+                    value == 0 -> PomoTokens.colors.onSurfaceFaint
+                    else -> PomoTokens.colors.onSurface
+                }
             Box(
-                modifier = Modifier
-                    .width(4.dp)
-                    .height(height)
-                    .clip(RoundedCornerShape(1.dp))
-                    .background(barColor),
+                modifier =
+                    Modifier
+                        .width(4.dp)
+                        .height(height)
+                        .clip(RoundedCornerShape(1.dp))
+                        .background(barColor),
             )
         }
     }
@@ -558,11 +592,12 @@ private fun MemberDetailSheet(
 ) {
     val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
     val blocks = row.dailyAggregates.sumOf { it.completedWorkBlocks }
-    PomoSheet(title = row.displayName, onDismissRequest = onDismiss) {
+    PomoSheet(title = row.displayName, onDismissRequest = onDismiss, skipPartiallyExpanded = true) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             MemberIdentityStrip(row)
@@ -572,14 +607,14 @@ private fun MemberDetailSheet(
                 StatTile(activeDays.toString(), "ACTIVE DAYS", Modifier.weight(1f))
                 StatTile(blocks.toString(), "BLOCKS", Modifier.weight(1f))
             }
-            if (!row.isSelf && self != null) {
-                MemberComparisons(row, self, rankingMode)
-            }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PomoButton(onClick = onViewStats, modifier = Modifier.weight(1f)) { Text("View stats") }
                 if (!row.isSelf) {
                     PomoButton(onClick = onHide, variant = PomoButtonVariant.Ghost) { Text("Hide") }
                 }
+            }
+            if (!row.isSelf && self != null) {
+                MemberComparisons(row, self, rankingMode)
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -590,10 +625,11 @@ private fun MemberDetailSheet(
 private fun MemberIdentityStrip(row: CrewBoardRow) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Box(
-            modifier = Modifier
-                .size(42.dp)
-                .clip(RoundedCornerShape(11.dp))
-                .background(PomoTokens.colors.surfaceElevated),
+            modifier =
+                Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(11.dp))
+                    .background(PomoTokens.colors.surfaceElevated),
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -654,26 +690,28 @@ private fun MemberHistoryBars(row: CrewBoardRow) {
         }
         Spacer(Modifier.height(8.dp))
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(46.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(46.dp),
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.Bottom,
         ) {
             days.forEach { day ->
                 val fraction = day.focusMinutes.toFloat() / max
                 Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(fraction.coerceAtLeast(MIN_BAR_FRACTION))
-                        .clip(RoundedCornerShape(1.dp))
-                        .background(
-                            when {
-                                day.focusMinutes == 0 -> PomoTokens.colors.outline
-                                day.focusMinutes == max -> PomoTokens.colors.accent
-                                else -> PomoTokens.colors.outlineStrong
-                            },
-                        ),
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight(fraction.coerceAtLeast(MIN_BAR_FRACTION))
+                            .clip(RoundedCornerShape(1.dp))
+                            .background(
+                                when {
+                                    day.focusMinutes == 0 -> PomoTokens.colors.outline
+                                    day.focusMinutes == max -> PomoTokens.colors.accent
+                                    else -> PomoTokens.colors.outlineStrong
+                                },
+                            ),
                 )
             }
         }
@@ -685,12 +723,17 @@ private fun MemberHistoryBars(row: CrewBoardRow) {
  * ahead, left in grey when you are — so the sign is legible without reading the number.
  */
 @Composable
-private fun MemberComparisons(row: CrewBoardRow, self: CrewBoardRow, rankingMode: CrewRankingMode) {
-    val minuteScale = maxOf(
-        abs(row.selectedFocusMinutes - self.selectedFocusMinutes),
-        abs(row.thirtyDayFocusMinutes - self.thirtyDayFocusMinutes),
-        1,
-    )
+private fun MemberComparisons(
+    row: CrewBoardRow,
+    self: CrewBoardRow,
+    rankingMode: CrewRankingMode,
+) {
+    val minuteScale =
+        maxOf(
+            abs(row.selectedFocusMinutes - self.selectedFocusMinutes),
+            abs(row.thirtyDayFocusMinutes - self.thirtyDayFocusMinutes),
+            1,
+        )
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -710,15 +753,21 @@ private fun MemberComparisons(row: CrewBoardRow, self: CrewBoardRow, rankingMode
         ComparisonBar(
             label = "Streak",
             deltaMinutes = row.currentStreak - self.currentStreak,
-            fraction = abs(row.currentStreak - self.currentStreak).toFloat() /
-                maxOf(abs(row.currentStreak - self.currentStreak), 1),
+            fraction =
+                abs(row.currentStreak - self.currentStreak).toFloat() /
+                    maxOf(abs(row.currentStreak - self.currentStreak), 1),
             value = comparisonDaysLabel(row.currentStreak - self.currentStreak),
         )
     }
 }
 
 @Composable
-private fun ComparisonBar(label: String, deltaMinutes: Int, fraction: Float, value: String) {
+private fun ComparisonBar(
+    label: String,
+    deltaMinutes: Int,
+    fraction: Float,
+    value: String,
+) {
     val ahead = deltaMinutes > 0
     val accent = PomoTokens.colors.accent
     val track = PomoTokens.colors.surfaceElevated
@@ -733,27 +782,28 @@ private fun ComparisonBar(label: String, deltaMinutes: Int, fraction: Float, val
             overflow = TextOverflow.Ellipsis,
         )
         Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(6.dp)
-                .clip(RoundedCornerShape(3.dp))
-                .drawBehind {
-                    drawRect(track)
-                    val half = size.width / 2f
-                    val width = half * fraction.coerceIn(0f, 1f)
-                    if (deltaMinutes != 0) {
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(6.dp)
+                    .clip(RoundedCornerShape(3.dp))
+                    .drawBehind {
+                        drawRect(track)
+                        val half = size.width / 2f
+                        val width = half * fraction.coerceIn(0f, 1f)
+                        if (deltaMinutes != 0) {
+                            drawRect(
+                                color = if (ahead) accent else neutral,
+                                topLeft = Offset(if (ahead) half else half - width, 0f),
+                                size = Size(width, size.height),
+                            )
+                        }
                         drawRect(
-                            color = if (ahead) accent else neutral,
-                            topLeft = Offset(if (ahead) half else half - width, 0f),
-                            size = Size(width, size.height),
+                            color = neutral,
+                            topLeft = Offset(half - 0.5f, 0f),
+                            size = Size(1f, size.height),
                         )
-                    }
-                    drawRect(
-                        color = neutral,
-                        topLeft = Offset(half - 0.5f, 0f),
-                        size = Size(1f, size.height),
-                    )
-                },
+                    },
         )
         Spacer(Modifier.width(10.dp))
         Text(

@@ -47,6 +47,7 @@ public data class BackupSession(
  */
 public data class BackupCrew(
     val identityPrivateKey: String = "",
+    val profileAvatarBase64: String? = null,
     val activeCrewId: String? = null,
     val memberships: List<BackupMembership> = emptyList(),
     val snapshots: List<BackupSnapshot> = emptyList(),
@@ -68,6 +69,7 @@ public data class BackupSnapshot(
     val crewId: String = "",
     val identityPublicKey: String = "",
     val displayName: String = "",
+    val avatarBase64: String? = null,
     val allTimeFocusMinutes: Int = 0,
     val publishedAtEpochSeconds: Long = 0L,
     val localDate: String = "",

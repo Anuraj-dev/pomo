@@ -31,7 +31,6 @@ import kotlinx.coroutines.flow.flow
  * no achievements table and nothing is persisted. See docs/adr/0005-achievements.md.
  */
 public class AchievementsFragment : Fragment() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enterTransition = MaterialFadeThrough()
@@ -82,12 +81,13 @@ public class AchievementsFragment : Fragment() {
     }
 
     /** Keep the streak-driven tiles current across midnight while the page is open, as Stats does. */
-    private fun currentDateFlow(): Flow<String> = flow {
-        while (true) {
-            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
-            delay(DATE_REFRESH_INTERVAL_MS)
-        }
-    }.distinctUntilChanged()
+    private fun currentDateFlow(): Flow<String> =
+        flow {
+            while (true) {
+                emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+                delay(DATE_REFRESH_INTERVAL_MS)
+            }
+        }.distinctUntilChanged()
 }
 
 private const val DEFAULT_DAILY_GOAL: Int = 8

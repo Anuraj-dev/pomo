@@ -35,17 +35,23 @@ import com.pomo.update.DownloadOutcome
 import com.pomo.update.GithubUpdateChecker
 import com.pomo.update.LatestRelease
 import com.pomo.update.UpdateCheckResult
-import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 private sealed interface UpdateUiState {
     data object Idle : UpdateUiState
+
     data object Checking : UpdateUiState
+
     data object UpToDate : UpdateUiState
+
     data class Available(val release: LatestRelease) : UpdateUiState
+
     data class Downloading(val release: LatestRelease, val progress: Float) : UpdateUiState
+
     data object Installing : UpdateUiState
+
     data class Failed(val message: String, val canOpenSettings: Boolean = false) : UpdateUiState
 }
 
@@ -58,11 +64,12 @@ private sealed interface UpdateUiState {
 internal fun UpdateSection(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val client = remember {
-        OkHttpClient.Builder()
-            .callTimeout(60, TimeUnit.SECONDS)
-            .build()
-    }
+    val client =
+        remember {
+            OkHttpClient.Builder()
+                .callTimeout(60, TimeUnit.SECONDS)
+                .build()
+        }
     val checker = remember { GithubUpdateChecker(client) }
     val installer = remember(context) { ApkInstaller(client, context.cacheDir) }
     var state by remember { mutableStateOf<UpdateUiState>(UpdateUiState.Idle) }
@@ -70,53 +77,57 @@ internal fun UpdateSection(modifier: Modifier = Modifier) {
     fun check() {
         state = UpdateUiState.Checking
         scope.launch {
-            state = when (val result = checker.check(BuildConfig.VERSION_NAME)) {
-                is UpdateCheckResult.UpdateAvailable -> UpdateUiState.Available(result.release)
-                UpdateCheckResult.UpToDate -> UpdateUiState.UpToDate
-                UpdateCheckResult.Offline ->
-                    UpdateUiState.Failed("No connection. Check your network and try again.")
-                UpdateCheckResult.RateLimited ->
-                    UpdateUiState.Failed("GitHub rate limit reached. Try again later.")
-                UpdateCheckResult.MalformedMetadata ->
-                    UpdateUiState.Failed("Couldn't read the latest release. Try again later.")
-                UpdateCheckResult.MissingAsset ->
-                    UpdateUiState.Failed("The latest release has no installable file yet.")
-            }
+            state =
+                when (val result = checker.check(BuildConfig.VERSION_NAME)) {
+                    is UpdateCheckResult.UpdateAvailable -> UpdateUiState.Available(result.release)
+                    UpdateCheckResult.UpToDate -> UpdateUiState.UpToDate
+                    UpdateCheckResult.Offline ->
+                        UpdateUiState.Failed("No connection. Check your network and try again.")
+                    UpdateCheckResult.RateLimited ->
+                        UpdateUiState.Failed("GitHub rate limit reached. Try again later.")
+                    UpdateCheckResult.MalformedMetadata ->
+                        UpdateUiState.Failed("Couldn't read the latest release. Try again later.")
+                    UpdateCheckResult.MissingAsset ->
+                        UpdateUiState.Failed("The latest release has no installable file yet.")
+                }
         }
     }
 
     fun install(release: LatestRelease) {
         if (!ApkInstaller.canInstall(context)) {
-            state = UpdateUiState.Failed(
-                "Allow Pomo to install apps, then try again.",
-                canOpenSettings = true,
-            )
+            state =
+                UpdateUiState.Failed(
+                    "Allow Pomo to install apps, then try again.",
+                    canOpenSettings = true,
+                )
             return
         }
         scope.launch {
             state = UpdateUiState.Downloading(release, 0f)
-            val outcome = installer.download(release) { progress ->
-                state = UpdateUiState.Downloading(release, progress)
-            }
-            state = when (outcome) {
-                is DownloadOutcome.Ready -> {
-                    if (ApkInstaller.canInstall(context)) {
-                        ApkInstaller.launchInstaller(context, outcome.apk)
-                        UpdateUiState.Installing
-                    } else {
-                        UpdateUiState.Failed(
-                            "Allow Pomo to install apps, then try again.",
-                            canOpenSettings = true,
-                        )
-                    }
+            val outcome =
+                installer.download(release) { progress ->
+                    state = UpdateUiState.Downloading(release, progress)
                 }
-                DownloadOutcome.Offline ->
-                    UpdateUiState.Failed("Download interrupted. Check your network and try again.")
-                DownloadOutcome.Corrupt ->
-                    UpdateUiState.Failed("Download was corrupted. Try again.")
-                DownloadOutcome.Failed ->
-                    UpdateUiState.Failed("Download failed. Try again.")
-            }
+            state =
+                when (outcome) {
+                    is DownloadOutcome.Ready -> {
+                        if (ApkInstaller.canInstall(context)) {
+                            ApkInstaller.launchInstaller(context, outcome.apk)
+                            UpdateUiState.Installing
+                        } else {
+                            UpdateUiState.Failed(
+                                "Allow Pomo to install apps, then try again.",
+                                canOpenSettings = true,
+                            )
+                        }
+                    }
+                    DownloadOutcome.Offline ->
+                        UpdateUiState.Failed("Download interrupted. Check your network and try again.")
+                    DownloadOutcome.Corrupt ->
+                        UpdateUiState.Failed("Download was corrupted. Try again.")
+                    DownloadOutcome.Failed ->
+                        UpdateUiState.Failed("Download failed. Try again.")
+                }
         }
     }
 
@@ -209,15 +220,19 @@ internal fun UpdateSection(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun StatusText(text: String, emphasis: Boolean = false) {
+private fun StatusText(
+    text: String,
+    emphasis: Boolean = false,
+) {
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
-        color = if (emphasis) {
-            MaterialTheme.colorScheme.primary
-        } else {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        },
+        color =
+            if (emphasis) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            },
     )
 }
 
@@ -229,9 +244,10 @@ private fun ReleaseNotes(notes: String) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         lineHeight = 18.sp,
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 160.dp)
-            .verticalScroll(scroll),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 160.dp)
+                .verticalScroll(scroll),
     )
 }

@@ -82,14 +82,16 @@ internal fun ManageCrewScreen(
     val shareUri = payload?.let(com.pomo.crew.CrewJoinCodeCodec::encodeUri) ?: board.joinCode
     BackHandler(onBack = onBack)
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(start = 4.dp, end = 12.dp, top = 8.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
@@ -105,9 +107,10 @@ internal fun ManageCrewScreen(
             )
         }
         LazyColumn(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
             contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -251,7 +254,10 @@ internal fun ManageCrewScreen(
 }
 
 @Composable
-private fun ActiveMemberRow(row: CrewBoardRow, onHide: () -> Unit) {
+private fun ActiveMemberRow(
+    row: CrewBoardRow,
+    onHide: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -293,8 +299,9 @@ internal fun HideMemberConfirmDialog(
         title = { Text("Hide $memberName?") },
         body = {
             Text(
-                text = "They disappear from your leaderboard on this device only. Nothing is " +
-                    "deleted for them, and you can unhide them any time from Manage.",
+                text =
+                    "They disappear from your leaderboard on this device only. Nothing is " +
+                        "deleted for them, and you can unhide them any time from Manage.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = PomoTokens.colors.onSurfaceMuted,
             )
@@ -307,7 +314,10 @@ internal fun HideMemberConfirmDialog(
 }
 
 @Composable
-private fun HiddenMemberRow(member: CrewHiddenMember, onUnhide: () -> Unit) {
+private fun HiddenMemberRow(
+    member: CrewHiddenMember,
+    onUnhide: () -> Unit,
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
@@ -335,17 +345,19 @@ private fun HiddenMemberRow(member: CrewHiddenMember, onUnhide: () -> Unit) {
 
 @Composable
 private fun CrewQrCode(value: String) {
-    val bitmap = remember(value) {
-        val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, QR_SIZE, QR_SIZE)
-        Bitmap.createBitmap(QR_SIZE, QR_SIZE, Bitmap.Config.ARGB_8888).apply {
-            val pixels = IntArray(QR_SIZE * QR_SIZE) { index ->
-                val x = index % QR_SIZE
-                val y = index / QR_SIZE
-                if (matrix[x, y]) QR_FOREGROUND else QR_BACKGROUND
+    val bitmap =
+        remember(value) {
+            val matrix = MultiFormatWriter().encode(value, BarcodeFormat.QR_CODE, QR_SIZE, QR_SIZE)
+            Bitmap.createBitmap(QR_SIZE, QR_SIZE, Bitmap.Config.ARGB_8888).apply {
+                val pixels =
+                    IntArray(QR_SIZE * QR_SIZE) { index ->
+                        val x = index % QR_SIZE
+                        val y = index / QR_SIZE
+                        if (matrix[x, y]) QR_FOREGROUND else QR_BACKGROUND
+                    }
+                setPixels(pixels, 0, QR_SIZE, 0, 0, QR_SIZE, QR_SIZE)
             }
-            setPixels(pixels, 0, QR_SIZE, 0, 0, QR_SIZE, QR_SIZE)
         }
-    }
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
         Image(
             bitmap = bitmap.asImageBitmap(),
@@ -375,20 +387,23 @@ internal fun JoinConfirmationSheet(
     LaunchedEffect(pending.joinCode) {
         preview = loadPreview(pending.joinCode)
     }
-    val normalizedDisplayName = remember(displayName) {
-        CrewValidation.normalizeDisplayName(displayName)
-    }
-    val duplicateName = normalizedDisplayName
-        ?.trim()
-        ?.lowercase(Locale.ROOT)
-        ?.let { normalized -> preview?.knownDisplayNames?.contains(normalized) == true }
-        ?: false
+    val normalizedDisplayName =
+        remember(displayName) {
+            CrewValidation.normalizeDisplayName(displayName)
+        }
+    val duplicateName =
+        normalizedDisplayName
+            ?.trim()
+            ?.lowercase(Locale.ROOT)
+            ?.let { normalized -> preview?.knownDisplayNames?.contains(normalized) == true }
+            ?: false
 
     PomoSheet(title = "Join Crew", onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
@@ -444,9 +459,10 @@ internal fun CreateCrewSheet(
 
     PomoSheet(title = "Create Crew", onDismissRequest = onDismiss) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 8.dp),
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
             Text(
@@ -496,7 +512,11 @@ private fun JoinPreviewStats(preview: CrewJoinPreview) {
 }
 
 @Composable
-private fun PreviewStat(value: String, label: String, modifier: Modifier = Modifier) {
+private fun PreviewStat(
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
     Column(modifier = modifier) {
         Text(
             text = label,
@@ -515,7 +535,10 @@ private fun PreviewStat(value: String, label: String, modifier: Modifier = Modif
 }
 
 @Composable
-internal fun NameField(value: String, onValueChange: (String) -> Unit) {
+internal fun NameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+) {
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,

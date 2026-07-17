@@ -3,10 +3,12 @@ package com.pomo.crew
 import android.content.Context
 
 public class CrewIdentityStore(context: Context) {
-    private val prefs = context.applicationContext
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-    private val legacyPrefs = context.applicationContext
-        .getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs =
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val legacyPrefs =
+        context.applicationContext
+            .getSharedPreferences(LEGACY_PREFS_NAME, Context.MODE_PRIVATE)
     private val cipher: CrewSecretCipher by lazy { CrewSecretCipher() }
 
     public fun identity(): CrewIdentity {
@@ -16,8 +18,9 @@ public class CrewIdentityStore(context: Context) {
             return CrewIdentity(existing, publicKeyFor(existing))
         }
 
-        val legacy = legacyPrefs.getString(LEGACY_IDENTITY_KEY, null)
-            ?.takeIf { CrewValidation.isLowerHex(it, 64) }
+        val legacy =
+            legacyPrefs.getString(LEGACY_IDENTITY_KEY, null)
+                ?.takeIf { CrewValidation.isLowerHex(it, 64) }
         val privateKey = legacy ?: CrewNostrKeys.generatePrivateKeyHex()
         replaceIdentity(privateKey)
         legacyPrefs.edit()

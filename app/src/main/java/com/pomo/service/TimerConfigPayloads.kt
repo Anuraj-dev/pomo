@@ -5,9 +5,13 @@ import com.google.gson.Gson
 public object TimerConfigPayloads {
     private val gson = Gson()
 
-    public fun parseAndMerge(body: String, current: Values): Values {
-        val payload = gson.fromJson(body, PartialPayload::class.java)
-            ?: throw IllegalArgumentException("config body must be a JSON object")
+    public fun parseAndMerge(
+        body: String,
+        current: Values,
+    ): Values {
+        val payload =
+            gson.fromJson(body, PartialPayload::class.java)
+                ?: throw IllegalArgumentException("config body must be a JSON object")
         return Values(
             work = payload.durations?.work?.takeIf { it > 0 } ?: current.work,
             shortBreak = payload.durations?.short_break?.takeIf { it > 0 } ?: current.shortBreak,

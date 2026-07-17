@@ -3,18 +3,19 @@ package com.pomo.crew
 import android.content.Context
 import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.profile.AvatarStore
 import com.pomo.stats.StatsAggregator
 import com.pomo.timer.TimerState
 import com.pomo.util.DateLogic
-import java.time.Instant
-import java.time.LocalDate
-import java.time.ZoneId
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.sample
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 public class CrewRepository(context: Context) {
     private val appContext = context.applicationContext
@@ -22,8 +23,10 @@ public class CrewRepository(context: Context) {
     private val historyRepository = HistoryCacheRepository(appContext)
     private val crewStore = CrewStore(appContext)
     private val relayStore = LocalCrewRelayStore(appContext)
+    private val avatarStore = AvatarStore(appContext)
 
     public fun identity(): CrewIdentity = identityStore.identity()
+
     private val identityPublicKey: String
         get() = identityStore.publicKey()
 
@@ -96,11 +99,12 @@ public class CrewRepository(context: Context) {
     public suspend fun republishStaleLocalHistory(): Boolean {
         val memberships = crewStore.loadMemberships()
         if (memberships.isEmpty()) return false
-        val newestWorkEnd = historyRepository.getHistoryPayload().values
-            .flatMap { it.sessions }
-            .filter { it.type == TimerState.PHASE_WORK && it.completed }
-            .maxOfOrNull { it.start + it.duration }
-            ?: return false
+        val newestWorkEnd =
+            historyRepository.getHistoryPayload().values
+                .flatMap { it.sessions }
+                .filter { it.type == TimerState.PHASE_WORK && it.completed }
+                .maxOfOrNull { it.start + it.duration }
+                ?: return false
         var published = false
         memberships.forEach { membership ->
             val lastPublish = relayStore.lastPublishSuccessEpochSeconds(membership.crewId)
@@ -112,20 +116,25 @@ public class CrewRepository(context: Context) {
         return published
     }
 
-    public suspend fun createSoloCrew(displayName: String, crewName: String = "${displayName.ifBlank { "My" }} Crew"): CrewBoard {
-        val name = CrewValidation.normalizeDisplayName(displayName)
-            ?: crewStore.loadMembership()?.displayName
-            ?: "Me"
+    public suspend fun createSoloCrew(
+        displayName: String,
+        crewName: String = "${displayName.ifBlank { "My" }} Crew",
+    ): CrewBoard {
+        val name =
+            CrewValidation.normalizeDisplayName(displayName)
+                ?: crewStore.loadMembership()?.displayName
+                ?: "Me"
         val payload = CrewJoinCodeCodec.newPayload(crewName)
         val joinCode = CrewJoinCodeCodec.encode(payload)
-        val membership = CrewMembership(
-            crewId = payload.crewId,
-            crewName = payload.crewName,
-            joinCode = joinCode,
-            relays = payload.relays,
-            key = payload.key,
-            displayName = name,
-        )
+        val membership =
+            CrewMembership(
+                crewId = payload.crewId,
+                crewName = payload.crewName,
+                joinCode = joinCode,
+                relays = payload.relays,
+                key = payload.key,
+                displayName = name,
+            )
         crewStore.saveMembership(membership)
         if (displayName.isNotBlank()) {
             crewStore.updateDisplayName(name).forEach { updatedMembership ->
@@ -151,20 +160,24 @@ public class CrewRepository(context: Context) {
         )
     }
 
-    public suspend fun joinCrew(joinCode: String, displayName: String): CrewBoard? {
+    public suspend fun joinCrew(
+        joinCode: String,
+        displayName: String,
+    ): CrewBoard? {
         val payload = CrewJoinCodeCodec.decode(joinCode.trim()) ?: return null
         val existingName = crewStore.loadMemberships().firstOrNull()?.displayName
         // A member with no name starts empty rather than being christened for them. Both callers
         // gate their confirm button on a normalized name, so this bail is unreachable today.
         val name = CrewValidation.normalizeDisplayName(displayName) ?: existingName ?: return null
-        val membership = CrewMembership(
-            crewId = payload.crewId,
-            crewName = payload.crewName,
-            joinCode = CrewJoinCodeCodec.encode(payload),
-            relays = payload.relays,
-            key = payload.key,
-            displayName = name,
-        )
+        val membership =
+            CrewMembership(
+                crewId = payload.crewId,
+                crewName = payload.crewName,
+                joinCode = CrewJoinCodeCodec.encode(payload),
+                relays = payload.relays,
+                key = payload.key,
+                displayName = name,
+            )
         crewStore.saveMembership(membership)
         if (displayName.isNotBlank()) {
             crewStore.updateDisplayName(name).forEach { updatedMembership ->
@@ -194,21 +207,28 @@ public class CrewRepository(context: Context) {
         return currentBoard()
     }
 
-    public suspend fun setMemberHidden(identityPublicKey: String, hidden: Boolean): CrewBoard? {
+    public suspend fun setMemberHidden(
+        identityPublicKey: String,
+        hidden: Boolean,
+    ): CrewBoard? {
         val membership = crewStore.loadMembership() ?: return null
         relayStore.setHidden(membership.crewId, identityPublicKey, hidden)
         return currentBoard()
     }
 
-    public fun createRecovery(passphrase: CharArray): String = CrewRecoveryCodec.encode(
-        CrewRecoveryPayload(
-            identityPrivateKey = identity().privateKey,
-            memberships = crewStore.loadMemberships(),
-        ),
-        passphrase,
-    )
+    public fun createRecovery(passphrase: CharArray): String =
+        CrewRecoveryCodec.encode(
+            CrewRecoveryPayload(
+                identityPrivateKey = identity().privateKey,
+                memberships = crewStore.loadMemberships(),
+            ),
+            passphrase,
+        )
 
-    public fun restoreRecovery(recovery: String, passphrase: CharArray): Boolean {
+    public fun restoreRecovery(
+        recovery: String,
+        passphrase: CharArray,
+    ): Boolean {
         val payload = CrewRecoveryCodec.decode(recovery, passphrase) ?: return false
         val previousIdentity = identity().privateKey
         val previousMemberships = crewStore.loadMemberships()
@@ -227,42 +247,47 @@ public class CrewRepository(context: Context) {
         val identity = identity()
         val history = historyRepository.getHistoryPayload()
         val today = historyRepository.getEffectiveDateString()
-        val activeDates = history
-            .filter { it.value.completed > 0 }
-            .keys
-            .toSet()
+        val activeDates =
+            history
+                .filter { it.value.completed > 0 }
+                .keys
+                .toSet()
         val focusMinutes = history.values.sumOf { it.work_minutes }
         val nowSeconds = System.currentTimeMillis() / 1000L
         val zoneId = ZoneId.systemDefault()
         val nowInstant = Instant.ofEpochSecond(nowSeconds)
-        val dailyAggregates = history.entries
-            .sortedByDescending { it.key }
-            .take(CrewValidation.MAX_DAILY_AGGREGATES)
-            .map { (date, entry) ->
-                CrewDailyAggregate(
-                    localDate = date,
-                    focusMinutes = entry.work_minutes,
-                    completedWorkBlocks = entry.completed,
-                )
-            }
-        val lastFocusedAt = history.values
-            .flatMap { it.sessions }
-            .filter { it.type == TimerState.PHASE_WORK && it.completed }
-            .maxOfOrNull { it.start + it.duration }
-            ?: 0L
-        val snapshot = CrewSnapshot(
-            crewId = membership.crewId,
-            identityPublicKey = identity.publicKey,
-            displayName = membership.displayName,
-            allTimeFocusMinutes = focusMinutes,
-            publishedAtEpochSeconds = nowSeconds,
-            localDate = today,
-            utcOffsetMinutes = zoneId.rules.getOffset(nowInstant).totalSeconds / 60,
-            dailyAggregates = dailyAggregates,
-            currentStreak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
-            lastFocusedAtEpochSeconds = lastFocusedAt,
-            stats = buildStatsExtras(history, today, zoneId),
-        )
+        val dailyAggregates =
+            history.entries
+                .sortedByDescending { it.key }
+                .take(CrewValidation.MAX_DAILY_AGGREGATES)
+                .map { (date, entry) ->
+                    CrewDailyAggregate(
+                        localDate = date,
+                        focusMinutes = entry.work_minutes,
+                        completedWorkBlocks = entry.completed,
+                    )
+                }
+        val lastFocusedAt =
+            history.values
+                .flatMap { it.sessions }
+                .filter { it.type == TimerState.PHASE_WORK && it.completed }
+                .maxOfOrNull { it.start + it.duration }
+                ?: 0L
+        val snapshot =
+            CrewSnapshot(
+                crewId = membership.crewId,
+                identityPublicKey = identity.publicKey,
+                displayName = membership.displayName,
+                avatarBase64 = avatarStore.encoded(),
+                allTimeFocusMinutes = focusMinutes,
+                publishedAtEpochSeconds = nowSeconds,
+                localDate = today,
+                utcOffsetMinutes = zoneId.rules.getOffset(nowInstant).totalSeconds / 60,
+                dailyAggregates = dailyAggregates,
+                currentStreak = DateLogic.currentStreak(activeDates, System.currentTimeMillis()),
+                lastFocusedAtEpochSeconds = lastFocusedAt,
+                stats = buildStatsExtras(history, today, zoneId),
+            )
         relayStore.publish(
             snapshot = snapshot,
             payload = CrewSnapshotCodec.encodeEncrypted(snapshot, membership.key, identity),
@@ -281,9 +306,10 @@ public class CrewRepository(context: Context) {
         today: String,
         zoneId: ZoneId,
     ): CrewStatsExtras {
-        val workSessions = history.values
-            .flatMap { it.sessions }
-            .filter { it.type == TimerState.PHASE_WORK }
+        val workSessions =
+            history.values
+                .flatMap { it.sessions }
+                .filter { it.type == TimerState.PHASE_WORK }
         val hourBuckets = IntArray(24)
         val weekdayBuckets = IntArray(7)
         for (session in workSessions) {
@@ -294,14 +320,15 @@ public class CrewRepository(context: Context) {
             weekdayBuckets[at.dayOfWeek.value - 1] += minutes
         }
 
-        val days = history.map { (date, entry) ->
-            DayStatsEntity(
-                date = date,
-                completed = entry.completed,
-                workMinutes = entry.work_minutes,
-                breakMinutes = entry.break_minutes,
-            )
-        }
+        val days =
+            history.map { (date, entry) ->
+                DayStatsEntity(
+                    date = date,
+                    completed = entry.completed,
+                    workMinutes = entry.work_minutes,
+                    breakMinutes = entry.break_minutes,
+                )
+            }
         val bestDay = StatsAggregator.bestDayOf(days)
         val bestWeek = StatsAggregator.bestWeekOf(days)
         val activeDates = history.filterValues { it.completed > 0 }.keys.toSet()
@@ -309,13 +336,15 @@ public class CrewRepository(context: Context) {
 
         val todayDate = LocalDate.parse(today)
         val windowFloor = todayDate.minusDays((CrewValidation.MAX_HISTORY_DAYS - 1).toLong())
-        val historyStart = firstFocusDate
-            ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
-            ?.let { maxOf(it, windowFloor) }
-            ?: todayDate
-        val historyDates = generateSequence(historyStart) { it.plusDays(1) }
-            .takeWhile { !it.isAfter(todayDate) }
-            .toList()
+        val historyStart =
+            firstFocusDate
+                ?.let { runCatching { LocalDate.parse(it) }.getOrNull() }
+                ?.let { maxOf(it, windowFloor) }
+                ?: todayDate
+        val historyDates =
+            generateSequence(historyStart) { it.plusDays(1) }
+                .takeWhile { !it.isAfter(todayDate) }
+                .toList()
 
         return CrewStatsExtras(
             hourBuckets = hourBuckets.toList(),
@@ -341,30 +370,32 @@ public class CrewRepository(context: Context) {
         mode: CrewRankingMode,
     ): CrewBoard {
         val visibleSnapshots = snapshots.filterNot { it.identityPublicKey in hiddenIdentityPublicKeys }
-        val hiddenMembers = snapshots
-            .filter { it.identityPublicKey in hiddenIdentityPublicKeys }
-            .sortedWith(
-                compareByDescending<CrewSnapshot> { it.selectedFocusMinutes(mode) }
-                    .thenBy { it.displayName.lowercase() }
-                    .thenBy { it.identityPublicKey },
-            )
-            .map { snapshot ->
-                CrewHiddenMember(
-                    identityPublicKey = snapshot.identityPublicKey,
-                    displayName = snapshot.displayName,
-                    selectedFocusMinutes = snapshot.selectedFocusMinutes(mode),
+        val hiddenMembers =
+            snapshots
+                .filter { it.identityPublicKey in hiddenIdentityPublicKeys }
+                .sortedWith(
+                    compareByDescending<CrewSnapshot> { it.selectedFocusMinutes(mode) }
+                        .thenBy { it.displayName.lowercase() }
+                        .thenBy { it.identityPublicKey },
                 )
-            }
+                .map { snapshot ->
+                    CrewHiddenMember(
+                        identityPublicKey = snapshot.identityPublicKey,
+                        displayName = snapshot.displayName,
+                        selectedFocusMinutes = snapshot.selectedFocusMinutes(mode),
+                    )
+                }
         return CrewBoard(
             crewId = membership.crewId,
             crewName = membership.crewName,
             joinCode = membership.joinCode,
-            rows = CrewLeaderboardAggregator.rank(
-                crewId = membership.crewId,
-                snapshots = visibleSnapshots,
-                selfIdentityPublicKey = identityPublicKey,
-                mode = mode,
-            ),
+            rows =
+                CrewLeaderboardAggregator.rank(
+                    crewId = membership.crewId,
+                    snapshots = visibleSnapshots,
+                    selfIdentityPublicKey = identityPublicKey,
+                    mode = mode,
+                ),
             hiddenMembers = hiddenMembers,
             rankingMode = mode,
             lastUpdatedEpochSeconds = snapshots.maxOfOrNull { it.publishedAtEpochSeconds },
@@ -399,12 +430,16 @@ internal fun CrewSnapshot.selectedFocusMinutes(mode: CrewRankingMode): Int {
         CrewRankingMode.SevenDays -> focusMinutesBetween(today.minusDays(6), today)
         CrewRankingMode.ThirtyDays -> focusMinutesBetween(today.minusDays(29), today)
         CrewRankingMode.AllTime -> allTimeFocusMinutes
-        is CrewRankingMode.Day -> LocalDate.parse(mode.localDate)
-            .let { focusMinutesBetween(it, it) }
+        is CrewRankingMode.Day ->
+            LocalDate.parse(mode.localDate)
+                .let { focusMinutesBetween(it, it) }
     }
 }
 
-internal fun CrewSnapshot.focusMinutesBetween(startDate: LocalDate, endDate: LocalDate): Int =
+internal fun CrewSnapshot.focusMinutesBetween(
+    startDate: LocalDate,
+    endDate: LocalDate,
+): Int =
     dailyAggregates.sumOf { aggregate ->
         val date = LocalDate.parse(aggregate.localDate)
         if (date < startDate || date > endDate) 0 else aggregate.focusMinutes

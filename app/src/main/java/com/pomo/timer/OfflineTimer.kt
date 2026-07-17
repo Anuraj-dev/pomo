@@ -34,16 +34,17 @@ public class OfflineTimer(
         val remainingMillis = (state.remaining * 1000).toLong()
         if (remainingMillis <= 0) return
 
-        timer = object : CountDownTimer(remainingMillis, 1000) {
-            override fun onTick(millisUntilFinished: Long) {
-                state.remaining = millisUntilFinished / 1000.0
-                observer.onTimerUpdate(state)
-            }
+        timer =
+            object : CountDownTimer(remainingMillis, 1000) {
+                override fun onTick(millisUntilFinished: Long) {
+                    state.remaining = millisUntilFinished / 1000.0
+                    observer.onTimerUpdate(state)
+                }
 
-            override fun onFinish() {
-                handleTimerComplete()
-            }
-        }.start()
+                override fun onFinish() {
+                    handleTimerComplete()
+                }
+            }.start()
     }
 
     private fun stopLocalTimer() {
@@ -61,54 +62,57 @@ public class OfflineTimer(
 
         val completionState = state.copy()
         val now = System.currentTimeMillis() / 1000
-        val sessionStart = completionState.start_time
-            .takeIf { it > 0 }
-            ?.toLong()
-            ?: now - completionState.duration.toLong()
+        val sessionStart =
+            completionState.start_time
+                .takeIf { it > 0 }
+                ?.toLong()
+                ?: now - completionState.duration.toLong()
         // Derive the completion date from the session's actual end time (start + duration)
         // so that process-death restores and midnight-crossing coroutines both use the
         // correct calendar day rather than the time the app reopened.
         val sessionEnd = sessionStart + completionState.duration.toLong()
         val completionDate = historyRepository.dateStringForEpochSecond(sessionEnd)
-        val session = Session(
-            type = completionState.phase,
-            start = sessionStart,
-            duration = completionState.duration.toInt(),
-            completed = true,
-        )
+        val session =
+            Session(
+                type = completionState.phase,
+                start = sessionStart,
+                duration = completionState.duration.toInt(),
+                completed = true,
+            )
 
-        val job = scope.launch {
-            historyRepository.saveLocalSession(session)
+        val job =
+            scope.launch {
+                historyRepository.saveLocalSession(session)
 
-            if (!isStillCompleting(completionState)) {
-                return@launch
-            }
-
-            state.remaining = 0.0
-            state.status = TimerState.STATUS_STOPPED
-
-            if (TimerState.PHASE_WORK == completionState.phase) {
-                state.completed = historyRepository.getCompletedCountForDate(completionDate)
-                state.date = completionDate
-                val longBreakAfter = prefs.longBreakAfter
-
-                if (state.completed > 0 && state.completed % longBreakAfter == 0) {
-                    state.phase = TimerState.PHASE_LONG
-                    state.duration = (prefs.longBreakDuration * 60).toDouble()
-                } else {
-                    state.phase = TimerState.PHASE_SHORT
-                    state.duration = (prefs.shortBreakDuration * 60).toDouble()
+                if (!isStillCompleting(completionState)) {
+                    return@launch
                 }
-            } else {
-                state.phase = TimerState.PHASE_WORK
-                state.duration = (prefs.pomodoroDuration * 60).toDouble()
+
+                state.remaining = 0.0
+                state.status = TimerState.STATUS_STOPPED
+
+                if (TimerState.PHASE_WORK == completionState.phase) {
+                    state.completed = historyRepository.getCompletedCountForDate(completionDate)
+                    state.date = completionDate
+                    val longBreakAfter = prefs.longBreakAfter
+
+                    if (state.completed > 0 && state.completed % longBreakAfter == 0) {
+                        state.phase = TimerState.PHASE_LONG
+                        state.duration = (prefs.longBreakDuration * 60).toDouble()
+                    } else {
+                        state.phase = TimerState.PHASE_SHORT
+                        state.duration = (prefs.shortBreakDuration * 60).toDouble()
+                    }
+                } else {
+                    state.phase = TimerState.PHASE_WORK
+                    state.duration = (prefs.pomodoroDuration * 60).toDouble()
+                }
+
+                recalculateNextPhase()
+
+                state.remaining = state.duration
+                observer.onTimerComplete(state)
             }
-
-            recalculateNextPhase()
-
-            state.remaining = state.duration
-            observer.onTimerComplete(state)
-        }
         completionJob = job
         job.invokeOnCompletion {
             if (completionJob === job) {
@@ -214,12 +218,13 @@ public class OfflineTimer(
     }
 
     private fun getDurationForPhase(phase: String): Double {
-        val minutes = when (phase) {
-            TimerState.PHASE_WORK -> prefs.pomodoroDuration
-            TimerState.PHASE_SHORT -> prefs.shortBreakDuration
-            TimerState.PHASE_LONG -> prefs.longBreakDuration
-            else -> 25
-        }
+        val minutes =
+            when (phase) {
+                TimerState.PHASE_WORK -> prefs.pomodoroDuration
+                TimerState.PHASE_SHORT -> prefs.shortBreakDuration
+                TimerState.PHASE_LONG -> prefs.longBreakDuration
+                else -> 25
+            }
         return (minutes * 60).toDouble()
     }
 
@@ -233,12 +238,13 @@ public class OfflineTimer(
 
         val now = System.currentTimeMillis() / 1000
         val sessionStart = state.start_time.takeIf { it > 0 }?.toLong() ?: (now - elapsedSeconds)
-        val session = Session(
-            type = TimerState.PHASE_WORK,
-            start = sessionStart,
-            duration = elapsedSeconds.toInt(),
-            completed = false,
-        )
+        val session =
+            Session(
+                type = TimerState.PHASE_WORK,
+                start = sessionStart,
+                duration = elapsedSeconds.toInt(),
+                completed = false,
+            )
         scope.launch {
             historyRepository.saveLocalSession(session)
             observer.onPartialWorkBlockRecorded()

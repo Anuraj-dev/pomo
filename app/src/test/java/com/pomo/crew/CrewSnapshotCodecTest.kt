@@ -12,21 +12,23 @@ public class CrewSnapshotCodecTest {
     private val privateKey = CrewNostrKeys.generatePrivateKeyHex()
     private val identity = CrewIdentity(privateKey, CrewNostrKeys.publicKeyHex(privateKey))
     private val crewKey = "22".repeat(32)
-    private val snapshot = CrewSnapshot(
-        crewId = "11".repeat(16),
-        identityPublicKey = identity.publicKey,
-        displayName = "Snehit",
-        allTimeFocusMinutes = 125,
-        publishedAtEpochSeconds = 1_750_000_000L,
-        localDate = "2026-06-20",
-        utcOffsetMinutes = 330,
-        dailyAggregates = listOf(
-            CrewDailyAggregate("2026-06-20", focusMinutes = 50, completedWorkBlocks = 2),
-            CrewDailyAggregate("2026-06-19", focusMinutes = 75, completedWorkBlocks = 3),
-        ),
-        currentStreak = 2,
-        lastFocusedAtEpochSeconds = 1_750_000_000L,
-    )
+    private val snapshot =
+        CrewSnapshot(
+            crewId = "11".repeat(16),
+            identityPublicKey = identity.publicKey,
+            displayName = "Snehit",
+            allTimeFocusMinutes = 125,
+            publishedAtEpochSeconds = 1_750_000_000L,
+            localDate = "2026-06-20",
+            utcOffsetMinutes = 330,
+            dailyAggregates =
+                listOf(
+                    CrewDailyAggregate("2026-06-20", focusMinutes = 50, completedWorkBlocks = 2),
+                    CrewDailyAggregate("2026-06-19", focusMinutes = 75, completedWorkBlocks = 3),
+                ),
+            currentStreak = 2,
+            lastFocusedAtEpochSeconds = 1_750_000_000L,
+        )
 
     @Test
     public fun encodeEncryptedRoundTripRecoversSnapshotAndHidesPlaintext() {
@@ -69,11 +71,13 @@ public class CrewSnapshotCodecTest {
     public fun decodePlaintextRejectsDuplicateDatesUnsafeNamesAndOversizedHistory() {
         val duplicateDates = snapshot.copy(dailyAggregates = snapshot.dailyAggregates + snapshot.dailyAggregates.first())
         val unsafeName = snapshot.copy(displayName = "unsafe\u202ename")
-        val oversized = snapshot.copy(
-            dailyAggregates = (0..30).map {
-                CrewDailyAggregate("2026-05-${(it + 1).toString().padStart(2, '0')}", 1, 1)
-            },
-        )
+        val oversized =
+            snapshot.copy(
+                dailyAggregates =
+                    (0..30).map {
+                        CrewDailyAggregate("2026-05-${(it + 1).toString().padStart(2, '0')}", 1, 1)
+                    },
+            )
 
         assertNull(CrewSnapshotCodec.decodePlaintext(gson.toJson(duplicateDates)))
         assertNull(CrewSnapshotCodec.decodePlaintext(gson.toJson(unsafeName)))

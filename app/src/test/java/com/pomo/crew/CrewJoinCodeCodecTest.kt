@@ -10,12 +10,13 @@ import org.junit.Test
 public class CrewJoinCodeCodecTest {
     @Test
     public fun rawAndUriRoundTripRecoverNormalizedV2Payload() {
-        val payload = CrewJoinPayload(
-            crewId = "11".repeat(16),
-            crewName = "Deep Work",
-            relays = listOf("wss://relay.example", "wss://backup.example"),
-            key = "22".repeat(32),
-        )
+        val payload =
+            CrewJoinPayload(
+                crewId = "11".repeat(16),
+                crewName = "Deep Work",
+                relays = listOf("wss://relay.example", "wss://backup.example"),
+                key = "22".repeat(32),
+            )
 
         assertEquals(payload, CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encode(payload)))
         assertEquals(payload, CrewJoinCodeCodec.decode(CrewJoinCodeCodec.encodeUri(payload)))

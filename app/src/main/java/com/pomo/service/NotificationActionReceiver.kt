@@ -5,7 +5,10 @@ import android.content.Context
 import android.content.Intent
 
 public class NotificationActionReceiver : BroadcastReceiver() {
-    override fun onReceive(context: Context, intent: Intent?) {
+    override fun onReceive(
+        context: Context,
+        intent: Intent?,
+    ) {
         if (intent == null || intent.action == null) return
 
         val serviceIntent = Intent(context, PomodoroService::class.java)

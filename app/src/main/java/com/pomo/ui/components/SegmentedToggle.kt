@@ -2,9 +2,9 @@ package com.pomo.ui.components
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -30,10 +30,11 @@ public fun SegmentedToggle(
                 selected = option.value == selectedValue,
                 onClick = { onSelectedValueChange(option.value) },
                 shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
-                colors = SegmentedButtonDefaults.colors(
-                    activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                    activeContentColor = MaterialTheme.colorScheme.primary,
-                ),
+                colors =
+                    SegmentedButtonDefaults.colors(
+                        activeContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
+                        activeContentColor = MaterialTheme.colorScheme.primary,
+                    ),
             ) {
                 Text(option.label)
             }
@@ -46,11 +47,12 @@ public fun SegmentedToggle(
 private fun SegmentedTogglePreview() {
     PomoTheme {
         SegmentedToggle(
-            options = listOf(
-                SegmentedToggleOption("today", "Today"),
-                SegmentedToggleOption("week", "Week"),
-                SegmentedToggleOption("month", "Month"),
-            ),
+            options =
+                listOf(
+                    SegmentedToggleOption("today", "Today"),
+                    SegmentedToggleOption("week", "Week"),
+                    SegmentedToggleOption("month", "Month"),
+                ),
             selectedValue = "today",
             onSelectedValueChange = {},
         )

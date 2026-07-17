@@ -6,6 +6,7 @@ package com.pomo.timer
  */
 public interface TimerObserver {
     public fun onTimerUpdate(state: TimerState)
+
     public fun onTimerComplete(state: TimerState)
 
     /** A partial (skipped) Work block was just recorded to history. Minutes count

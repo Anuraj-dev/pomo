@@ -31,7 +31,7 @@ Own a focus session from start to finish as a live performance readout. The phon
 - Make the current phase unmistakable in under a second of looking.
 - Make Stats feel like a telemetry readout of real work, not a dashboard of vanity metrics.
 - Make Crew feel like privacy-preserving competitive telemetry: fast rankings
-  and shared focus stats without accounts, public profiles, or a Pomo-owned
+  and shared focus stats without accounts, open public profiles, or a Pomo-owned
   backend.
 - Land a real light theme so the app is usable in direct sun — but dark is the canonical experience for this product.
 
@@ -159,7 +159,8 @@ Own a focus session from start to finish as a live performance readout. The phon
 ## Non-goals
 
 - Gamification beyond the existing streak, daily goal, and Crew rankings. No XP,
-  levels, badges, public profiles, or coaching mechanics.
+  levels, or coaching mechanics. Profiles remain limited to optional identity
+  photos and display names inside private Crews.
 - Social networking or account features. Crew is limited to private,
   join-code-based comparison of focus telemetry; the app remains local-first
   and has no login or Pomo-owned social backend.

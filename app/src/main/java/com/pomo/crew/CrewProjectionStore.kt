@@ -51,7 +51,11 @@ public class CrewProjectionStore(context: Context) {
         )
     }
 
-    public suspend fun setHidden(crewId: String, identityPublicKey: String, hidden: Boolean) {
+    public suspend fun setHidden(
+        crewId: String,
+        identityPublicKey: String,
+        hidden: Boolean,
+    ) {
         if (hidden) {
             dao.upsertHiddenMember(
                 CrewHiddenMemberEntity(
@@ -65,7 +69,11 @@ public class CrewProjectionStore(context: Context) {
         }
     }
 
-    public suspend fun recordRelayResult(crewId: String, relayUrl: String, error: String?) {
+    public suspend fun recordRelayResult(
+        crewId: String,
+        relayUrl: String,
+        error: String?,
+    ) {
         val now = System.currentTimeMillis() / 1000L
         val previousSuccess = dao.getRelayState(crewId, relayUrl)?.lastSuccessEpochSeconds
         dao.upsertRelayState(
@@ -87,7 +95,11 @@ public class CrewProjectionStore(context: Context) {
     public fun lastPublishSuccessEpochSeconds(crewId: String): Long? =
         if (prefs.contains(lastPublishSuccessKey(crewId))) prefs.getLong(lastPublishSuccessKey(crewId), 0L) else null
 
-    public suspend fun recordPublishResult(crewId: String, result: CrewRelayPublishResult, nowEpochSeconds: Long) {
+    public suspend fun recordPublishResult(
+        crewId: String,
+        result: CrewRelayPublishResult,
+        nowEpochSeconds: Long,
+    ) {
         recordRelayResult(crewId, result.relayUrl, result.error)
         if (result.accepted) {
             prefs.edit().putLong(lastPublishSuccessKey(crewId), nowEpochSeconds).apply()
@@ -98,23 +110,23 @@ public class CrewProjectionStore(context: Context) {
         prefs.edit().remove(lastPublishSuccessKey(crewId)).apply()
     }
 
-    private fun List<CrewSnapshotEntity>.toModels(
-        aggregates: List<CrewDailyAggregateEntity>,
-    ): List<CrewSnapshot> {
+    private fun List<CrewSnapshotEntity>.toModels(aggregates: List<CrewDailyAggregateEntity>): List<CrewSnapshot> {
         val aggregatesByMember = aggregates.groupBy { it.crewId to it.identityPublicKey }
         return map { snapshot ->
             CrewSnapshot(
                 crewId = snapshot.crewId,
                 identityPublicKey = snapshot.identityPublicKey,
                 displayName = snapshot.displayName,
+                avatarBase64 = snapshot.avatarBase64,
                 allTimeFocusMinutes = snapshot.allTimeFocusMinutes,
                 publishedAtEpochSeconds = snapshot.publishedAtEpochSeconds,
                 localDate = snapshot.localDate,
                 utcOffsetMinutes = snapshot.utcOffsetMinutes,
-                dailyAggregates = aggregatesByMember[snapshot.crewId to snapshot.identityPublicKey]
-                    .orEmpty()
-                    .map { it.toModel() }
-                    .sortedByDescending { it.localDate },
+                dailyAggregates =
+                    aggregatesByMember[snapshot.crewId to snapshot.identityPublicKey]
+                        .orEmpty()
+                        .map { it.toModel() }
+                        .sortedByDescending { it.localDate },
                 currentStreak = snapshot.currentStreak,
                 lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
                 version = snapshot.protocolVersion,
@@ -122,18 +134,20 @@ public class CrewProjectionStore(context: Context) {
         }
     }
 
-    private fun CrewSnapshot.toEntity(): CrewSnapshotEntity = CrewSnapshotEntity(
-        crewId = crewId,
-        identityPublicKey = identityPublicKey,
-        displayName = displayName,
-        allTimeFocusMinutes = allTimeFocusMinutes,
-        publishedAtEpochSeconds = publishedAtEpochSeconds,
-        localDate = localDate,
-        utcOffsetMinutes = utcOffsetMinutes,
-        currentStreak = currentStreak,
-        lastFocusedAtEpochSeconds = lastFocusedAtEpochSeconds,
-        protocolVersion = version,
-    )
+    private fun CrewSnapshot.toEntity(): CrewSnapshotEntity =
+        CrewSnapshotEntity(
+            crewId = crewId,
+            identityPublicKey = identityPublicKey,
+            displayName = displayName,
+            avatarBase64 = avatarBase64,
+            allTimeFocusMinutes = allTimeFocusMinutes,
+            publishedAtEpochSeconds = publishedAtEpochSeconds,
+            localDate = localDate,
+            utcOffsetMinutes = utcOffsetMinutes,
+            currentStreak = currentStreak,
+            lastFocusedAtEpochSeconds = lastFocusedAtEpochSeconds,
+            protocolVersion = version,
+        )
 
     private fun CrewDailyAggregate.toEntity(snapshot: CrewSnapshot): CrewDailyAggregateEntity =
         CrewDailyAggregateEntity(
@@ -144,11 +158,12 @@ public class CrewProjectionStore(context: Context) {
             completedWorkBlocks = completedWorkBlocks,
         )
 
-    private fun CrewDailyAggregateEntity.toModel(): CrewDailyAggregate = CrewDailyAggregate(
-        localDate = localDate,
-        focusMinutes = focusMinutes,
-        completedWorkBlocks = completedWorkBlocks,
-    )
+    private fun CrewDailyAggregateEntity.toModel(): CrewDailyAggregate =
+        CrewDailyAggregate(
+            localDate = localDate,
+            focusMinutes = focusMinutes,
+            completedWorkBlocks = completedWorkBlocks,
+        )
 
     private fun lastPublishSuccessKey(crewId: String): String = "crew_publish_success_$crewId"
 

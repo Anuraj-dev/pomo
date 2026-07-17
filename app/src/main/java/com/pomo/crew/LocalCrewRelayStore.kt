@@ -1,11 +1,11 @@
 package com.pomo.crew
 
 import android.content.Context
-import java.util.Locale
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.toList
+import java.util.Locale
 
 public class LocalCrewRelayStore(context: Context) {
     private val appContext = context.applicationContext
@@ -29,58 +29,79 @@ public class LocalCrewRelayStore(context: Context) {
         return results.any { it.accepted }
     }
 
-    public suspend fun pull(crewId: String, crewKey: String, relays: List<String>): List<CrewSnapshot> {
+    public suspend fun pull(
+        crewId: String,
+        crewKey: String,
+        relays: List<String>,
+    ): List<CrewSnapshot> {
         refresh(crewId, crewKey, relays).toList()
         return projectionStore.load(crewId).snapshots
     }
 
-    public suspend fun preview(crewId: String, crewKey: String, relays: List<String>): CrewJoinPreview? {
+    public suspend fun preview(
+        crewId: String,
+        crewKey: String,
+        relays: List<String>,
+    ): CrewJoinPreview? {
         val results = transport().pullIncrementally(crewId, relays).toList()
         if (results.isEmpty()) return null
 
-        val latestSnapshots = results
-            .flatMap { result -> result.events }
-            .mapNotNull { event -> decodeEvent(event, crewKey, persist = false) }
-            .groupBy { snapshot -> snapshot.identityPublicKey }
-            .values
-            .mapNotNull { snapshots -> snapshots.maxByOrNull { it.publishedAtEpochSeconds } }
+        val latestSnapshots =
+            results
+                .flatMap { result -> result.events }
+                .mapNotNull { event -> decodeEvent(event, crewKey, persist = false) }
+                .groupBy { snapshot -> snapshot.identityPublicKey }
+                .values
+                .mapNotNull { snapshots -> snapshots.maxByOrNull { it.publishedAtEpochSeconds } }
         if (latestSnapshots.isEmpty() && results.all { it.error != null }) return null
 
         val participating = latestSnapshots.filter { snapshot -> snapshot.todayFocusMinutes > 0 }
-        val knownDisplayNames = latestSnapshots.mapTo(mutableSetOf()) { snapshot ->
-            snapshot.displayName.trim().lowercase(Locale.ROOT)
-        }
+        val knownDisplayNames =
+            latestSnapshots.mapTo(mutableSetOf()) { snapshot ->
+                snapshot.displayName.trim().lowercase(Locale.ROOT)
+            }
         return CrewJoinPreview(
             activeMembers = participating.size,
             todayFocusMinutes = participating.sumOf { snapshot -> snapshot.todayFocusMinutes },
-            medianMemberFocusMinutes = participating
-                .map { snapshot -> snapshot.todayFocusMinutes }
-                .sorted()
-                .median(),
+            medianMemberFocusMinutes =
+                participating
+                    .map { snapshot -> snapshot.todayFocusMinutes }
+                    .sorted()
+                    .median(),
             knownDisplayNames = knownDisplayNames,
         )
     }
 
-    public fun refresh(crewId: String, crewKey: String, relays: List<String>): Flow<CrewRelayResult> =
+    public fun refresh(
+        crewId: String,
+        crewKey: String,
+        relays: List<String>,
+    ): Flow<CrewRelayResult> =
         transport().pullIncrementally(crewId, relays)
             .onEach { result ->
                 result.events.forEach { event -> acceptEvent(event, crewKey) }
                 projectionStore.recordRelayResult(crewId, result.relayUrl, result.error)
             }
 
-    public fun observe(crewId: String, crewKey: String, relays: List<String>): Flow<CrewSnapshot> =
+    public fun observe(
+        crewId: String,
+        crewKey: String,
+        relays: List<String>,
+    ): Flow<CrewSnapshot> =
         transport().observe(crewId, relays)
             .mapNotNull { event -> acceptEvent(event, crewKey) }
 
-    public fun observeProjection(crewId: String): Flow<CrewProjection> =
-        projectionStore.observe(crewId)
+    public fun observeProjection(crewId: String): Flow<CrewProjection> = projectionStore.observe(crewId)
 
     public suspend fun loadProjection(crewId: String): CrewProjection = projectionStore.load(crewId)
 
-    public fun lastPublishSuccessEpochSeconds(crewId: String): Long? =
-        projectionStore.lastPublishSuccessEpochSeconds(crewId)
+    public fun lastPublishSuccessEpochSeconds(crewId: String): Long? = projectionStore.lastPublishSuccessEpochSeconds(crewId)
 
-    public suspend fun setHidden(crewId: String, identityPublicKey: String, hidden: Boolean) {
+    public suspend fun setHidden(
+        crewId: String,
+        identityPublicKey: String,
+        hidden: Boolean,
+    ) {
         projectionStore.setHidden(crewId, identityPublicKey, hidden)
     }
 
@@ -88,11 +109,18 @@ public class LocalCrewRelayStore(context: Context) {
         projectionStore.delete(crewId)
     }
 
-    private suspend fun acceptEvent(event: CrewRelayEvent, crewKey: String): CrewSnapshot? {
+    private suspend fun acceptEvent(
+        event: CrewRelayEvent,
+        crewKey: String,
+    ): CrewSnapshot? {
         return decodeEvent(event, crewKey, persist = true)
     }
 
-    private suspend fun decodeEvent(event: CrewRelayEvent, crewKey: String, persist: Boolean): CrewSnapshot? {
+    private suspend fun decodeEvent(
+        event: CrewRelayEvent,
+        crewKey: String,
+        persist: Boolean,
+    ): CrewSnapshot? {
         val snapshot = CrewSnapshotCodec.decodeEncrypted(event.content, crewKey) ?: return null
         val now = System.currentTimeMillis() / 1000L
         if (snapshot.identityPublicKey != event.authorPublicKey) return null
@@ -103,8 +131,7 @@ public class LocalCrewRelayStore(context: Context) {
         return snapshot
     }
 
-    private fun transport(): CrewRelayTransport =
-        CrewRelayTransport(identityStore.identity().privateKey)
+    private fun transport(): CrewRelayTransport = CrewRelayTransport(identityStore.identity().privateKey)
 
     private fun List<Int>.median(): Int {
         if (isEmpty()) return 0

@@ -13,11 +13,11 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.appcompat.app.AlertDialog
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.fragment.findNavController
@@ -60,10 +60,11 @@ public class CrewFragment : Fragment() {
     private val importRecoveryDocumentLauncher =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             if (uri == null) return@registerForActivityResult
-            val recovery = readRecoveryFile(uri) ?: run {
-                showMessage("Could not read recovery file")
-                return@registerForActivityResult
-            }
+            val recovery =
+                readRecoveryFile(uri) ?: run {
+                    showMessage("Could not read recovery file")
+                    return@registerForActivityResult
+                }
             promptRecoveryPassphrase(
                 title = "Restore Recovery",
                 confirmLabel = "Restore",
@@ -104,44 +105,48 @@ public class CrewFragment : Fragment() {
         // consumed on the first pass, and a name that arrives later would arrive after the join
         // sheet had already decided to ask for one.
         profileDisplayName.value = profileStore.displayName()
-        initialJoinCode.value = arguments?.getString("crewJoinPayload")
-            ?.let { payload -> "pomo://crew/join/v2/$payload" }
+        initialJoinCode.value =
+            arguments?.getString("crewJoinPayload")
+                ?.let { payload -> "pomo://crew/join/v2/$payload" }
     }
 
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View = ComposeView(requireContext()).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent {
-            PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
-                val currentState by screenState.collectAsState()
-                val currentInitialJoinCode by initialJoinCode.collectAsState()
-                val currentProfileDisplayName by profileDisplayName.collectAsState()
-                CrewScreen(
-                    state = currentState,
-                    profileDisplayName = currentProfileDisplayName,
-                    onCreateCrew = { crewName, displayName -> createCrew(crewName, displayName) },
-                    onJoinCrew = { joinCode, displayName -> joinCrew(joinCode, displayName) },
-                    onSwitchCrew = { crewId -> switchCrew(crewId) },
-                    onLeaveCrew = { crewId -> leaveCrew(crewId) },
-                    onRankingModeChange = { mode -> rankingMode.value = mode },
-                    onMemberHiddenChange = { identityPublicKey, hidden ->
-                        setMemberHidden(identityPublicKey, hidden)
-                    },
-                    loadJoinPreview = { joinCode -> repository.previewJoin(joinCode) },
-                    onExportRecovery = ::requestRecoveryExport,
-                    onImportRecovery = ::requestRecoveryImport,
-                    onOpenOwnStats = {
-                        findNavController().navigate(R.id.navigation_stats)
-                    },
-                    initialJoinCode = currentInitialJoinCode,
-                    onInitialJoinCodeConsumed = { initialJoinCode.value = null },
-                )
+    ): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
+                    val currentState by screenState.collectAsState()
+                    val currentInitialJoinCode by initialJoinCode.collectAsState()
+                    val currentProfileDisplayName by profileDisplayName.collectAsState()
+                    CrewScreen(
+                        state = currentState,
+                        profileDisplayName = currentProfileDisplayName,
+                        onCreateCrew = { crewName, displayName -> createCrew(crewName, displayName) },
+                        onJoinCrew = { joinCode, displayName -> joinCrew(joinCode, displayName) },
+                        onSwitchCrew = { crewId -> switchCrew(crewId) },
+                        onLeaveCrew = { crewId -> leaveCrew(crewId) },
+                        onRankingModeChange = { mode -> rankingMode.value = mode },
+                        onMemberHiddenChange = { identityPublicKey, hidden ->
+                            setMemberHidden(identityPublicKey, hidden)
+                        },
+                        loadJoinPreview = { joinCode -> repository.previewJoin(joinCode) },
+                        onExportRecovery = ::requestRecoveryExport,
+                        onImportRecovery = ::requestRecoveryImport,
+                        onOpenOwnStats = {
+                            val navController = findNavController()
+                            navController.popBackStack(R.id.navigation_timer, false)
+                            navController.navigate(R.id.navigation_stats)
+                        },
+                        initialJoinCode = currentInitialJoinCode,
+                        onInitialJoinCodeConsumed = { initialJoinCode.value = null },
+                    )
+                }
             }
         }
-    }
 
     override fun onResume() {
         super.onResume()
@@ -164,7 +169,10 @@ public class CrewFragment : Fragment() {
         }
     }
 
-    private fun createCrew(crewName: String, displayName: String) {
+    private fun createCrew(
+        crewName: String,
+        displayName: String,
+    ) {
         rememberName(displayName)
         viewLifecycleOwner.lifecycleScope.launch {
             screenState.value = screenState.value.copy(isLoading = true)
@@ -173,7 +181,10 @@ public class CrewFragment : Fragment() {
         }
     }
 
-    private fun joinCrew(joinCode: String, displayName: String) {
+    private fun joinCrew(
+        joinCode: String,
+        displayName: String,
+    ) {
         rememberName(displayName)
         viewLifecycleOwner.lifecycleScope.launch {
             screenState.value = screenState.value.copy(isLoading = true)
@@ -212,7 +223,10 @@ public class CrewFragment : Fragment() {
         }
     }
 
-    private fun setMemberHidden(identityPublicKey: String, hidden: Boolean) {
+    private fun setMemberHidden(
+        identityPublicKey: String,
+        hidden: Boolean,
+    ) {
         viewLifecycleOwner.lifecycleScope.launch {
             publishBoard(repository.setMemberHidden(identityPublicKey, hidden))
         }
@@ -220,37 +234,42 @@ public class CrewFragment : Fragment() {
 
     private fun startLiveBoard() {
         liveBoardJob?.cancel()
-        liveBoardJob = viewLifecycleOwner.lifecycleScope.launch {
-            launch {
-                screenState.value = screenState.value.copy(isSyncing = true)
-                try {
-                    val republishedLocalHistory = repository.republishStaleLocalHistory()
-                    if (republishedLocalHistory) {
-                        publishBoard(repository.currentBoard(rankingMode.value))
+        liveBoardJob =
+            viewLifecycleOwner.lifecycleScope.launch {
+                launch {
+                    screenState.value = screenState.value.copy(isSyncing = true)
+                    try {
+                        val republishedLocalHistory = repository.republishStaleLocalHistory()
+                        if (republishedLocalHistory) {
+                            publishBoard(repository.currentBoard(rankingMode.value))
+                        }
+                        repository.republishCurrentCrewIfStale()
+                        repository.refreshCurrentCrew().collect { }
+                    } finally {
+                        screenState.value = screenState.value.copy(isSyncing = false)
                     }
-                    repository.republishCurrentCrewIfStale()
-                    repository.refreshCurrentCrew().collect { }
-                } finally {
-                    screenState.value = screenState.value.copy(isSyncing = false)
+                }
+                launch {
+                    repository.observeLiveSnapshots().collect { }
+                }
+                repository.observeCurrentBoard(rankingMode).collect { board ->
+                    publishBoard(board)
                 }
             }
-            launch {
-                repository.observeLiveSnapshots().collect { }
-            }
-            repository.observeCurrentBoard(rankingMode).collect { board ->
-                publishBoard(board)
-            }
-        }
     }
 
-    private fun publishBoard(board: com.pomo.crew.CrewBoard?, errorMessage: String? = null) {
-        screenState.value = CrewScreenState(
-            isLoading = false,
-            isSyncing = screenState.value.isSyncing,
-            board = board,
-            archivedMemberships = repository.currentArchivedMemberships(),
-            errorMessage = errorMessage,
-        )
+    private fun publishBoard(
+        board: com.pomo.crew.CrewBoard?,
+        errorMessage: String? = null,
+    ) {
+        screenState.value =
+            CrewScreenState(
+                isLoading = false,
+                isSyncing = screenState.value.isSyncing,
+                board = board,
+                archivedMemberships = repository.currentArchivedMemberships(),
+                errorMessage = errorMessage,
+            )
     }
 
     private fun requestRecoveryExport() {
@@ -264,15 +283,17 @@ public class CrewFragment : Fragment() {
                 showMessage("Set a device lock screen before exporting recovery")
                 return@promptRecoveryPassphrase
             }
-            pendingRecoveryExport = PendingRecoveryExport(
-                recovery = repository.createRecovery(passphrase.toCharArray()),
-                suggestedFileName = "pomo-crew-recovery-${System.currentTimeMillis()}.txt",
-            )
+            pendingRecoveryExport =
+                PendingRecoveryExport(
+                    recovery = repository.createRecovery(passphrase.toCharArray()),
+                    suggestedFileName = "pomo-crew-recovery-${System.currentTimeMillis()}.txt",
+                )
             @Suppress("DEPRECATION")
-            val intent = keyguardManager.createConfirmDeviceCredentialIntent(
-                "Confirm device unlock",
-                "Unlock to export your Crew recovery",
-            )
+            val intent =
+                keyguardManager.createConfirmDeviceCredentialIntent(
+                    "Confirm device unlock",
+                    "Unlock to export your Crew recovery",
+                )
             if (intent == null) {
                 pendingRecoveryExport = null
                 showMessage("Could not start device credential confirmation")
@@ -285,7 +306,11 @@ public class CrewFragment : Fragment() {
     private fun requestRecoveryImport() {
         AlertDialog.Builder(requireContext())
             .setTitle("Restore Recovery")
-            .setMessage("Restoring replaces this phone's current Crew identity and active v2 memberships. Export the current identity first if you may need it later.")
+            .setMessage(
+                "Restoring replaces this phone's current Crew identity and " +
+                    "active v2 memberships. Export the current identity first " +
+                    "if you may need it later.",
+            )
             .setNegativeButton("Cancel", null)
             .setNeutralButton("Export current") { _, _ -> requestRecoveryExport() }
             .setPositiveButton("Choose file") { _, _ ->
@@ -301,21 +326,24 @@ public class CrewFragment : Fragment() {
         onConfirm: (String) -> Unit,
     ) {
         val context = requireContext()
-        val input = EditText(context).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "Passphrase"
-        }
-        val confirm = EditText(context).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = "Confirm passphrase"
-        }
-        val container = LinearLayout(context).apply {
-            orientation = LinearLayout.VERTICAL
-            val padding = (20 * resources.displayMetrics.density).toInt()
-            setPadding(padding, padding / 2, padding, 0)
-            addView(input)
-            addView(confirm)
-        }
+        val input =
+            EditText(context).apply {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                hint = "Passphrase"
+            }
+        val confirm =
+            EditText(context).apply {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+                hint = "Confirm passphrase"
+            }
+        val container =
+            LinearLayout(context).apply {
+                orientation = LinearLayout.VERTICAL
+                val padding = (20 * resources.displayMetrics.density).toInt()
+                setPadding(padding, padding / 2, padding, 0)
+                addView(input)
+                addView(confirm)
+            }
         AlertDialog.Builder(context)
             .setTitle(title)
             .setMessage(helperText)
@@ -347,12 +375,16 @@ public class CrewFragment : Fragment() {
             input.bufferedReader().readText().trim().ifBlank { null }
         }
 
-    private fun writeRecoveryFile(uri: Uri, recovery: String): Boolean = runCatching {
-        requireContext().contentResolver.openOutputStream(uri)?.use { output ->
-            output.writer().use { writer -> writer.write(recovery) }
-        } ?: return false
-        true
-    }.getOrDefault(false)
+    private fun writeRecoveryFile(
+        uri: Uri,
+        recovery: String,
+    ): Boolean =
+        runCatching {
+            requireContext().contentResolver.openOutputStream(uri)?.use { output ->
+                output.writer().use { writer -> writer.write(recovery) }
+            } ?: return false
+            true
+        }.getOrDefault(false)
 
     private fun showMessage(message: String) {
         Toast.makeText(requireContext(), message, Toast.LENGTH_SHORT).show()
