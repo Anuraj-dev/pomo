@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -53,6 +54,7 @@ public class HistoryFragment : Fragment() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 val availableTags = remember { tagStore.getTags() }
+                val coroutineScope = rememberCoroutineScope()
                 PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
                     val items by itemsFlow.collectAsState(initial = emptyList())
                     HistoryScreen(
@@ -62,7 +64,7 @@ public class HistoryFragment : Fragment() {
                         onTagSession = { startTime, tag ->
                             val service = (activity as? MainActivity)?.service
                             if (service != null) {
-                                viewLifecycleOwner.lifecycleScope.launch {
+                                coroutineScope.launch {
                                     service.updateSessionTag(startTime, tag)
                                 }
                             }
