@@ -16,11 +16,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.pomo.ui.theme.PomoTheme
 
@@ -30,7 +30,7 @@ public fun PomoSheet(
     title: String,
     onDismissRequest: () -> Unit,
     modifier: Modifier = Modifier,
-    peekHeight: Dp = 56.dp,
+    skipPartiallyExpanded: Boolean = false,
     content: @Composable ColumnScope.() -> Unit,
 ) {
     ModalBottomSheet(
@@ -40,7 +40,7 @@ public fun PomoSheet(
         // Disable M3's tonal-elevation overlay; it blends the red surfaceTint into the
         // sheet and produces a maroon wash. Sheets read as flat slate instead.
         tonalElevation = 0.dp,
-        sheetPeekHeight = peekHeight,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = skipPartiallyExpanded),
     ) {
         Row(
             modifier =

@@ -592,7 +592,7 @@ private fun MemberDetailSheet(
 ) {
     val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
     val blocks = row.dailyAggregates.sumOf { it.completedWorkBlocks }
-    PomoSheet(title = row.displayName, onDismissRequest = onDismiss, peekHeight = 200.dp) {
+    PomoSheet(title = row.displayName, onDismissRequest = onDismiss, skipPartiallyExpanded = true) {
         Column(
             modifier =
                 Modifier
