@@ -279,7 +279,7 @@ internal fun standingContext(
 internal fun rowMeta(row: CrewBoardRow): String =
     buildList {
         add("${row.currentStreak}d streak")
-        add("${row.todaySessionCount} blocks today")
+        add("${row.todaySessionCount} blocks")
         if (row.isStale) add("stale")
         if (row.isInactive) add("inactive")
     }.joinToString(" · ")
