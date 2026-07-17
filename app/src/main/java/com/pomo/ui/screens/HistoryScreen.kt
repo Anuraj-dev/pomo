@@ -22,6 +22,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -201,8 +202,9 @@ private fun DayDetailSheet(
     val rhythm by produceState(initialValue = emptyRhythm(), item.date) {
         value = runCatching { loadRhythm(item.date) }.getOrElse { emptyRhythm() }
     }
-    val sessions by produceState(initialValue = emptyList<SessionEntity>(), item.date) {
-        value = runCatching { loadSessions(item.date) }.getOrElse { emptyList() }
+    var sessions by remember { mutableStateOf(emptyList<SessionEntity>()) }
+    LaunchedEffect(item.date) {
+        sessions = runCatching { loadSessions(item.date) }.getOrElse { emptyList() }
     }
     var tagPickerSession by remember { mutableStateOf<Long?>(null) }
 
@@ -256,6 +258,9 @@ private fun DayDetailSheet(
             currentTag = currentSession?.tag,
             onSelect = { tag ->
                 onTagSession(startTime, tag)
+                sessions = sessions.map {
+                    if (it.start == startTime) it.copy(tag = tag) else it
+                }
                 tagPickerSession = null
             },
             onDismiss = { tagPickerSession = null },

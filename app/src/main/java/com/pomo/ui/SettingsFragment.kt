@@ -65,6 +65,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     private val backupRepository: BackupRepository by lazy { BackupRepository(requireContext()) }
 
     override fun onDestroyView() {
+        tagManagerDialog.value = false
         pairingDialog.value = null
         rotateConfirm.value = false
         scanResult.value = null

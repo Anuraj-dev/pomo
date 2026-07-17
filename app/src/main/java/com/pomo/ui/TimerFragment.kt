@@ -7,6 +7,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -58,6 +59,7 @@ public class TimerFragment : Fragment() {
                 val ctx = context
                 val tagStore = remember { TagStore(ctx) }
                 var showTagPicker by remember { mutableStateOf(false) }
+                var currentSessionStart by remember { mutableStateOf<Long?>(null) }
                 var currentSessionTag by remember { mutableStateOf<String?>(null) }
 
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
@@ -67,6 +69,14 @@ public class TimerFragment : Fragment() {
                     val effectiveGoal = if ((state?.goal ?: 0) > 0) state!!.goal else goal
                     val workMinutes = mainActivity?.prefs?.pomodoroDuration ?: 25
                     val availableTags = remember { tagStore.getTags() }
+
+                    // Reset session tracking when a new work block starts
+                    LaunchedEffect(state?.phase, state?.status) {
+                        if (state?.phase == TimerState.PHASE_WORK && state?.status == TimerState.STATUS_RUNNING) {
+                            currentSessionStart = null
+                            currentSessionTag = null
+                        }
+                    }
 
                     TimerScreen(
                         state = state,
@@ -99,7 +109,20 @@ public class TimerFragment : Fragment() {
                                 .onFailure { Log.w(TAG, "Could not navigate to stats", it) }
                         },
                         currentTag = currentSessionTag,
-                        onTagSelected = { showTagPicker = true },
+                        onTagSelected = {
+                            if (currentSessionStart == null) {
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    mainActivity?.service?.let { service ->
+                                        val latestSession = service.getLatestCompletedWorkSession()
+                                        if (latestSession != null) {
+                                            currentSessionStart = latestSession.start
+                                            currentSessionTag = latestSession.tag
+                                        }
+                                    }
+                                }
+                            }
+                            showTagPicker = true
+                        },
                         availableTags = availableTags,
                     )
 
@@ -110,12 +133,10 @@ public class TimerFragment : Fragment() {
                             onSelect = { tag ->
                                 currentSessionTag = tag
                                 showTagPicker = false
-                                viewLifecycleOwner.lifecycleScope.launch {
-                                    mainActivity?.service?.let { service ->
-                                        val latestSession = service.getLatestCompletedWorkSession()
-                                        if (latestSession != null) {
-                                            service.updateSessionTag(latestSession.start, tag)
-                                        }
+                                val startTime = currentSessionStart
+                                if (startTime != null) {
+                                    viewLifecycleOwner.lifecycleScope.launch {
+                                        mainActivity?.service?.updateSessionTag(startTime, tag)
                                     }
                                 }
                             },

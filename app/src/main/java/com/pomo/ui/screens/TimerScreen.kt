@@ -43,6 +43,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.CustomAccessibilityAction
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -52,6 +53,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pomo.R
 import com.pomo.timer.TimerState
 import com.pomo.ui.components.StatTile
 import com.pomo.ui.theme.PomoTokens
@@ -458,7 +460,7 @@ private fun TagChip(
     onClick: () -> Unit,
 ) {
     val colors = PomoTokens.colors
-    val displayText = tag ?: "untagged"
+    val displayText = tag ?: stringResource(R.string.session_tags_untagged)
     Row(
         modifier =
             Modifier

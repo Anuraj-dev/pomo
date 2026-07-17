@@ -36,9 +36,18 @@ public class TagStore(context: Context) {
     public fun renameTag(
         oldName: String,
         newName: String,
-    ): List<String> {
-        if (oldName == newName) return getTags()
-        return getTags().map { if (it == oldName) newName else it }.also { setTags(it) }
+    ): RenameResult {
+        if (oldName == newName) return RenameResult.Success(getTags())
+        val current = getTags()
+        if (current.contains(newName)) return RenameResult.Duplicate(newName)
+        return current.map { if (it == oldName) newName else it }
+            .also { setTags(it) }
+            .let { RenameResult.Success(it) }
+    }
+
+    public sealed interface RenameResult {
+        public data class Success(val tags: List<String>) : RenameResult
+        public data class Duplicate(val existingTag: String) : RenameResult
     }
 
     public fun hasTag(name: String): Boolean = getTags().contains(name)

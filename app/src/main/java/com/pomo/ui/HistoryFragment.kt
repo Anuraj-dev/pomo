@@ -63,7 +63,7 @@ public class HistoryFragment : Fragment() {
                         onTagSession = { startTime, tag ->
                             val service = (activity as? MainActivity)?.service
                             if (service != null) {
-                                kotlinx.coroutines.MainScope().launch {
+                                viewLifecycleOwner.lifecycleScope.launch {
                                     service.updateSessionTag(startTime, tag)
                                 }
                             }

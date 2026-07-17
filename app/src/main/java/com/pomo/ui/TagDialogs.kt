@@ -128,9 +128,16 @@ internal fun TagManagerDialog(onDismiss: () -> Unit) {
             title = stringResource(R.string.session_tags_edit),
             initial = oldName,
             onConfirm = { newName ->
-                tags = tagStore.renameTag(oldName, newName)
+                when (val result = tagStore.renameTag(oldName, newName)) {
+                    is TagStore.RenameResult.Success -> {
+                        tags = result.tags
+                        Toast.makeText(context, R.string.session_tags_edit_done, Toast.LENGTH_SHORT).show()
+                    }
+                    is TagStore.RenameResult.Duplicate -> {
+                        Toast.makeText(context, "Tag \"${result.existingTag}\" already exists", Toast.LENGTH_SHORT).show()
+                    }
+                }
                 editingTag = null
-                Toast.makeText(context, R.string.session_tags_edit_done, Toast.LENGTH_SHORT).show()
             },
             onDismiss = { editingTag = null },
         )
@@ -234,7 +241,7 @@ internal fun TagPickerSheet(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = "untagged",
+                            text = stringResource(R.string.session_tags_untagged),
                             style = MaterialTheme.typography.bodyLarge,
                             color = if (currentTag == null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f),

@@ -138,6 +138,7 @@
     <string name="session_tags_add_done">Tag added</string>
     <string name="session_tags_edit_done">Tag renamed</string>
     <string name="session_tags_delete_done">Tag deleted</string>
+    <string name="session_tags_untagged">untagged</string>
 
     <!-- Goals -->
     <string name="category_goals">Goals</string>
