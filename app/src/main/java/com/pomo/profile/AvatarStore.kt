@@ -55,6 +55,7 @@ public class AvatarStore(context: Context) {
     private fun compress(bitmap: Bitmap): ByteArray? {
         for (quality in intArrayOf(72, 58, 45, 32)) {
             val output = ByteArrayOutputStream()
+            @Suppress("DEPRECATION")
             if (!bitmap.compress(Bitmap.CompressFormat.WEBP, quality, output)) continue
             val bytes = output.toByteArray()
             if (bytes.size <= MAX_AVATAR_BYTES) return bytes
