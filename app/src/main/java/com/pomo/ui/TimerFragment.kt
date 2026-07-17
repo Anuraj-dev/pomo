@@ -69,8 +69,27 @@ public class TimerFragment : Fragment() {
                     val effectiveGoal = if ((state?.goal ?: 0) > 0) state!!.goal else goal
                     val workMinutes = mainActivity?.prefs?.pomodoroDuration ?: 25
                     val availableTags = remember { tagStore.getTags() }
+                    var lastPhase by remember { mutableStateOf(state?.phase) }
 
-                    // Reset session tracking when a new work block starts
+                    // When work completes (phase transitions away from WORK), capture the session
+                    LaunchedEffect(state?.phase) {
+                        val prev = lastPhase
+                        val curr = state?.phase
+                        lastPhase = curr
+                        if (prev == TimerState.PHASE_WORK && curr != TimerState.PHASE_WORK && curr != null) {
+                            viewLifecycleOwner.lifecycleScope.launch {
+                                mainActivity?.service?.let { service ->
+                                    val session = service.getLatestCompletedWorkSession()
+                                    if (session != null) {
+                                        currentSessionStart = session.start
+                                        currentSessionTag = session.tag
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Reset when a new work block starts
                     LaunchedEffect(state?.phase, state?.status) {
                         if (state?.phase == TimerState.PHASE_WORK && state?.status == TimerState.STATUS_RUNNING) {
                             currentSessionStart = null
@@ -109,20 +128,7 @@ public class TimerFragment : Fragment() {
                                 .onFailure { Log.w(TAG, "Could not navigate to stats", it) }
                         },
                         currentTag = currentSessionTag,
-                        onTagSelected = {
-                            if (currentSessionStart == null) {
-                                viewLifecycleOwner.lifecycleScope.launch {
-                                    mainActivity?.service?.let { service ->
-                                        val latestSession = service.getLatestCompletedWorkSession()
-                                        if (latestSession != null) {
-                                            currentSessionStart = latestSession.start
-                                            currentSessionTag = latestSession.tag
-                                        }
-                                    }
-                                }
-                            }
-                            showTagPicker = true
-                        },
+                        onTagSelected = { showTagPicker = true },
                         availableTags = availableTags,
                     )
 
