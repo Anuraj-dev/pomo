@@ -258,9 +258,10 @@ private fun DayDetailSheet(
             currentTag = currentSession?.tag,
             onSelect = { tag ->
                 onTagSession(startTime, tag)
-                sessions = sessions.map {
-                    if (it.start == startTime) it.copy(tag = tag) else it
-                }
+                sessions =
+                    sessions.map {
+                        if (it.start == startTime) it.copy(tag = tag) else it
+                    }
                 tagPickerSession = null
             },
             onDismiss = { tagPickerSession = null },

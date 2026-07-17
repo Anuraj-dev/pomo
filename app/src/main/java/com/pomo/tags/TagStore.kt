@@ -47,6 +47,7 @@ public class TagStore(context: Context) {
 
     public sealed interface RenameResult {
         public data class Success(val tags: List<String>) : RenameResult
+
         public data class Duplicate(val existingTag: String) : RenameResult
     }
 

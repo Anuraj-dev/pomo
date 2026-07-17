@@ -20,7 +20,6 @@ import com.pomo.tags.TagStore
 import com.pomo.ui.screens.HistoryScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.themeMode
-import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
