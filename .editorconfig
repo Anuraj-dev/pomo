@@ -1,0 +1,12 @@
+root = true
+
+[*.{kt,kts}]
+indent_size = 4
+indent_style = space
+insert_final_newline = true
+max_line_length = 140
+
+# Disable rules that conflict with Compose conventions
+ktlint_standard_function-naming = disabled
+ktlint_standard_property-naming = disabled
+ktlint_standard_file-name = disabled
