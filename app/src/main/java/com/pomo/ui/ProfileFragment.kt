@@ -40,7 +40,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 public class ProfileFragment : Fragment() {
-
     private val displayName = mutableStateOf("")
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -90,9 +89,10 @@ public class ProfileFragment : Fragment() {
                     // Crew pays that cost the first time they open Profile, so it happens off the
                     // main thread and the line appears when it is ready.
                     val fingerprint by produceState(initialValue = "") {
-                        value = withContext(Dispatchers.IO) {
-                            KeyFingerprint.format(CrewIdentityStore(ctx).publicKey())
-                        }
+                        value =
+                            withContext(Dispatchers.IO) {
+                                KeyFingerprint.format(CrewIdentityStore(ctx).publicKey())
+                            }
                     }
 
                     ProfileScreen(
@@ -128,12 +128,13 @@ public class ProfileFragment : Fragment() {
     }
 
     /** The streak has to keep up with the calendar while the screen is open, as Stats does. */
-    private fun currentDateFlow(): Flow<String> = flow {
-        while (true) {
-            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
-            delay(DATE_REFRESH_INTERVAL_MS)
-        }
-    }.distinctUntilChanged()
+    private fun currentDateFlow(): Flow<String> =
+        flow {
+            while (true) {
+                emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+                delay(DATE_REFRESH_INTERVAL_MS)
+            }
+        }.distinctUntilChanged()
 }
 
 private const val DEFAULT_DAILY_GOAL: Int = 8

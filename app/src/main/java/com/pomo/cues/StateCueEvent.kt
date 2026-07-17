@@ -13,10 +13,11 @@ public enum class StateCueEvent {
     ;
 
     public val isManual: Boolean
-        get() = when (this) {
-            StartOrResumeTapped, PauseTapped, SkipTapped, ResetTapped -> true
-            else -> false
-        }
+        get() =
+            when (this) {
+                StartOrResumeTapped, PauseTapped, SkipTapped, ResetTapped -> true
+                else -> false
+            }
 
     public companion object {
         public fun forCompletedPhase(phase: String): StateCueEvent? {

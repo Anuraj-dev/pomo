@@ -14,7 +14,6 @@ import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.themeMode
 
 public class ReleaseNotesFragment : Fragment() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enterTransition = MaterialSharedAxis(MaterialSharedAxis.Z, true)
@@ -25,12 +24,13 @@ public class ReleaseNotesFragment : Fragment() {
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
-    ): View = ComposeView(requireContext()).apply {
-        setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-        setContent {
-            PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
-                ReleaseNotesScreen()
+    ): View =
+        ComposeView(requireContext()).apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
+                    ReleaseNotesScreen()
+                }
             }
         }
-    }
 }

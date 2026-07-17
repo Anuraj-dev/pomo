@@ -33,7 +33,6 @@ import kotlinx.coroutines.flow.flow
 import java.io.File
 
 public class StatsFragment : Fragment() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enterTransition = MaterialFadeThrough()
@@ -83,12 +82,13 @@ public class StatsFragment : Fragment() {
         }
     }
 
-    private fun currentDateFlow(): Flow<String> = flow {
-        while (true) {
-            emit(DateLogic.effectiveDate(System.currentTimeMillis()))
-            delay(DATE_REFRESH_INTERVAL_MS)
-        }
-    }.distinctUntilChanged()
+    private fun currentDateFlow(): Flow<String> =
+        flow {
+            while (true) {
+                emit(DateLogic.effectiveDate(System.currentTimeMillis()))
+                delay(DATE_REFRESH_INTERVAL_MS)
+            }
+        }.distinctUntilChanged()
 
     private fun exportStats(days: List<DayStatsEntity>) {
         val ctx = context ?: return
@@ -97,19 +97,21 @@ public class StatsFragment : Fragment() {
             return
         }
         try {
-            val csv = buildString {
-                append("Date,WorkMinutes,Completed\n")
-                days.sortedByDescending { it.date }.forEach { d ->
-                    append("${d.date},${d.workMinutes},${d.completed}\n")
+            val csv =
+                buildString {
+                    append("Date,WorkMinutes,Completed\n")
+                    days.sortedByDescending { it.date }.forEach { d ->
+                        append("${d.date},${d.workMinutes},${d.completed}\n")
+                    }
                 }
-            }
             val file = File(ctx.cacheDir, "pomo_stats.csv").apply { writeText(csv) }
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "text/csv"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+            val intent =
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "text/csv"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             startActivity(Intent.createChooser(intent, "Export Stats CSV"))
         } catch (e: Exception) {
             Toast.makeText(ctx, "Export failed: ${e.message}", Toast.LENGTH_SHORT).show()
@@ -136,18 +138,18 @@ public class StatsFragment : Fragment() {
             bitmap.recycle()
 
             val uri = FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
-            val intent = Intent(Intent.ACTION_SEND).apply {
-                type = "image/png"
-                putExtra(Intent.EXTRA_STREAM, uri)
-                clipData = ClipData.newUri(ctx.contentResolver, "Pomo stats screenshot", uri)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
+            val intent =
+                Intent(Intent.ACTION_SEND).apply {
+                    type = "image/png"
+                    putExtra(Intent.EXTRA_STREAM, uri)
+                    clipData = ClipData.newUri(ctx.contentResolver, "Pomo stats screenshot", uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
             startActivity(Intent.createChooser(intent, "Share Stats"))
         } catch (e: Exception) {
             Toast.makeText(ctx, "Share failed: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
-
 }
 
 private const val DATE_REFRESH_INTERVAL_MS: Long = 60_000L

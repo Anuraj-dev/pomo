@@ -6,7 +6,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 public class UpdateCheckerTest {
-
     private val apk = ReleaseAsset("pomo-1.25.0-dev-debug.apk", "https://example/apk")
     private val sha = ReleaseAsset("pomo-1.25.0-dev-debug.apk.sha256", "https://example/sha")
 

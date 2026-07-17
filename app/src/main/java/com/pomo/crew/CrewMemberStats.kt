@@ -31,47 +31,51 @@ public fun CrewBoardRow.toStatsSnapshot(
 ): StatsSnapshot {
     val today: String = localDate.toIsoDateOrNull()?.toString() ?: LocalDate.now().toString()
     val days = memberDays()
-    val base = StatsAggregator.aggregate(
-        days = days,
-        // Members share bucketed rhythm, never raw sessions: their timestamps are their business.
-        sessions = emptyList(),
-        dailyGoal = 0,
-        today = today,
-        nowMs = nowMs,
-        tz = timeZone,
-    )
+    val base =
+        StatsAggregator.aggregate(
+            days = days,
+            // Members share bucketed rhythm, never raw sessions: their timestamps are their business.
+            sessions = emptyList(),
+            dailyGoal = 0,
+            today = today,
+            nowMs = nowMs,
+            tz = timeZone,
+        )
     if (base.isEmpty && allTimeFocusMinutes == 0) return base
 
     val bestStreak = stats?.bestStreak ?: base.habit.bestStreak
     return base.copy(
-        lifetime = Lifetime(
-            focusMinutes = allTimeFocusMinutes,
-            sessions = stats?.allTimeWorkBlocks ?: days.sumOf { it.completed },
-            daysWithApp = daysWithPomo(today),
-            firstDate = stats?.firstFocusLocalDate,
-        ),
-        rhythm = stats?.hourBuckets
-            ?.takeIf { it.size == CrewValidation.HOUR_BUCKETS }
-            ?.let { StatsAggregator.rhythmFromBuckets(it.toIntArray()) }
-            ?: HourRhythm(IntArray(CrewValidation.HOUR_BUCKETS), null, RhythmPattern.None),
-        weekShape = stats?.weekdayBuckets
-            ?.takeIf { it.size == CrewValidation.WEEKDAY_BUCKETS }
-            ?.let { StatsAggregator.weekShapeFromBuckets(it.toIntArray()) }
-            ?: base.weekShape,
+        lifetime =
+            Lifetime(
+                focusMinutes = allTimeFocusMinutes,
+                sessions = stats?.allTimeWorkBlocks ?: days.sumOf { it.completed },
+                daysWithApp = daysWithPomo(today),
+                firstDate = stats?.firstFocusLocalDate,
+            ),
+        rhythm =
+            stats?.hourBuckets
+                ?.takeIf { it.size == CrewValidation.HOUR_BUCKETS }
+                ?.let { StatsAggregator.rhythmFromBuckets(it.toIntArray()) }
+                ?: HourRhythm(IntArray(CrewValidation.HOUR_BUCKETS), null, RhythmPattern.None),
+        weekShape =
+            stats?.weekdayBuckets
+                ?.takeIf { it.size == CrewValidation.WEEKDAY_BUCKETS }
+                ?.let { StatsAggregator.weekShapeFromBuckets(it.toIntArray()) }
+                ?: base.weekShape,
         // Their streak is anchored to their clock and their midnight, so take it as given rather
         // than recomputing it against ours.
         habit = base.habit.copy(currentStreak = currentStreak, bestStreak = bestStreak),
-        records = Records(
-            bestDay = stats?.bestDay() ?: base.records.bestDay,
-            bestWeek = stats?.bestWeek() ?: base.records.bestWeek,
-            longestStreak = bestStreak,
-        ),
+        records =
+            Records(
+                bestDay = stats?.bestDay() ?: base.records.bestDay,
+                bestWeek = stats?.bestWeek() ?: base.records.bestWeek,
+                longestStreak = bestStreak,
+            ),
     )
 }
 
 /** Whether this member's build shares enough for the hour-of-day chart and the long heatmap. */
-public fun CrewBoardRow.hasFullStats(): Boolean =
-    stats?.hourBuckets?.size == CrewValidation.HOUR_BUCKETS
+public fun CrewBoardRow.hasFullStats(): Boolean = stats?.hourBuckets?.size == CrewValidation.HOUR_BUCKETS
 
 /**
  * Prefer the dense history window; fall back to the 30 daily aggregates every snapshot carries.
@@ -119,5 +123,4 @@ private fun CrewStatsExtras.bestWeek(): BestWeek? {
     return BestWeek(weekStart = weekStart, sessions = bestWeekWorkBlocks ?: 0, minutes = minutes)
 }
 
-private fun String.toIsoDateOrNull(): LocalDate? =
-    runCatching { LocalDate.parse(this) }.getOrNull()
+private fun String.toIsoDateOrNull(): LocalDate? = runCatching { LocalDate.parse(this) }.getOrNull()

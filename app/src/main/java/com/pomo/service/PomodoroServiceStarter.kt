@@ -8,7 +8,10 @@ import android.util.Log
 public object PomodoroServiceStarter {
     private const val TAG: String = "PomodoroServiceStarter"
 
-    public fun start(context: Context, intent: Intent = Intent(context, PomodoroService::class.java)): Boolean {
+    public fun start(
+        context: Context,
+        intent: Intent = Intent(context, PomodoroService::class.java),
+    ): Boolean {
         return try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(intent)

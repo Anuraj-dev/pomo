@@ -44,49 +44,55 @@ public fun PomoButton(
     val interactionSource = remember { MutableInteractionSource() }
 
     when (variant) {
-        PomoButtonVariant.Filled -> Button(
-            onClick = clickWithHaptic,
-            modifier = minSize,
-            enabled = enabled && !loading,
-            interactionSource = interactionSource,
-            contentPadding = contentPadding,
-            colors = ButtonDefaults.buttonColors(
-                containerColor = phaseColor,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
-            content = { ButtonContent(loading, MaterialTheme.colorScheme.onPrimary, content) },
-        )
-        PomoButtonVariant.Tonal -> Button(
-            onClick = clickWithHaptic,
-            modifier = minSize,
-            enabled = enabled && !loading,
-            interactionSource = interactionSource,
-            contentPadding = contentPadding,
-            // Solid elevated-slate chip with a signal-red label. A translucent red fill
-            // washed out against dark surfaces; the opaque slate + outline reads clearly.
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                contentColor = phaseColor,
-                disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
-            content = { ButtonContent(loading, phaseColor, content) },
-        )
-        PomoButtonVariant.Ghost -> TextButton(
-            onClick = clickWithHaptic,
-            modifier = minSize,
-            enabled = enabled && !loading,
-            interactionSource = interactionSource,
-            contentPadding = contentPadding,
-            colors = ButtonDefaults.textButtonColors(
-                contentColor = phaseColor,
-                disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            ),
-            content = { ButtonContent(loading, phaseColor, content) },
-        )
+        PomoButtonVariant.Filled ->
+            Button(
+                onClick = clickWithHaptic,
+                modifier = minSize,
+                enabled = enabled && !loading,
+                interactionSource = interactionSource,
+                contentPadding = contentPadding,
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = phaseColor,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                content = { ButtonContent(loading, MaterialTheme.colorScheme.onPrimary, content) },
+            )
+        PomoButtonVariant.Tonal ->
+            Button(
+                onClick = clickWithHaptic,
+                modifier = minSize,
+                enabled = enabled && !loading,
+                interactionSource = interactionSource,
+                contentPadding = contentPadding,
+                // Solid elevated-slate chip with a signal-red label. A translucent red fill
+                // washed out against dark surfaces; the opaque slate + outline reads clearly.
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                colors =
+                    ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        contentColor = phaseColor,
+                        disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                content = { ButtonContent(loading, phaseColor, content) },
+            )
+        PomoButtonVariant.Ghost ->
+            TextButton(
+                onClick = clickWithHaptic,
+                modifier = minSize,
+                enabled = enabled && !loading,
+                interactionSource = interactionSource,
+                contentPadding = contentPadding,
+                colors =
+                    ButtonDefaults.textButtonColors(
+                        contentColor = phaseColor,
+                        disabledContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    ),
+                content = { ButtonContent(loading, phaseColor, content) },
+            )
     }
 }
 

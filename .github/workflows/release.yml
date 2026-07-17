@@ -180,6 +180,9 @@ jobs:
 
       - name: Build debug APK
         run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug
+        env:
+          CI_COMMIT_SHA: ${{ github.sha }}
+          CI_REF_NAME: ${{ github.ref_name }}
 
       - name: Commit and tag version
         shell: bash

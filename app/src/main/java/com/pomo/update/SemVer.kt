@@ -10,9 +10,7 @@ internal data class SemVer(
     val minor: Int,
     val patch: Int,
 ) : Comparable<SemVer> {
-
-    override fun compareTo(other: SemVer): Int =
-        compareValuesBy(this, other, SemVer::major, SemVer::minor, SemVer::patch)
+    override fun compareTo(other: SemVer): Int = compareValuesBy(this, other, SemVer::major, SemVer::minor, SemVer::patch)
 
     internal companion object {
         /**
@@ -20,21 +18,23 @@ internal data class SemVer(
          * for anything that is not a numeric dotted version so callers can fail safe.
          */
         fun parseOrNull(raw: String): SemVer? {
-            val core = raw.trim()
-                .removePrefix("v")
-                .removePrefix("V")
-                .substringBefore('-')
-                .substringBefore('+')
+            val core =
+                raw.trim()
+                    .removePrefix("v")
+                    .removePrefix("V")
+                    .substringBefore('-')
+                    .substringBefore('+')
             if (core.isEmpty()) return null
 
             val parts = core.split('.')
             if (parts.size > 3) return null
 
-            val nums = parts.map { part ->
-                val n = part.toIntOrNull() ?: return null
-                if (n < 0) return null
-                n
-            }
+            val nums =
+                parts.map { part ->
+                    val n = part.toIntOrNull() ?: return null
+                    if (n < 0) return null
+                    n
+                }
             return SemVer(
                 major = nums.getOrElse(0) { 0 },
                 minor = nums.getOrElse(1) { 0 },

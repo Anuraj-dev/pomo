@@ -8,8 +8,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.preference.PreferenceManager
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import com.pomo.db.DayStatsEntity
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.stats.HourRhythm
@@ -18,19 +18,18 @@ import com.pomo.ui.screens.HistoryScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.ui.theme.themeMode
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 
 public class HistoryFragment : Fragment() {
-
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?,
     ): View {
         val repo = HistoryCacheRepository(requireContext())
-        val itemsFlow: Flow<List<HistoryItem>> = repo.observeDayStats()
-            .map { entities -> entities.toHistoryItems() }
+        val itemsFlow: Flow<List<HistoryItem>> =
+            repo.observeDayStats()
+                .map { entities -> entities.toHistoryItems() }
         val loadRhythm: suspend (String) -> HourRhythm = { date ->
             StatsAggregator.hourRhythmForDay(repo.getSessionsForDate(date))
         }
@@ -58,10 +57,11 @@ internal fun List<DayStatsEntity>.toHistoryItems(): List<HistoryItem> =
     map { e ->
         HistoryItem(
             date = e.date,
-            entry = DayEntry(
-                completed = e.completed,
-                work_minutes = e.workMinutes,
-                break_minutes = e.breakMinutes,
-            ),
+            entry =
+                DayEntry(
+                    completed = e.completed,
+                    work_minutes = e.workMinutes,
+                    break_minutes = e.breakMinutes,
+                ),
         )
     }.sortedByDescending { it.date }

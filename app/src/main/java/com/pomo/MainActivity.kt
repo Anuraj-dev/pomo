@@ -1,7 +1,12 @@
 package com.pomo
 
 import android.Manifest
-import android.content.*
+import android.content.BroadcastReceiver
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.content.ServiceConnection
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -38,28 +43,36 @@ public class MainActivity : AppCompatActivity() {
     private val alertsNotifier: AlertsNotifier by lazy { AlertsNotifier(this) }
     private val foregroundUpdateCheck = ForegroundUpdateCheck()
 
-    private val connection = object : ServiceConnection {
-        override fun onServiceConnected(name: ComponentName, binder: IBinder) {
-            Log.i(TAG, "PomodoroService connected: ${name.flattenToShortString()}")
-            val localBinder = binder as PomodoroService.LocalBinder
-            service = localBinder.service
-            isBound = true
-            updateCurrentFragment()
+    private val connection =
+        object : ServiceConnection {
+            override fun onServiceConnected(
+                name: ComponentName,
+                binder: IBinder,
+            ) {
+                Log.i(TAG, "PomodoroService connected: ${name.flattenToShortString()}")
+                val localBinder = binder as PomodoroService.LocalBinder
+                service = localBinder.service
+                isBound = true
+                updateCurrentFragment()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName) {
+                Log.w(TAG, "PomodoroService disconnected: ${name.flattenToShortString()}")
+                isBound = false
+                service = null
+            }
         }
 
-        override fun onServiceDisconnected(name: ComponentName) {
-            Log.w(TAG, "PomodoroService disconnected: ${name.flattenToShortString()}")
-            isBound = false
-            service = null
+    private val stateReceiver =
+        object : BroadcastReceiver() {
+            override fun onReceive(
+                context: Context,
+                intent: Intent,
+            ) {
+                updateCurrentFragment()
+                refreshProfileBadge()
+            }
         }
-    }
-
-    private val stateReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            updateCurrentFragment()
-            refreshProfileBadge()
-        }
-    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -73,8 +86,9 @@ public class MainActivity : AppCompatActivity() {
         prefs = UtilPreferenceManager(this)
 
         // Setup Navigation
-        val navHostFragment = supportFragmentManager
-            .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
+        val navHostFragment =
+            supportFragmentManager
+                .findFragmentById(R.id.nav_host_fragment) as NavHostFragment
         val navController = navHostFragment.navController
         navView = findViewById(R.id.nav_view)
         navView.setupWithNavController(navController)
@@ -103,14 +117,16 @@ public class MainActivity : AppCompatActivity() {
         val target = intent?.getStringExtra(AlertsNotifier.EXTRA_NAV_TARGET) ?: return
         // Consume it so a later config change or resume doesn't navigate a second time.
         intent.removeExtra(AlertsNotifier.EXTRA_NAV_TARGET)
-        val navController = (
-            supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
+        val navController =
+            (
+                supportFragmentManager.findFragmentById(R.id.nav_host_fragment) as? NavHostFragment
             )?.navController ?: return
-        val destination = when (target) {
-            AlertsNotifier.NAV_TARGET_ACHIEVEMENTS -> R.id.navigation_achievements
-            AlertsNotifier.NAV_TARGET_UPDATE -> R.id.navigation_settings
-            else -> return
-        }
+        val destination =
+            when (target) {
+                AlertsNotifier.NAV_TARGET_ACHIEVEMENTS -> R.id.navigation_achievements
+                AlertsNotifier.NAV_TARGET_UPDATE -> R.id.navigation_settings
+                else -> return
+            }
         runCatching { navController.navigate(destination) }
             .onFailure { Log.w(TAG, "Could not open notification target '$target'", it) }
     }
@@ -169,7 +185,10 @@ public class MainActivity : AppCompatActivity() {
         dispatchTimerCommand("add_time") { addTimeBlocking(secondsDelta) }
     }
 
-    private fun dispatchTimerCommand(name: String, command: suspend PomodoroService.() -> com.pomo.timer.TimerState) {
+    private fun dispatchTimerCommand(
+        name: String,
+        command: suspend PomodoroService.() -> com.pomo.timer.TimerState,
+    ) {
         val boundService = service
         Log.i(TAG, "Timer command requested: $name. isBound=$isBound serviceReady=${boundService != null}")
         if (!isBound || boundService == null) {
@@ -190,11 +209,12 @@ public class MainActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-                != PackageManager.PERMISSION_GRANTED) {
+                != PackageManager.PERMISSION_GRANTED
+            ) {
                 ActivityCompat.requestPermissions(
                     this,
                     arrayOf(Manifest.permission.POST_NOTIFICATIONS),
-                    NOTIFICATION_PERMISSION_REQUEST_CODE
+                    NOTIFICATION_PERMISSION_REQUEST_CODE,
                 )
             }
         }
@@ -203,7 +223,7 @@ public class MainActivity : AppCompatActivity() {
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<String>,
-        grantResults: IntArray
+        grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         // Handle permissions if needed

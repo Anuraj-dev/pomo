@@ -63,11 +63,12 @@ public fun ProfileScreen(
     var editing by remember { mutableStateOf(false) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scroll)
-            .padding(horizontal = 20.dp, vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(scroll)
+                .padding(horizontal = 20.dp, vertical = 16.dp),
     ) {
         Text(
             text = "Profile",
@@ -121,10 +122,11 @@ private fun IdentityHeader(
     val named = displayName.isNotBlank()
 
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onEdit)
-            .padding(vertical = 4.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onEdit)
+                .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         LetterTile(displayName = displayName)
@@ -133,11 +135,12 @@ private fun IdentityHeader(
             Text(
                 text = if (named) displayName else "Set your name",
                 style = MaterialTheme.typography.headlineLarge,
-                color = if (named) {
-                    MaterialTheme.colorScheme.onSurface
-                } else {
-                    PomoTokens.colors.onSurfaceFaint
-                },
+                color =
+                    if (named) {
+                        MaterialTheme.colorScheme.onSurface
+                    } else {
+                        PomoTokens.colors.onSurfaceFaint
+                    },
             )
             if (keyFingerprint.isNotEmpty()) {
                 Spacer(Modifier.height(2.dp))
@@ -158,9 +161,10 @@ private fun LetterTile(displayName: String) {
     val initial = displayName.trim().firstOrNull()?.uppercase() ?: "?"
 
     Box(
-        modifier = Modifier
-            .size(52.dp)
-            .background(PomoTokens.colors.accent, RoundedCornerShape(14.dp)),
+        modifier =
+            Modifier
+                .size(52.dp)
+                .background(PomoTokens.colors.accent, RoundedCornerShape(14.dp)),
         contentAlignment = Alignment.Center,
     ) {
         Text(
@@ -182,9 +186,10 @@ private fun StatStrip(
 
     Hairline()
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 16.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 16.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -225,30 +230,33 @@ private fun StatColumn(
 @Composable
 private fun StatDivider() {
     Box(
-        modifier = Modifier
-            .width(1.dp)
-            .height(34.dp)
-            .background(PomoTokens.colors.outline),
+        modifier =
+            Modifier
+                .width(1.dp)
+                .height(34.dp)
+                .background(PomoTokens.colors.outline),
     )
 }
 
 @Composable
 private fun Hairline() {
     Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(1.dp)
-            .background(PomoTokens.colors.outline),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(PomoTokens.colors.outline),
     )
 }
 
 @Composable
 private fun SettingsRow(onOpenSettings: () -> Unit) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onOpenSettings)
-            .padding(vertical = 18.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpenSettings)
+                .padding(vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
@@ -282,8 +290,9 @@ private fun DisplayNameDialog(
         body = {
             Column {
                 Text(
-                    text = "This is the name your crews see. You have one name, and it is the " +
-                        "same in every crew.",
+                    text =
+                        "This is the name your crews see. You have one name, and it is the " +
+                            "same in every crew.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = PomoTokens.colors.onSurfaceMuted,
                 )
@@ -294,9 +303,10 @@ private fun DisplayNameDialog(
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(
-                        onDone = { normalized?.let(onSave) },
-                    ),
+                    keyboardActions =
+                        KeyboardActions(
+                            onDone = { normalized?.let(onSave) },
+                        ),
                 )
             }
         },

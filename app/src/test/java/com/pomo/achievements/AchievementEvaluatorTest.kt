@@ -9,23 +9,23 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 public class AchievementEvaluatorTest {
-
     private fun snapshot(
         focusMinutes: Int = 0,
         sessions: Int = 0,
         bestStreak: Int = 0,
         bestDayMinutes: Int = 0,
-    ): StatsSnapshot = StatsSnapshot.Empty.copy(
-        lifetime = StatsSnapshot.Empty.lifetime.copy(focusMinutes = focusMinutes, sessions = sessions),
-        records = Records(
-            bestDay = if (bestDayMinutes > 0) BestDay("2026-01-01", 0, bestDayMinutes) else null,
-            bestWeek = null,
-            longestStreak = bestStreak,
-        ),
-    )
+    ): StatsSnapshot =
+        StatsSnapshot.Empty.copy(
+            lifetime = StatsSnapshot.Empty.lifetime.copy(focusMinutes = focusMinutes, sessions = sessions),
+            records =
+                Records(
+                    bestDay = if (bestDayMinutes > 0) BestDay("2026-01-01", 0, bestDayMinutes) else null,
+                    bestWeek = null,
+                    longestStreak = bestStreak,
+                ),
+        )
 
-    private fun earnedIds(snapshot: StatsSnapshot): Set<String> =
-        AchievementEvaluator.earnedOnly(snapshot).map { it.id }.toSet()
+    private fun earnedIds(snapshot: StatsSnapshot): Set<String> = AchievementEvaluator.earnedOnly(snapshot).map { it.id }.toSet()
 
     @Test
     public fun `empty history earns nothing`() {
@@ -66,10 +66,11 @@ public class AchievementEvaluatorTest {
     @Test
     public fun `best day ladder is capped at eight hours`() {
         // A 16-hour day earns the two rungs and no more — there is deliberately nothing above 8h.
-        val axisIds = AchievementCatalog.all
-            .filter { it.axis == AchievementAxis.BestDay }
-            .map { it.id }
-            .toSet()
+        val axisIds =
+            AchievementCatalog.all
+                .filter { it.axis == AchievementAxis.BestDay }
+                .map { it.id }
+                .toSet()
         assertEquals(setOf("day_4h", "day_8h"), axisIds)
         assertEquals(setOf("day_4h", "day_8h"), earnedIds(snapshot(bestDayMinutes = 16 * 60)))
     }

@@ -9,10 +9,12 @@ import java.util.TimeZone
  * Pure date/streak helpers. No Android, no clock — caller passes nowMs.
  */
 public object DateLogic {
-
     private const val DATE_PATTERN: String = "yyyy-MM-dd"
 
-    public fun effectiveDate(nowMs: Long, tz: TimeZone = TimeZone.getDefault()): String {
+    public fun effectiveDate(
+        nowMs: Long,
+        tz: TimeZone = TimeZone.getDefault(),
+    ): String {
         val cal = Calendar.getInstance(tz).apply { timeInMillis = nowMs }
         val df = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { timeZone = tz }
         return df.format(cal.time)
@@ -53,8 +55,9 @@ public object DateLogic {
     public fun bestStreak(activeDates: Set<String>): Int {
         if (activeDates.isEmpty()) return 0
         val df = SimpleDateFormat(DATE_PATTERN, Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        val parsed = activeDates.mapNotNull { runCatching { df.parse(it) }.getOrNull() }
-            .sortedDescending()
+        val parsed =
+            activeDates.mapNotNull { runCatching { df.parse(it) }.getOrNull() }
+                .sortedDescending()
         if (parsed.isEmpty()) return 0
         var best = 1
         var cur = 1

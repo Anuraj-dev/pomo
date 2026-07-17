@@ -4,7 +4,6 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 public class KeyFingerprintTest {
-
     @Test
     public fun `formats the first eight hex characters as two groups`() {
         assertEquals("4f2a · 9c11", KeyFingerprint.format("4f2a9c11" + "ab".repeat(28)))

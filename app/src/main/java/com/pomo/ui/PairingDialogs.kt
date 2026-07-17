@@ -27,7 +27,6 @@ import com.pomo.R
 import com.pomo.ui.components.PomoDialog
 import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoRadius
-import com.pomo.ui.theme.PomoTokens
 
 internal data class PairingDialogData(
     val url: String,
@@ -58,18 +57,20 @@ internal fun PairingDialog(
             ) {
                 data.qr?.let { qr ->
                     Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
                         contentAlignment = Alignment.Center,
                     ) {
                         Image(
                             bitmap = qr,
                             contentDescription = stringResource(R.string.pair_desktop_title),
-                            modifier = Modifier
-                                .size(220.dp)
-                                .background(Color.White, RoundedCornerShape(PomoRadius.Sm))
-                                .padding(12.dp),
+                            modifier =
+                                Modifier
+                                    .size(220.dp)
+                                    .background(Color.White, RoundedCornerShape(PomoRadius.Sm))
+                                    .padding(12.dp),
                         )
                     }
                 }
@@ -135,7 +136,10 @@ internal fun ScanResultDialog(
 }
 
 @Composable
-private fun LabelValue(label: String, value: String) {
+private fun LabelValue(
+    label: String,
+    value: String,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             label,

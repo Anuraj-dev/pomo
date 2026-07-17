@@ -62,24 +62,27 @@ import com.pomo.ui.components.SegmentedToggle
 import com.pomo.ui.components.SegmentedToggleOption
 import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoRadius
-import com.pomo.ui.theme.PomoTokens
 import com.pomo.util.UtilPreferenceManager
 
 public sealed interface SettingsItem {
     public data class Section(val title: String) : SettingsItem
+
     public data class Note(val text: String) : SettingsItem
+
     public data class IntPref(
         val key: String,
         val title: String,
         val summary: String,
         val default: Int,
     ) : SettingsItem
+
     public data class BoolPref(
         val key: String,
         val title: String,
         val summary: String,
         val default: Boolean,
     ) : SettingsItem
+
     public data class ChoicePref(
         val key: String,
         val title: String,
@@ -87,6 +90,7 @@ public sealed interface SettingsItem {
         val default: String,
         val choices: List<Choice>,
     ) : SettingsItem
+
     public data class SegmentedPref(
         val key: String,
         val title: String,
@@ -94,12 +98,14 @@ public sealed interface SettingsItem {
         val default: String,
         val choices: List<Choice>,
     ) : SettingsItem
+
     public data class Action(
         val title: String,
         val summary: String,
         val onClick: () -> Unit,
         val iconRes: Int? = null,
     ) : SettingsItem
+
     public data class CompletionCuePreview(
         val family: CompletionCueFamily,
         val title: String,
@@ -107,6 +113,7 @@ public sealed interface SettingsItem {
         val serviceProvider: () -> PomodoroService?,
         val onFeedback: (Int) -> Unit,
     ) : SettingsItem
+
     public data class ManualHapticPreview(
         val event: StateCueEvent,
         val title: String,
@@ -157,9 +164,10 @@ public fun SettingsScreen(
     val groups = remember(items) { groupSettings(items) }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         Row(
             modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 20.dp, bottom = 8.dp),
@@ -201,7 +209,10 @@ public fun SettingsScreen(
 }
 
 @Composable
-private fun SettingsGroupCard(group: SettingsGroup, prefs: SharedPreferences) {
+private fun SettingsGroupCard(
+    group: SettingsGroup,
+    prefs: SharedPreferences,
+) {
     Column {
         if (group.title != null) {
             SectionHeader(group.title, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
@@ -248,16 +259,20 @@ private fun NoteRow(item: SettingsItem.Note) {
 }
 
 @Composable
-private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
+private fun IntPrefRow(
+    prefs: SharedPreferences,
+    item: SettingsItem.IntPref,
+) {
     var current by remember(item.key) {
         mutableStateOf(prefs.getString(item.key, item.default.toString()) ?: item.default.toString())
     }
     DisposableEffect(item.key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
-            if (k == item.key) {
-                current = sp.getString(item.key, item.default.toString()) ?: item.default.toString()
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+                if (k == item.key) {
+                    current = sp.getString(item.key, item.default.toString()) ?: item.default.toString()
+                }
             }
-        }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
@@ -300,21 +315,26 @@ private fun IntPrefRow(prefs: SharedPreferences, item: SettingsItem.IntPref) {
 }
 
 @Composable
-private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePref) {
+private fun ChoicePrefRow(
+    prefs: SharedPreferences,
+    item: SettingsItem.ChoicePref,
+) {
     var current by remember(item.key) {
         mutableStateOf(prefs.getString(item.key, item.default) ?: item.default)
     }
     DisposableEffect(item.key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
-            if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
-        }
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+                if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
+            }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     var editing by remember { mutableStateOf(false) }
-    val currentLabel = item.choices.firstOrNull { it.value == current }?.label
-        ?: item.choices.firstOrNull { it.value == item.default }?.label
-        ?: current
+    val currentLabel =
+        item.choices.firstOrNull { it.value == current }?.label
+            ?: item.choices.firstOrNull { it.value == item.default }?.label
+            ?: current
 
     PrefRow(
         title = item.title,
@@ -333,20 +353,22 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
                     item.choices.forEach { choice ->
                         Text(
                             text = choice.label,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    current = choice.value
-                                    prefs.edit().putString(item.key, choice.value).apply()
-                                    editing = false
-                                }
-                                .padding(vertical = 12.dp),
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        current = choice.value
+                                        prefs.edit().putString(item.key, choice.value).apply()
+                                        editing = false
+                                    }
+                                    .padding(vertical = 12.dp),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = if (choice.value == current) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurface
-                            },
+                            color =
+                                if (choice.value == current) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
                         )
                     }
                 }
@@ -359,14 +381,18 @@ private fun ChoicePrefRow(prefs: SharedPreferences, item: SettingsItem.ChoicePre
 }
 
 @Composable
-private fun SegmentedPrefRow(prefs: SharedPreferences, item: SettingsItem.SegmentedPref) {
+private fun SegmentedPrefRow(
+    prefs: SharedPreferences,
+    item: SettingsItem.SegmentedPref,
+) {
     var current by remember(item.key) {
         mutableStateOf(prefs.getString(item.key, item.default) ?: item.default)
     }
     DisposableEffect(item.key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
-            if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
-        }
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+                if (k == item.key) current = sp.getString(item.key, item.default) ?: item.default
+            }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
@@ -398,26 +424,31 @@ private fun SegmentedPrefRow(prefs: SharedPreferences, item: SettingsItem.Segmen
 }
 
 @Composable
-private fun BoolPrefRow(prefs: SharedPreferences, item: SettingsItem.BoolPref) {
+private fun BoolPrefRow(
+    prefs: SharedPreferences,
+    item: SettingsItem.BoolPref,
+) {
     var checked by remember(item.key) {
         mutableStateOf(prefs.getBoolean(item.key, item.default))
     }
     DisposableEffect(item.key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
-            if (k == item.key) checked = sp.getBoolean(item.key, item.default)
-        }
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, k ->
+                if (k == item.key) checked = sp.getBoolean(item.key, item.default)
+            }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                val next = !checked
-                checked = next
-                prefs.edit().putBoolean(item.key, next).apply()
-            }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val next = !checked
+                    checked = next
+                    prefs.edit().putBoolean(item.key, next).apply()
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
@@ -439,10 +470,11 @@ private fun BoolPrefRow(prefs: SharedPreferences, item: SettingsItem.BoolPref) {
                 checked = it
                 prefs.edit().putBoolean(item.key, it).apply()
             },
-            colors = SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                checkedTrackColor = MaterialTheme.colorScheme.primary,
-            ),
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primary,
+                ),
         )
     }
 }
@@ -500,35 +532,37 @@ private fun CompletionCuePreviewRow(
         )
         Spacer(Modifier.height(12.dp))
         SegmentedToggle(
-            options = listOf(
-                SegmentedToggleOption(CueVariant.Variant1.number.toString(), context.getString(R.string.state_cues_variant_1)),
-                SegmentedToggleOption(CueVariant.Variant2.number.toString(), context.getString(R.string.state_cues_variant_2)),
-                SegmentedToggleOption(CueVariant.Variant3.number.toString(), context.getString(R.string.state_cues_variant_3)),
-            ),
+            options =
+                listOf(
+                    SegmentedToggleOption(CueVariant.Variant1.number.toString(), context.getString(R.string.state_cues_variant_1)),
+                    SegmentedToggleOption(CueVariant.Variant2.number.toString(), context.getString(R.string.state_cues_variant_2)),
+                    SegmentedToggleOption(CueVariant.Variant3.number.toString(), context.getString(R.string.state_cues_variant_3)),
+                ),
             selectedValue = selectedVariant.number.toString(),
             onSelectedValueChange = { selectedVariant = CueVariant.fromNumber(it.toInt()) },
             modifier = Modifier.fillMaxWidth(),
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = buildString {
-                append(context.getString(R.string.state_cues_preview_next_up, nextVariantNumber))
-                append(" · ")
-                append(
-                    context.getString(
-                        if (soundEnabled) R.string.state_cues_preview_sound_on else R.string.state_cues_preview_sound_off_inline,
-                    ),
-                )
-                append(" · ")
-                append(
-                    when {
-                        !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
-                        !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
-                        else -> context.getString(R.string.state_cues_preview_vibration_on)
-                    },
-                )
-                if (strongerEnabled) append(" · ${context.getString(R.string.state_cues_preview_stronger)}")
-            },
+            text =
+                buildString {
+                    append(context.getString(R.string.state_cues_preview_next_up, nextVariantNumber))
+                    append(" · ")
+                    append(
+                        context.getString(
+                            if (soundEnabled) R.string.state_cues_preview_sound_on else R.string.state_cues_preview_sound_off_inline,
+                        ),
+                    )
+                    append(" · ")
+                    append(
+                        when {
+                            !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                            !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                            else -> context.getString(R.string.state_cues_preview_vibration_on)
+                        },
+                    )
+                    if (strongerEnabled) append(" · ${context.getString(R.string.state_cues_preview_stronger)}")
+                },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -577,11 +611,12 @@ private fun ManualHapticPreviewRow(
         )
         Spacer(Modifier.height(8.dp))
         Text(
-            text = when {
-                !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
-                !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
-                else -> context.getString(R.string.state_cues_preview_vibration_on)
-            },
+            text =
+                when {
+                    !vibrationEnabled -> context.getString(R.string.state_cues_preview_vibration_off_inline)
+                    !vibrationAvailable -> context.getString(R.string.state_cues_preview_vibration_unavailable_inline)
+                    else -> context.getString(R.string.state_cues_preview_vibration_on)
+                },
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -611,10 +646,11 @@ private fun PrefRow(
     valueMono: Boolean = false,
 ) {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (leadingIconRes != null) {
@@ -641,11 +677,12 @@ private fun PrefRow(
         if (valueText != null) {
             Text(
                 valueText,
-                style = if (valueMono) {
-                    MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono)
-                } else {
-                    MaterialTheme.typography.titleMedium
-                },
+                style =
+                    if (valueMono) {
+                        MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMono)
+                    } else {
+                        MaterialTheme.typography.titleMedium
+                    },
                 color = MaterialTheme.colorScheme.primary,
             )
             Spacer(Modifier.padding(end = 2.dp))
@@ -672,9 +709,10 @@ private fun rememberPrefBoolean(
 ): Boolean {
     var value by remember(key) { mutableStateOf(prefs.getBoolean(key, default)) }
     DisposableEffect(key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, changedKey ->
-            if (changedKey == key) value = sp.getBoolean(key, default)
-        }
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, changedKey ->
+                if (changedKey == key) value = sp.getBoolean(key, default)
+            }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
@@ -689,9 +727,10 @@ private fun rememberPrefInt(
 ): Int {
     var value by remember(key) { mutableStateOf(prefs.getInt(key, default)) }
     DisposableEffect(key) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, changedKey ->
-            if (changedKey == key) value = sp.getInt(key, default)
-        }
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { sp, changedKey ->
+                if (changedKey == key) value = sp.getInt(key, default)
+            }
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
@@ -699,12 +738,13 @@ private fun rememberPrefInt(
 }
 
 private fun Context.hasVibratorCapability(): Boolean {
-    val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
-        manager.defaultVibrator
-    } else {
-        @Suppress("DEPRECATION")
-        getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
-    }
+    val vibrator =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val manager = getSystemService(Context.VIBRATOR_MANAGER_SERVICE) as VibratorManager
+            manager.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+        }
     return vibrator.hasVibrator()
 }

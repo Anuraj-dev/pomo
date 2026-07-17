@@ -35,7 +35,10 @@ public interface CrewDao {
     public suspend fun getRelayStates(crewId: String): List<CrewRelayStateEntity>
 
     @Query("SELECT * FROM crew_relay_state WHERE crewId = :crewId AND relayUrl = :relayUrl LIMIT 1")
-    public suspend fun getRelayState(crewId: String, relayUrl: String): CrewRelayStateEntity?
+    public suspend fun getRelayState(
+        crewId: String,
+        relayUrl: String,
+    ): CrewRelayStateEntity?
 
     @Query("SELECT * FROM crew_snapshots ORDER BY crewId ASC, identityPublicKey ASC")
     public suspend fun getAllSnapshots(): List<CrewSnapshotEntity>
@@ -75,7 +78,10 @@ public interface CrewDao {
         "SELECT publishedAtEpochSeconds FROM crew_snapshots " +
             "WHERE crewId = :crewId AND identityPublicKey = :identityPublicKey",
     )
-    public suspend fun getPublishedAt(crewId: String, identityPublicKey: String): Long?
+    public suspend fun getPublishedAt(
+        crewId: String,
+        identityPublicKey: String,
+    ): Long?
 
     @Upsert
     public suspend fun upsertSnapshot(snapshot: CrewSnapshotEntity)
@@ -84,7 +90,10 @@ public interface CrewDao {
     public suspend fun insertDailyAggregates(aggregates: List<CrewDailyAggregateEntity>)
 
     @Query("DELETE FROM crew_daily_aggregates WHERE crewId = :crewId AND identityPublicKey = :identityPublicKey")
-    public suspend fun deleteDailyAggregates(crewId: String, identityPublicKey: String)
+    public suspend fun deleteDailyAggregates(
+        crewId: String,
+        identityPublicKey: String,
+    )
 
     @Transaction
     public suspend fun upsertLatest(
@@ -103,7 +112,10 @@ public interface CrewDao {
     public suspend fun upsertHiddenMember(hiddenMember: CrewHiddenMemberEntity)
 
     @Query("DELETE FROM crew_hidden_members WHERE crewId = :crewId AND identityPublicKey = :identityPublicKey")
-    public suspend fun unhideMember(crewId: String, identityPublicKey: String)
+    public suspend fun unhideMember(
+        crewId: String,
+        identityPublicKey: String,
+    )
 
     @Upsert
     public suspend fun upsertRelayState(relayState: CrewRelayStateEntity)

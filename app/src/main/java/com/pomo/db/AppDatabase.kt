@@ -21,8 +21,8 @@ import androidx.sqlite.db.SupportSQLiteDatabase
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
-
     public abstract fun historyDao(): HistoryDao
+
     public abstract fun crewDao(): CrewDao
 
     public companion object {
@@ -45,23 +45,26 @@ public abstract class AppDatabase : RoomDatabase() {
                 .build()
         }
 
-        public val MIGRATION_1_3: Migration = object : Migration(1, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                migrateSessionsToStartPrimaryKey(db)
+        public val MIGRATION_1_3: Migration =
+            object : Migration(1, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    migrateSessionsToStartPrimaryKey(db)
+                }
             }
-        }
 
-        public val MIGRATION_2_3: Migration = object : Migration(2, 3) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                migrateSessionsToStartPrimaryKey(db)
+        public val MIGRATION_2_3: Migration =
+            object : Migration(2, 3) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    migrateSessionsToStartPrimaryKey(db)
+                }
             }
-        }
 
-        public val MIGRATION_3_4: Migration = object : Migration(3, 4) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                createCrewTables(db)
+        public val MIGRATION_3_4: Migration =
+            object : Migration(3, 4) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    createCrewTables(db)
+                }
             }
-        }
 
         private fun createCrewTables(db: SupportSQLiteDatabase) {
             db.execSQL(
@@ -168,7 +171,10 @@ public abstract class AppDatabase : RoomDatabase() {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_sessions_date` ON `sessions` (`date`)")
         }
 
-        private fun tableColumns(db: SupportSQLiteDatabase, table: String): Set<String> {
+        private fun tableColumns(
+            db: SupportSQLiteDatabase,
+            table: String,
+        ): Set<String> {
             val cursor = db.query("PRAGMA table_info(`$table`)")
             return cursor.use {
                 val nameIndex = it.getColumnIndexOrThrow("name")

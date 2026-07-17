@@ -14,15 +14,33 @@ public class TimerState {
     }
 
     @JvmField public var status: String = STATUS_STOPPED
+
     @JvmField public var phase: String = PHASE_WORK
-    @JvmField @SerializedName("next_phase") public var next_phase: String? = null
-    @JvmField @SerializedName("start_time") public var start_time: Double = 0.0
+
+    @JvmField
+    @SerializedName("next_phase")
+    public var next_phase: String? = null
+
+    @JvmField
+    @SerializedName("start_time")
+    public var start_time: Double = 0.0
+
     @JvmField public var duration: Double = 0.0
+
     @JvmField public var remaining: Double = 0.0
+
     @JvmField public var completed: Int = 0
-    @JvmField @SerializedName("daily_goal") public var goal: Int = 8
+
+    @JvmField
+    @SerializedName("daily_goal")
+    public var goal: Int = 8
+
     @JvmField public var date: String? = null
-    @JvmField @SerializedName("last_action_time") public var last_action_time: Long = 0
+
+    @JvmField
+    @SerializedName("last_action_time")
+    public var last_action_time: Long = 0
+
     @JvmField public var version: Int = 2
 
     public fun copy(): TimerState {

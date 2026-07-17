@@ -20,11 +20,9 @@ public object CrewValidation {
     public const val HOUR_BUCKETS: Int = 24
     public const val WEEKDAY_BUCKETS: Int = 7
 
-    public fun normalizeDisplayName(value: String): String? =
-        normalizeName(value, MAX_DISPLAY_NAME_GRAPHEMES)
+    public fun normalizeDisplayName(value: String): String? = normalizeName(value, MAX_DISPLAY_NAME_GRAPHEMES)
 
-    public fun normalizeCrewName(value: String): String? =
-        normalizeName(value, MAX_CREW_NAME_GRAPHEMES)
+    public fun normalizeCrewName(value: String): String? = normalizeName(value, MAX_CREW_NAME_GRAPHEMES)
 
     public fun isValidSnapshot(snapshot: CrewSnapshot): Boolean {
         if (snapshot.version != CrewDefaults.PROTOCOL_VERSION) return false
@@ -42,7 +40,9 @@ public object CrewValidation {
                     aggregate.focusMinutes < 0 ||
                     aggregate.completedWorkBlocks < 0
             }
-        ) return false
+        ) {
+            return false
+        }
         if (snapshot.dailyAggregates != snapshot.dailyAggregates.sortedByDescending { it.localDate }) return false
         return isValidStatsExtras(snapshot.stats)
     }
@@ -66,7 +66,9 @@ public object CrewValidation {
                 stats.bestWeekFocusMinutes,
                 stats.bestWeekWorkBlocks,
             ).any { it != null && it < 0 }
-        ) return false
+        ) {
+            return false
+        }
         return isValidHistory(stats)
     }
 
@@ -83,18 +85,27 @@ public object CrewValidation {
         return minutes.all { it >= 0 } && blocks.all { it >= 0 }
     }
 
-    private fun isValidBuckets(buckets: List<Int>?, expectedSize: Int): Boolean {
+    private fun isValidBuckets(
+        buckets: List<Int>?,
+        expectedSize: Int,
+    ): Boolean {
         if (buckets == null) return true
         return buckets.size == expectedSize && buckets.all { it >= 0 }
     }
 
-    public fun isLowerHex(value: String, expectedLength: Int): Boolean =
-        value.length == expectedLength && value.all { it in '0'..'9' || it in 'a'..'f' }
+    public fun isLowerHex(
+        value: String,
+        expectedLength: Int,
+    ): Boolean = value.length == expectedLength && value.all { it in '0'..'9' || it in 'a'..'f' }
 
-    private fun normalizeName(value: String, maxGraphemes: Int): String? {
-        val normalized = Normalizer.normalize(value, Normalizer.Form.NFC)
-            .trim()
-            .replace(WHITESPACE, " ")
+    private fun normalizeName(
+        value: String,
+        maxGraphemes: Int,
+    ): String? {
+        val normalized =
+            Normalizer.normalize(value, Normalizer.Form.NFC)
+                .trim()
+                .replace(WHITESPACE, " ")
         if (normalized.isBlank()) return null
         if (normalized.any(::isUnsafeNameCharacter)) return null
         if (graphemeCount(normalized) > maxGraphemes) return null
@@ -123,21 +134,21 @@ public object CrewValidation {
             character in BIDI_OVERRIDES
     }
 
-    private fun isIsoDate(value: String): Boolean =
-        runCatching { LocalDate.parse(value).toString() == value }.getOrDefault(false)
+    private fun isIsoDate(value: String): Boolean = runCatching { LocalDate.parse(value).toString() == value }.getOrDefault(false)
 
     private val WHITESPACE: Regex = Regex("\\s+")
-    private val BIDI_OVERRIDES: Set<Char> = setOf(
-        '\u202A',
-        '\u202B',
-        '\u202D',
-        '\u202E',
-        '\u202C',
-        '\u2066',
-        '\u2067',
-        '\u2068',
-        '\u2069',
-    )
+    private val BIDI_OVERRIDES: Set<Char> =
+        setOf(
+            '\u202A',
+            '\u202B',
+            '\u202D',
+            '\u202E',
+            '\u202C',
+            '\u2066',
+            '\u2067',
+            '\u2068',
+            '\u2069',
+        )
     private const val MIN_UTC_OFFSET_MINUTES: Int = -18 * 60
     private const val MAX_UTC_OFFSET_MINUTES: Int = 18 * 60
 }

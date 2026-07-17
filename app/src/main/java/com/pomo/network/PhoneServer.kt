@@ -42,82 +42,86 @@ public class PhoneServer(
     public fun start() {
         if (engine != null) return
 
-        val newEngine = embeddedServer(CIO, host = "0.0.0.0", port = port) {
-            install(WebSockets)
-            routing {
-                get("/api/status") {
-                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
-                    call.respondJson(service.stateSnapshot())
-                }
-
-                post("/api/toggle") {
-                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
-                    call.respondJson(success(service.toggleTimerBlocking()))
-                }
-
-                post("/api/skip") {
-                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
-                    call.respondJson(success(service.skipTimerBlocking()))
-                }
-
-                post("/api/reset") {
-                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
-                    call.respondJson(success(service.resetTimerBlocking()))
-                }
-
-                post("/api/extend") {
-                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
-                    val secondsDelta = parseAddTimeSeconds(call.receiveText())
-                        ?: return@post call.respondBadRequest("invalid add-time delta")
-                    call.respondJson(success(service.addTimeBlocking(secondsDelta)))
-                }
-
-                get("/api/config") {
-                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
-                    call.respondJson(service.getConfigPayload())
-                }
-
-                post("/api/config") {
-                    if (!call.isAuthorized()) return@post call.rejectUnauthorized()
-                    val state = try {
-                        service.applyConfigPayload(call.receiveText())
-                    } catch (_: Exception) {
-                        return@post call.respondBadRequest("invalid config")
-                    }
-                    call.respondJson(success(state))
-                }
-
-                get("/api/history") {
-                    if (!call.isAuthorized()) return@get call.rejectUnauthorized()
-                    call.respondJson(service.getHistoryPayload())
-                }
-
-                webSocket("/ws") {
-                    val hello = try {
-                        incoming.receive()
-                    } catch (_: ClosedReceiveChannelException) {
-                        close()
-                        return@webSocket
+        val newEngine =
+            embeddedServer(CIO, host = "0.0.0.0", port = port) {
+                install(WebSockets)
+                routing {
+                    get("/api/status") {
+                        if (!call.isAuthorized()) return@get call.rejectUnauthorized()
+                        call.respondJson(service.stateSnapshot())
                     }
 
-                    val token = if (hello is Frame.Text) parseHelloToken(hello.readText()) else null
-                    if (token != service.pairingToken) {
-                        close()
-                        return@webSocket
+                    post("/api/toggle") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        call.respondJson(success(service.toggleTimerBlocking()))
                     }
 
-                    synchronized(sessionsLock) { sessions.add(this) }
-                    try {
-                        send(Frame.Text(stateMessage()))
-                        for (frame in incoming) {
-                            if (frame is Frame.Close) break
+                    post("/api/skip") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        call.respondJson(success(service.skipTimerBlocking()))
+                    }
+
+                    post("/api/reset") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        call.respondJson(success(service.resetTimerBlocking()))
+                    }
+
+                    post("/api/extend") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        val secondsDelta =
+                            parseAddTimeSeconds(call.receiveText())
+                                ?: return@post call.respondBadRequest("invalid add-time delta")
+                        call.respondJson(success(service.addTimeBlocking(secondsDelta)))
+                    }
+
+                    get("/api/config") {
+                        if (!call.isAuthorized()) return@get call.rejectUnauthorized()
+                        call.respondJson(service.getConfigPayload())
+                    }
+
+                    post("/api/config") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        val state =
+                            try {
+                                service.applyConfigPayload(call.receiveText())
+                            } catch (_: Exception) {
+                                return@post call.respondBadRequest("invalid config")
+                            }
+                        call.respondJson(success(state))
+                    }
+
+                    get("/api/history") {
+                        if (!call.isAuthorized()) return@get call.rejectUnauthorized()
+                        call.respondJson(service.getHistoryPayload())
+                    }
+
+                    webSocket("/ws") {
+                        val hello =
+                            try {
+                                incoming.receive()
+                            } catch (_: ClosedReceiveChannelException) {
+                                close()
+                                return@webSocket
+                            }
+
+                        val token = if (hello is Frame.Text) parseHelloToken(hello.readText()) else null
+                        if (token != service.pairingToken) {
+                            close()
+                            return@webSocket
                         }
-                    } finally {
-                        synchronized(sessionsLock) { sessions.remove(this) }
+
+                        synchronized(sessionsLock) { sessions.add(this) }
+                        try {
+                            send(Frame.Text(stateMessage()))
+                            for (frame in incoming) {
+                                if (frame is Frame.Close) break
+                            }
+                        } finally {
+                            synchronized(sessionsLock) { sessions.remove(this) }
+                        }
                     }
                 }
             }
-        }
 
         // The phone API is optional. If the port is taken (e.g. a second install
         // serving on the same port) the bind fails — catch it so a non-critical
@@ -159,27 +163,29 @@ public class PhoneServer(
         }
     }
 
-    private suspend fun stateMessage(): String = gson.toJson(
-        mapOf(
-            "type" to "state",
-            "data" to service.stateSnapshot(),
-        ),
-    )
+    private suspend fun stateMessage(): String =
+        gson.toJson(
+            mapOf(
+                "type" to "state",
+                "data" to service.stateSnapshot(),
+            ),
+        )
 
     private fun success(state: Any): Map<String, Any> = mapOf("success" to true, "state" to state)
 
     private fun parseAddTimeSeconds(body: String): Int? {
-        val seconds = try {
-            val obj = JsonParser.parseString(body).asJsonObject
-            when {
-                obj.has("seconds_delta") -> obj.get("seconds_delta")?.asInt
-                obj.has("seconds") -> obj.get("seconds")?.asInt
-                obj.has("minutes") -> obj.get("minutes")?.asInt?.let { it * 60 }
-                else -> null
+        val seconds =
+            try {
+                val obj = JsonParser.parseString(body).asJsonObject
+                when {
+                    obj.has("seconds_delta") -> obj.get("seconds_delta")?.asInt
+                    obj.has("seconds") -> obj.get("seconds")?.asInt
+                    obj.has("minutes") -> obj.get("minutes")?.asInt?.let { it * 60 }
+                    else -> null
+                }
+            } catch (_: Exception) {
+                null
             }
-        } catch (_: Exception) {
-            null
-        }
         return seconds?.takeIf { it > 0 }
     }
 

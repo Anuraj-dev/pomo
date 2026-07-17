@@ -24,45 +24,54 @@ public object CrewRecoveryCodec {
     private const val GCM_TAG_BITS: Int = 128
     private val gson = Gson()
 
-    public fun encode(payload: CrewRecoveryPayload, passphrase: CharArray): String {
+    public fun encode(
+        payload: CrewRecoveryPayload,
+        passphrase: CharArray,
+    ): String {
         requireValid(payload)
         require(passphrase.size >= MIN_PASSPHRASE_LENGTH)
         val salt = ByteArray(SALT_BYTES).also(SecureRandom()::nextBytes)
         val nonce = ByteArray(NONCE_BYTES).also(SecureRandom()::nextBytes)
-        val ciphertext = crypt(
-            mode = Cipher.ENCRYPT_MODE,
-            input = gson.toJson(payload).toByteArray(Charsets.UTF_8),
-            passphrase = passphrase,
-            salt = salt,
-            nonce = nonce,
-            iterations = PBKDF2_ITERATIONS,
-        )
-        val envelope = RecoveryEnvelope(
-            version = VERSION,
-            kdf = KDF_NAME,
-            iterations = PBKDF2_ITERATIONS,
-            cipher = CIPHER_NAME,
-            salt = encodeBytes(salt),
-            nonce = encodeBytes(nonce),
-            ciphertext = encodeBytes(ciphertext),
-        )
+        val ciphertext =
+            crypt(
+                mode = Cipher.ENCRYPT_MODE,
+                input = gson.toJson(payload).toByteArray(Charsets.UTF_8),
+                passphrase = passphrase,
+                salt = salt,
+                nonce = nonce,
+                iterations = PBKDF2_ITERATIONS,
+            )
+        val envelope =
+            RecoveryEnvelope(
+                version = VERSION,
+                kdf = KDF_NAME,
+                iterations = PBKDF2_ITERATIONS,
+                cipher = CIPHER_NAME,
+                salt = encodeBytes(salt),
+                nonce = encodeBytes(nonce),
+                ciphertext = encodeBytes(ciphertext),
+            )
         return PREFIX + encodeBytes(gson.toJson(envelope).toByteArray(Charsets.UTF_8))
     }
 
-    public fun decode(value: String, passphrase: CharArray): CrewRecoveryPayload? {
+    public fun decode(
+        value: String,
+        passphrase: CharArray,
+    ): CrewRecoveryPayload? {
         if (!value.startsWith(PREFIX) || value.length > MAX_ENCODED_LENGTH) return null
         return runCatching {
             val envelopeJson = String(decodeBytes(value.removePrefix(PREFIX)), Charsets.UTF_8)
             val envelope = gson.fromJson(envelopeJson, RecoveryEnvelope::class.java)
             if (!envelope.isSupported()) return null
-            val plaintext = crypt(
-                mode = Cipher.DECRYPT_MODE,
-                input = decodeBytes(envelope.ciphertext),
-                passphrase = passphrase,
-                salt = decodeBytes(envelope.salt),
-                nonce = decodeBytes(envelope.nonce),
-                iterations = envelope.iterations,
-            )
+            val plaintext =
+                crypt(
+                    mode = Cipher.DECRYPT_MODE,
+                    input = decodeBytes(envelope.ciphertext),
+                    passphrase = passphrase,
+                    salt = decodeBytes(envelope.salt),
+                    nonce = decodeBytes(envelope.nonce),
+                    iterations = envelope.iterations,
+                )
             gson.fromJson(String(plaintext, Charsets.UTF_8), CrewRecoveryPayload::class.java)
                 ?.takeIf(::isValid)
         }.getOrNull()
@@ -77,11 +86,12 @@ public object CrewRecoveryCodec {
         iterations: Int,
     ): ByteArray {
         val spec = PBEKeySpec(passphrase, salt, iterations, KEY_BITS)
-        val keyBytes = try {
-            SecretKeyFactory.getInstance(KDF_NAME).generateSecret(spec).encoded
-        } finally {
-            spec.clearPassword()
-        }
+        val keyBytes =
+            try {
+                SecretKeyFactory.getInstance(KDF_NAME).generateSecret(spec).encoded
+            } finally {
+                spec.clearPassword()
+            }
         return try {
             val cipher = Cipher.getInstance(CIPHER_NAME)
             cipher.init(mode, SecretKeySpec(keyBytes, "AES"), GCMParameterSpec(GCM_TAG_BITS, nonce))
@@ -115,8 +125,7 @@ public object CrewRecoveryCodec {
                     } == true
             }
 
-    private fun encodeBytes(bytes: ByteArray): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    private fun encodeBytes(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
     private fun decodeBytes(value: String): ByteArray = Base64.getUrlDecoder().decode(value)
 

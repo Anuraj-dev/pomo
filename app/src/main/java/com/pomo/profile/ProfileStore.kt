@@ -12,7 +12,6 @@ import com.pomo.crew.CrewValidation
  * on. See docs/adr/0004-profile-replaces-settings-in-the-nav.md.
  */
 public class ProfileStore(context: Context) {
-
     private val app: Context = context.applicationContext
     private val prefs = app.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 

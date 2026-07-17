@@ -24,17 +24,23 @@ public object CrewIdentityKeys {
         )
     }
 
-    public fun isValidPrivateKey(privateKey: String): Boolean =
-        runCatching { privateKey(privateKey) }.isSuccess
+    public fun isValidPrivateKey(privateKey: String): Boolean = runCatching { privateKey(privateKey) }.isSuccess
 
-    public fun sign(message: ByteArray, privateKey: String): String {
+    public fun sign(
+        message: ByteArray,
+        privateKey: String,
+    ): String {
         val signer = Signature.getInstance(SIGNATURE_ALGORITHM)
         signer.initSign(privateKey(privateKey))
         signer.update(message)
         return encode(signer.sign())
     }
 
-    public fun verify(message: ByteArray, signature: String, publicKey: String): Boolean {
+    public fun verify(
+        message: ByteArray,
+        signature: String,
+        publicKey: String,
+    ): Boolean {
         return try {
             val verifier = Signature.getInstance(SIGNATURE_ALGORITHM)
             verifier.initVerify(publicKey(publicKey))
@@ -55,9 +61,7 @@ public object CrewIdentityKeys {
         return KeyFactory.getInstance(KEY_ALGORITHM).generatePublic(spec)
     }
 
-    private fun encode(bytes: ByteArray): String =
-        Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
+    private fun encode(bytes: ByteArray): String = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes)
 
-    private fun decode(value: String): ByteArray =
-        Base64.getUrlDecoder().decode(value)
+    private fun decode(value: String): ByteArray = Base64.getUrlDecoder().decode(value)
 }

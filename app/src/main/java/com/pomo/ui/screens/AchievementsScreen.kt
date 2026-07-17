@@ -53,11 +53,12 @@ public fun AchievementsScreen(
     val notEarned = statuses.filterNot { it.earned }.map { it.achievement }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(scroll)
-            .padding(horizontal = PomoSpacing.Lg, vertical = PomoSpacing.M),
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background)
+                .verticalScroll(scroll)
+                .padding(horizontal = PomoSpacing.Lg, vertical = PomoSpacing.M),
     ) {
         AchievementsHeader(earnedCount = earned.size, total = statuses.size, onBack = onBack)
 
@@ -109,10 +110,11 @@ public fun AchievementHighlightsRow(
     onClick: () -> Unit,
 ) {
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = PomoSpacing.M),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onClick)
+                .padding(vertical = PomoSpacing.M),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
@@ -147,7 +149,11 @@ public fun AchievementHighlightsRow(
 }
 
 @Composable
-private fun AchievementsHeader(earnedCount: Int, total: Int, onBack: () -> Unit) {
+private fun AchievementsHeader(
+    earnedCount: Int,
+    total: Int,
+    onBack: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(
@@ -185,7 +191,10 @@ private fun SectionLabel(text: String) {
 
 /** A dependency-free two-column grid: the catalog is small, so plain chunked Rows beat a lazy grid. */
 @Composable
-private fun AchievementGrid(items: List<Achievement>, earned: Boolean) {
+private fun AchievementGrid(
+    items: List<Achievement>,
+    earned: Boolean,
+) {
     Column(verticalArrangement = Arrangement.spacedBy(PomoSpacing.S)) {
         items.chunked(GRID_COLUMNS).forEach { rowItems ->
             Row(horizontalArrangement = Arrangement.spacedBy(PomoSpacing.S)) {
@@ -206,9 +215,10 @@ private fun AchievementTile(
 ) {
     val ink = if (earned) MaterialTheme.colorScheme.onSurface else PomoTokens.colors.onSurfaceFaint
     Column(
-        modifier = modifier
-            .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(PomoRadius.Md))
-            .padding(horizontal = PomoSpacing.Sm, vertical = PomoSpacing.M),
+        modifier =
+            modifier
+                .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(PomoRadius.Md))
+                .padding(horizontal = PomoSpacing.Sm, vertical = PomoSpacing.M),
     ) {
         Text(text = achievement.badge, style = badgeTextStyle, color = ink)
         Spacer(Modifier.height(PomoSpacing.S))
@@ -232,12 +242,13 @@ private fun AchievementTile(
 
 // Tabular figures, like every other numeric readout in the app (see TimerTextStyle). The badge is
 // the number, so the digits must not shift width between "100h" and "500h".
-private val badgeTextStyle: TextStyle = TextStyle(
-    fontFamily = JetBrainsMono,
-    fontWeight = FontWeight.SemiBold,
-    fontSize = 26.sp,
-    fontFeatureSettings = "tnum",
-)
+private val badgeTextStyle: TextStyle =
+    TextStyle(
+        fontFamily = JetBrainsMono,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 26.sp,
+        fontFeatureSettings = "tnum",
+    )
 
 private const val GRID_COLUMNS: Int = 2
 private const val HIGHLIGHT_SLOTS: Int = 3

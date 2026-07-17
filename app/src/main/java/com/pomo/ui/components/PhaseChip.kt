@@ -21,9 +21,10 @@ public fun PhaseChip(
     modifier: Modifier = Modifier,
 ) {
     Box(
-        modifier = modifier
-            .background(color.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp),
+        modifier =
+            modifier
+                .background(color.copy(alpha = 0.18f), RoundedCornerShape(999.dp))
+                .padding(horizontal = 10.dp, vertical = 5.dp),
     ) {
         Text(
             text = label.uppercase(Locale.ROOT),

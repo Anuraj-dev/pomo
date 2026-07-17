@@ -47,13 +47,12 @@ import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
 import com.pomo.util.UtilPreferenceManager
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.launch
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
-
     private val gson = Gson()
 
     private val pairingDialog = mutableStateOf<PairingDialogData?>(null)
@@ -129,9 +128,10 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             setContent {
                 var themeMode by remember { mutableStateOf(prefs.themeMode()) }
                 DisposableEffect(prefs) {
-                    val listener = SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
-                        if (key == THEME_MODE_PREF_KEY) themeMode = sp.themeMode()
-                    }
+                    val listener =
+                        SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
+                            if (key == THEME_MODE_PREF_KEY) themeMode = sp.themeMode()
+                        }
                     prefs.registerOnSharedPreferenceChangeListener(listener)
                     onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
                 }
@@ -187,160 +187,203 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    private fun buildItems(): List<SettingsItem> = buildList {
-        add(SettingsItem.Section(getString(R.string.category_connection)))
-        add(SettingsItem.BoolPref(
-            key = "phone_server_enabled",
-            title = getString(R.string.phone_api_enabled_title),
-            summary = getString(R.string.phone_api_enabled_summary),
-            default = true,
-        ))
-        add(SettingsItem.BoolPref(
-            key = "phone_server_wifi_only",
-            title = getString(R.string.phone_api_wifi_only_title),
-            summary = getString(R.string.phone_api_wifi_only_summary),
-            default = true,
-        ))
-        add(SettingsItem.IntPref(
-            key = "phone_server_port",
-            title = getString(R.string.phone_api_port_title),
-            summary = getString(R.string.phone_api_port_summary),
-            default = 9876,
-        ))
-        add(SettingsItem.Action(
-            title = getString(R.string.pair_desktop_title),
-            summary = getString(R.string.pair_desktop_summary),
-            onClick = ::onPairingClick,
-        ))
-        add(SettingsItem.Action(
-            title = getString(R.string.rotate_pairing_token_title),
-            summary = getString(R.string.rotate_pairing_token_summary),
-            onClick = { rotateConfirm.value = true },
-        ))
-        add(SettingsItem.Action(
-            title = getString(R.string.scan_pairing_qr_title),
-            summary = getString(R.string.scan_pairing_qr_summary),
-            onClick = ::launchQrScanner,
-        ))
-
-        add(SettingsItem.Section(getString(R.string.category_timer)))
-        add(SettingsItem.IntPref(
-            key = "pomodoro_duration",
-            title = getString(R.string.pomodoro_duration_title),
-            summary = getString(R.string.pomodoro_duration_summary),
-            default = 25,
-        ))
-        add(SettingsItem.IntPref(
-            key = "short_break_duration",
-            title = getString(R.string.short_break_title),
-            summary = getString(R.string.short_break_summary),
-            default = 5,
-        ))
-        add(SettingsItem.IntPref(
-            key = "long_break_duration",
-            title = getString(R.string.long_break_title),
-            summary = getString(R.string.long_break_summary),
-            default = 15,
-        ))
-
-        add(SettingsItem.Section(getString(R.string.category_goals)))
-        add(SettingsItem.IntPref(
-            key = "daily_goal",
-            title = getString(R.string.daily_goal_title),
-            summary = getString(R.string.daily_goal_summary),
-            default = 8,
-        ))
-
-        add(SettingsItem.Section(getString(R.string.category_state_cues)))
-        add(SettingsItem.Note(getString(R.string.state_cues_note)))
-        add(SettingsItem.BoolPref(
-            key = "vibrate_enabled",
-            title = getString(R.string.vibrate_title),
-            summary = getString(R.string.vibrate_summary),
-            default = true,
-        ))
-        add(SettingsItem.BoolPref(
-            key = "sound_enabled",
-            title = getString(R.string.sound_title),
-            summary = getString(R.string.sound_summary),
-            default = true,
-        ))
-        add(SettingsItem.BoolPref(
-            key = "stronger_completion_cues",
-            title = getString(R.string.state_cues_stronger_title),
-            summary = getString(R.string.state_cues_stronger_summary),
-            default = false,
-        ))
-        add(SettingsItem.BoolPref(
-            key = "ring_until_dismissed",
-            title = getString(R.string.ring_until_dismissed_title),
-            summary = getString(R.string.ring_until_dismissed_summary),
-            default = false,
-        ))
-        add(SettingsItem.ChoicePref(
-            key = "ring_sound",
-            title = getString(R.string.ring_sound_title),
-            summary = getString(R.string.ring_sound_summary),
-            default = UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
-            choices = listOf(
-                SettingsItem.Choice(
-                    UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
-                    getString(R.string.ring_sound_system),
+    private fun buildItems(): List<SettingsItem> =
+        buildList {
+            add(SettingsItem.Section(getString(R.string.category_connection)))
+            add(
+                SettingsItem.BoolPref(
+                    key = "phone_server_enabled",
+                    title = getString(R.string.phone_api_enabled_title),
+                    summary = getString(R.string.phone_api_enabled_summary),
+                    default = true,
                 ),
-                SettingsItem.Choice(
-                    UtilPreferenceManager.RING_SOUND_POMO_CUE,
-                    getString(R.string.ring_sound_pomo),
+            )
+            add(
+                SettingsItem.BoolPref(
+                    key = "phone_server_wifi_only",
+                    title = getString(R.string.phone_api_wifi_only_title),
+                    summary = getString(R.string.phone_api_wifi_only_summary),
+                    default = true,
                 ),
-            ),
-        ))
-        add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
-        addCompletionCueItems()
-        add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
-        addManualHapticItems()
+            )
+            add(
+                SettingsItem.IntPref(
+                    key = "phone_server_port",
+                    title = getString(R.string.phone_api_port_title),
+                    summary = getString(R.string.phone_api_port_summary),
+                    default = 9876,
+                ),
+            )
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.pair_desktop_title),
+                    summary = getString(R.string.pair_desktop_summary),
+                    onClick = ::onPairingClick,
+                ),
+            )
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.rotate_pairing_token_title),
+                    summary = getString(R.string.rotate_pairing_token_summary),
+                    onClick = { rotateConfirm.value = true },
+                ),
+            )
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.scan_pairing_qr_title),
+                    summary = getString(R.string.scan_pairing_qr_summary),
+                    onClick = ::launchQrScanner,
+                ),
+            )
 
-        add(SettingsItem.Section(getString(R.string.category_theme)))
-        add(SettingsItem.SegmentedPref(
-            key = THEME_MODE_PREF_KEY,
-            title = getString(R.string.theme_mode_title),
-            summary = getString(R.string.theme_mode_summary),
-            default = ThemeMode.System.preferenceValue,
-            choices = listOf(
-                SettingsItem.Choice(ThemeMode.System.preferenceValue, ThemeMode.System.displayName),
-                SettingsItem.Choice(ThemeMode.Light.preferenceValue, ThemeMode.Light.displayName),
-                SettingsItem.Choice(ThemeMode.Dark.preferenceValue, ThemeMode.Dark.displayName),
-            ),
-        ))
+            add(SettingsItem.Section(getString(R.string.category_timer)))
+            add(
+                SettingsItem.IntPref(
+                    key = "pomodoro_duration",
+                    title = getString(R.string.pomodoro_duration_title),
+                    summary = getString(R.string.pomodoro_duration_summary),
+                    default = 25,
+                ),
+            )
+            add(
+                SettingsItem.IntPref(
+                    key = "short_break_duration",
+                    title = getString(R.string.short_break_title),
+                    summary = getString(R.string.short_break_summary),
+                    default = 5,
+                ),
+            )
+            add(
+                SettingsItem.IntPref(
+                    key = "long_break_duration",
+                    title = getString(R.string.long_break_title),
+                    summary = getString(R.string.long_break_summary),
+                    default = 15,
+                ),
+            )
 
-        add(SettingsItem.Section(getString(R.string.category_data)))
-        add(SettingsItem.Action(
-            title = getString(R.string.backup_export_title),
-            summary = getString(R.string.backup_export_summary),
-            onClick = ::launchBackupExport,
-        ))
-        add(SettingsItem.Action(
-            title = getString(R.string.backup_restore_title),
-            summary = getString(R.string.backup_restore_summary),
-            onClick = ::launchBackupImport,
-        ))
+            add(SettingsItem.Section(getString(R.string.category_goals)))
+            add(
+                SettingsItem.IntPref(
+                    key = "daily_goal",
+                    title = getString(R.string.daily_goal_title),
+                    summary = getString(R.string.daily_goal_summary),
+                    default = 8,
+                ),
+            )
 
-        add(SettingsItem.Section(getString(R.string.category_info)))
-        add(SettingsItem.Action(
-            title = getString(R.string.release_notes_title),
-            summary = getString(R.string.release_notes_summary, BuildConfig.VERSION_NAME),
-            iconRes = R.drawable.ic_info,
-            onClick = {
-                runCatching { findNavController().navigate(R.id.navigation_release_notes) }
-            },
-        ))
-        add(SettingsItem.Action(
-            title = getString(R.string.about_title),
-            summary = getString(R.string.about_summary),
-            iconRes = R.drawable.ic_info,
-            onClick = {
-                runCatching { findNavController().navigate(R.id.navigation_about) }
-            },
-        ))
-    }
+            add(SettingsItem.Section(getString(R.string.category_state_cues)))
+            add(SettingsItem.Note(getString(R.string.state_cues_note)))
+            add(
+                SettingsItem.BoolPref(
+                    key = "vibrate_enabled",
+                    title = getString(R.string.vibrate_title),
+                    summary = getString(R.string.vibrate_summary),
+                    default = true,
+                ),
+            )
+            add(
+                SettingsItem.BoolPref(
+                    key = "sound_enabled",
+                    title = getString(R.string.sound_title),
+                    summary = getString(R.string.sound_summary),
+                    default = true,
+                ),
+            )
+            add(
+                SettingsItem.BoolPref(
+                    key = "stronger_completion_cues",
+                    title = getString(R.string.state_cues_stronger_title),
+                    summary = getString(R.string.state_cues_stronger_summary),
+                    default = false,
+                ),
+            )
+            add(
+                SettingsItem.BoolPref(
+                    key = "ring_until_dismissed",
+                    title = getString(R.string.ring_until_dismissed_title),
+                    summary = getString(R.string.ring_until_dismissed_summary),
+                    default = false,
+                ),
+            )
+            add(
+                SettingsItem.ChoicePref(
+                    key = "ring_sound",
+                    title = getString(R.string.ring_sound_title),
+                    summary = getString(R.string.ring_sound_summary),
+                    default = UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+                    choices =
+                        listOf(
+                            SettingsItem.Choice(
+                                UtilPreferenceManager.RING_SOUND_SYSTEM_ALARM,
+                                getString(R.string.ring_sound_system),
+                            ),
+                            SettingsItem.Choice(
+                                UtilPreferenceManager.RING_SOUND_POMO_CUE,
+                                getString(R.string.ring_sound_pomo),
+                            ),
+                        ),
+                ),
+            )
+            add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
+            addCompletionCueItems()
+            add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
+            addManualHapticItems()
+
+            add(SettingsItem.Section(getString(R.string.category_theme)))
+            add(
+                SettingsItem.SegmentedPref(
+                    key = THEME_MODE_PREF_KEY,
+                    title = getString(R.string.theme_mode_title),
+                    summary = getString(R.string.theme_mode_summary),
+                    default = ThemeMode.System.preferenceValue,
+                    choices =
+                        listOf(
+                            SettingsItem.Choice(ThemeMode.System.preferenceValue, ThemeMode.System.displayName),
+                            SettingsItem.Choice(ThemeMode.Light.preferenceValue, ThemeMode.Light.displayName),
+                            SettingsItem.Choice(ThemeMode.Dark.preferenceValue, ThemeMode.Dark.displayName),
+                        ),
+                ),
+            )
+
+            add(SettingsItem.Section(getString(R.string.category_data)))
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.backup_export_title),
+                    summary = getString(R.string.backup_export_summary),
+                    onClick = ::launchBackupExport,
+                ),
+            )
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.backup_restore_title),
+                    summary = getString(R.string.backup_restore_summary),
+                    onClick = ::launchBackupImport,
+                ),
+            )
+
+            add(SettingsItem.Section(getString(R.string.category_info)))
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.release_notes_title),
+                    summary = getString(R.string.release_notes_summary, BuildConfig.VERSION_NAME),
+                    iconRes = R.drawable.ic_info,
+                    onClick = {
+                        runCatching { findNavController().navigate(R.id.navigation_release_notes) }
+                    },
+                ),
+            )
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.about_title),
+                    summary = getString(R.string.about_summary),
+                    iconRes = R.drawable.ic_info,
+                    onClick = {
+                        runCatching { findNavController().navigate(R.id.navigation_about) }
+                    },
+                ),
+            )
+        }
 
     private fun MutableList<SettingsItem>.addCompletionCueItems() {
         add(
@@ -423,7 +466,10 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             .unregisterOnSharedPreferenceChangeListener(this)
     }
 
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+    override fun onSharedPreferenceChanged(
+        sharedPreferences: SharedPreferences?,
+        key: String?,
+    ) {
         val activity = activity as? MainActivity ?: return
         when (key) {
             "daily_goal" -> {
@@ -431,7 +477,8 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 activity.service?.syncConfig()
             }
             "pomodoro_duration", "short_break_duration", "long_break_duration",
-            "long_break_after", "phone_server_port", "phone_server_enabled", "phone_server_wifi_only" -> {
+            "long_break_after", "phone_server_port", "phone_server_enabled", "phone_server_wifi_only",
+            -> {
                 activity.service?.syncConfig()
             }
         }
@@ -444,12 +491,13 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
             return
         }
         val qrSize = (220 * resources.displayMetrics.density).toInt()
-        pairingDialog.value = PairingDialogData(
-            url = service.pairingUrl,
-            token = service.pairingToken,
-            payload = service.pairingPayload,
-            qr = createQrBitmap(service.pairingPayload, qrSize)?.asImageBitmap(),
-        )
+        pairingDialog.value =
+            PairingDialogData(
+                url = service.pairingUrl,
+                token = service.pairingToken,
+                payload = service.pairingPayload,
+                qr = createQrBitmap(service.pairingPayload, qrSize)?.asImageBitmap(),
+            )
     }
 
     private fun doRotatePairingToken() {
@@ -462,18 +510,22 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    private fun createQrBitmap(payload: String, size: Int): Bitmap? = try {
-        val matrix = MultiFormatWriter().encode(payload, BarcodeFormat.QR_CODE, size, size)
-        Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
-            for (x in 0 until size) {
-                for (y in 0 until size) {
-                    bmp.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+    private fun createQrBitmap(
+        payload: String,
+        size: Int,
+    ): Bitmap? =
+        try {
+            val matrix = MultiFormatWriter().encode(payload, BarcodeFormat.QR_CODE, size, size)
+            Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888).also { bmp ->
+                for (x in 0 until size) {
+                    for (y in 0 until size) {
+                        bmp.setPixel(x, y, if (matrix[x, y]) Color.BLACK else Color.WHITE)
+                    }
                 }
             }
+        } catch (_: Exception) {
+            null
         }
-    } catch (_: Exception) {
-        null
-    }
 
     private fun copyPairingPayload(payload: String) {
         val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -482,17 +534,19 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     }
 
     private fun sharePairingPayload(payload: String) {
-        val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_TEXT, payload)
-        }
+        val intent =
+            Intent(Intent.ACTION_SEND).apply {
+                type = "text/plain"
+                putExtra(Intent.EXTRA_TEXT, payload)
+            }
         startActivity(Intent.createChooser(intent, getString(R.string.pairing_share_title)))
     }
 
     private fun launchQrScanner() {
-        val intent = Intent("com.google.zxing.client.android.SCAN").apply {
-            putExtra("SCAN_MODE", "QR_CODE_MODE")
-        }
+        val intent =
+            Intent("com.google.zxing.client.android.SCAN").apply {
+                putExtra("SCAN_MODE", "QR_CODE_MODE")
+            }
         if (intent.resolveActivity(requireContext().packageManager) == null) {
             showMessage(R.string.scan_pairing_qr_missing)
             return
@@ -511,11 +565,12 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
 
         val service = (activity as? MainActivity)?.service
-        val message = when {
-            service == null -> getString(R.string.scan_pairing_qr_service_unavailable)
-            scannedToken == service.pairingToken -> getString(R.string.scan_pairing_qr_match)
-            else -> getString(R.string.scan_pairing_qr_other)
-        }
+        val message =
+            when {
+                service == null -> getString(R.string.scan_pairing_qr_service_unavailable)
+                scannedToken == service.pairingToken -> getString(R.string.scan_pairing_qr_match)
+                else -> getString(R.string.scan_pairing_qr_other)
+            }
 
         scanResult.value = ScanResultData(message = message, url = scannedUrl)
     }
@@ -561,20 +616,22 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    private fun PomoBackup.toPreview(): RestorePreviewData = RestorePreviewData(
-        sessionCount = history.sessions.size,
-        crewCount = crew.memberships.size,
-        hasIdentity = crew.identityPrivateKey.isNotBlank(),
-        exportedOn = exportedAtEpochSeconds
-            .takeIf { it > 0L }
-            ?.let {
-                Instant.ofEpochSecond(it)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
-                    .toString()
-            }
-            ?: getString(R.string.backup_exported_unknown),
-    )
+    private fun PomoBackup.toPreview(): RestorePreviewData =
+        RestorePreviewData(
+            sessionCount = history.sessions.size,
+            crewCount = crew.memberships.size,
+            hasIdentity = crew.identityPrivateKey.isNotBlank(),
+            exportedOn =
+                exportedAtEpochSeconds
+                    .takeIf { it > 0L }
+                    ?.let {
+                        Instant.ofEpochSecond(it)
+                            .atZone(ZoneId.systemDefault())
+                            .toLocalDate()
+                            .toString()
+                    }
+                    ?: getString(R.string.backup_exported_unknown),
+        )
 
     private fun showMessage(messageRes: Int) {
         Toast.makeText(requireContext(), messageRes, Toast.LENGTH_SHORT).show()

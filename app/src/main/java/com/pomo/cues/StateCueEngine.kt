@@ -41,17 +41,18 @@ public class StateCueEngine(
         stop()
         val variant = rotationStore.nextVariant(family)
 
-        val played = if (prefs.isRingUntilDismissed) {
-            startRing(family, variant)
-        } else {
-            playCompletionChannels(
-                family = family,
-                variant = variant,
-                channel = CuePreviewChannel.Combined,
-                stronger = prefs.isStrongerCompletionCues,
-                isPreview = false,
-            ).played
-        }
+        val played =
+            if (prefs.isRingUntilDismissed) {
+                startRing(family, variant)
+            } else {
+                playCompletionChannels(
+                    family = family,
+                    variant = variant,
+                    channel = CuePreviewChannel.Combined,
+                    stronger = prefs.isStrongerCompletionCues,
+                    isPreview = false,
+                ).played
+            }
         if (played) {
             rotationStore.advance(family)
         } else {
@@ -59,7 +60,10 @@ public class StateCueEngine(
         }
     }
 
-    private fun startRing(family: CompletionCueFamily, variant: CueVariant): Boolean {
+    private fun startRing(
+        family: CompletionCueFamily,
+        variant: CueVariant,
+    ): Boolean {
         val availability = availability()
         var playedAny = false
         if (availability.soundEnabled && audioPlayer.isRingAvailable()) {
@@ -177,17 +181,18 @@ public class StateCueEngine(
 
         return CuePreviewOutcome(
             played = false,
-            messageRes = when {
-                !availability.soundEnabled && !availability.vibrationEnabled ->
-                    R.string.state_cues_preview_no_channels
-                !availability.soundEnabled && !availability.vibrationAvailable ->
-                    R.string.state_cues_preview_no_channels
-                !availability.vibrationEnabled && !availability.soundAvailable ->
-                    R.string.state_cues_preview_no_channels
-                !availability.soundAvailable && !availability.vibrationAvailable ->
-                    R.string.state_cues_preview_no_channels
-                else -> R.string.state_cues_preview_unavailable
-            },
+            messageRes =
+                when {
+                    !availability.soundEnabled && !availability.vibrationEnabled ->
+                        R.string.state_cues_preview_no_channels
+                    !availability.soundEnabled && !availability.vibrationAvailable ->
+                        R.string.state_cues_preview_no_channels
+                    !availability.vibrationEnabled && !availability.soundAvailable ->
+                        R.string.state_cues_preview_no_channels
+                    !availability.soundAvailable && !availability.vibrationAvailable ->
+                        R.string.state_cues_preview_no_channels
+                    else -> R.string.state_cues_preview_unavailable
+                },
         )
     }
 }

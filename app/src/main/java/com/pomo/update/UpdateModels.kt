@@ -25,11 +25,16 @@ internal data class VersionReleaseNotes(
 /** Outcome of a manual "Check for updates" request. */
 internal sealed interface UpdateCheckResult {
     data class UpdateAvailable(val release: LatestRelease) : UpdateCheckResult
+
     data object UpToDate : UpdateCheckResult
+
     data object Offline : UpdateCheckResult
+
     data object RateLimited : UpdateCheckResult
+
     /** Release JSON was unreadable, or the tag was not a comparable version. */
     data object MalformedMetadata : UpdateCheckResult
+
     /** A release exists but carries no installable `.apk` asset. */
     data object MissingAsset : UpdateCheckResult
 }
@@ -37,17 +42,24 @@ internal sealed interface UpdateCheckResult {
 /** Outcome of fetching release notes for an already-installed app version. */
 internal sealed interface ReleaseNotesResult {
     data class Found(val release: VersionReleaseNotes) : ReleaseNotesResult
+
     data object NotFound : ReleaseNotesResult
+
     data object Offline : ReleaseNotesResult
+
     data object RateLimited : ReleaseNotesResult
+
     data object MalformedMetadata : ReleaseNotesResult
 }
 
 /** Outcome of downloading + verifying the release APK. */
 internal sealed interface DownloadOutcome {
     data class Ready(val apk: File) : DownloadOutcome
+
     data object Offline : DownloadOutcome
+
     /** sha256 of the download did not match the published checksum. */
     data object Corrupt : DownloadOutcome
+
     data object Failed : DownloadOutcome
 }

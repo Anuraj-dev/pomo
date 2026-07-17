@@ -19,10 +19,16 @@ public object CrewNostrKeys {
         return uncompressed.copyOfRange(1, 33).toHex()
     }
 
-    public fun signSchnorr(messageHex: String, privateKeyHex: String): String =
-        secp256k1.signSchnorr(messageHex.hexToBytes(), privateKeyHex.hexToBytes(), null).toHex()
+    public fun signSchnorr(
+        messageHex: String,
+        privateKeyHex: String,
+    ): String = secp256k1.signSchnorr(messageHex.hexToBytes(), privateKeyHex.hexToBytes(), null).toHex()
 
-    public fun verifySchnorr(messageHex: String, signatureHex: String, publicKeyHex: String): Boolean =
+    public fun verifySchnorr(
+        messageHex: String,
+        signatureHex: String,
+        publicKeyHex: String,
+    ): Boolean =
         runCatching {
             secp256k1.verifySchnorr(
                 signatureHex.hexToBytes(),
@@ -31,8 +37,7 @@ public object CrewNostrKeys {
             )
         }.getOrDefault(false)
 
-    public fun ByteArray.toHex(): String =
-        joinToString("") { "%02x".format(it) }
+    public fun ByteArray.toHex(): String = joinToString("") { "%02x".format(it) }
 
     public fun String.hexToBytes(): ByteArray {
         require(length % 2 == 0) { "Hex string must have even length" }

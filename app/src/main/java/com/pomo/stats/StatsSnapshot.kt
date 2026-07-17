@@ -11,12 +11,13 @@ public data class ChartTrend(
     val allTime: TrendSeries,
 ) {
     public companion object {
-        public val Empty: ChartTrend = ChartTrend(
-            today = TrendSeries(emptyList()),
-            week = TrendSeries(emptyList()),
-            month = TrendSeries(emptyList()),
-            allTime = TrendSeries(emptyList()),
-        )
+        public val Empty: ChartTrend =
+            ChartTrend(
+                today = TrendSeries(emptyList()),
+                week = TrendSeries(emptyList()),
+                month = TrendSeries(emptyList()),
+                allTime = TrendSeries(emptyList()),
+            )
     }
 }
 
@@ -32,15 +33,16 @@ public data class StatsSnapshot(
     public val isEmpty: Boolean get() = lifetime.sessions == 0
 
     public companion object {
-        public val Empty: StatsSnapshot = StatsSnapshot(
-            lifetime = Lifetime(focusMinutes = 0, sessions = 0, daysWithApp = 0, firstDate = null),
-            rhythm = HourRhythm(buckets = IntArray(24), peakHour = null, pattern = RhythmPattern.None),
-            weekShape = WeekShape(buckets = IntArray(7), strongestDayIndex = null),
-            habit = HabitWindow(weeks = 12, cells = emptyList(), currentStreak = 0, bestStreak = 0),
-            goal = GoalSummary(dailyGoal = 0, daysHit = 0, totalDays = 0),
-            records = Records(bestDay = null, bestWeek = null, longestStreak = 0),
-            chartTrend = ChartTrend.Empty,
-        )
+        public val Empty: StatsSnapshot =
+            StatsSnapshot(
+                lifetime = Lifetime(focusMinutes = 0, sessions = 0, daysWithApp = 0, firstDate = null),
+                rhythm = HourRhythm(buckets = IntArray(24), peakHour = null, pattern = RhythmPattern.None),
+                weekShape = WeekShape(buckets = IntArray(7), strongestDayIndex = null),
+                habit = HabitWindow(weeks = 12, cells = emptyList(), currentStreak = 0, bestStreak = 0),
+                goal = GoalSummary(dailyGoal = 0, daysHit = 0, totalDays = 0),
+                records = Records(bestDay = null, bestWeek = null, longestStreak = 0),
+                chartTrend = ChartTrend.Empty,
+            )
     }
 }
 
@@ -61,6 +63,7 @@ public data class HourRhythm(
         if (other !is HourRhythm) return false
         return buckets.contentEquals(other.buckets) && peakHour == other.peakHour && pattern == other.pattern
     }
+
     override fun hashCode(): Int {
         var result = buckets.contentHashCode()
         result = 31 * result + (peakHour ?: -1)
@@ -80,6 +83,7 @@ public data class WeekShape(
         if (other !is WeekShape) return false
         return buckets.contentEquals(other.buckets) && strongestDayIndex == other.strongestDayIndex
     }
+
     override fun hashCode(): Int {
         var result = buckets.contentHashCode()
         result = 31 * result + (strongestDayIndex ?: -1)
@@ -113,4 +117,5 @@ public data class Records(
 )
 
 public data class BestDay(val date: String, val sessions: Int, val minutes: Int)
+
 public data class BestWeek(val weekStart: String, val sessions: Int, val minutes: Int)

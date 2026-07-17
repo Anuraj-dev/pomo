@@ -11,10 +11,11 @@ public object PomoRadius {
     public val Pill: androidx.compose.ui.unit.Dp = 999.dp
 }
 
-public val PomoShapes: Shapes = Shapes(
-    extraSmall = RoundedCornerShape(PomoRadius.Sm),
-    small = RoundedCornerShape(PomoRadius.Sm),
-    medium = RoundedCornerShape(PomoRadius.Md),
-    large = RoundedCornerShape(PomoRadius.Lg),
-    extraLarge = RoundedCornerShape(PomoRadius.Lg),
-)
+public val PomoShapes: Shapes =
+    Shapes(
+        extraSmall = RoundedCornerShape(PomoRadius.Sm),
+        small = RoundedCornerShape(PomoRadius.Sm),
+        medium = RoundedCornerShape(PomoRadius.Md),
+        large = RoundedCornerShape(PomoRadius.Lg),
+        extraLarge = RoundedCornerShape(PomoRadius.Lg),
+    )

@@ -2,8 +2,8 @@ package com.pomo.update
 
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.util.UtilPreferenceManager
-import java.util.concurrent.TimeUnit
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 /**
  * The unattended half of update checking. Where [com.pomo.ui.screens.UpdateSection] is the manual
@@ -19,7 +19,6 @@ import okhttp3.OkHttpClient
 internal class ForegroundUpdateCheck(
     private val checker: GithubUpdateChecker = GithubUpdateChecker(defaultClient()),
 ) {
-
     suspend fun runIfDue(
         prefs: UtilPreferenceManager,
         currentVersionName: String,
@@ -55,29 +54,31 @@ internal enum class UpdateCheckAction { NOTIFY, RECORD_ONLY, IGNORE }
 
 /** Pure throttle policy for [ForegroundUpdateCheck], extracted so it is unit-testable without Android. */
 internal object UpdateThrottle {
-
     val WINDOW_MS: Long = TimeUnit.HOURS.toMillis(24)
 
     /**
      * Whether a foreground check is due. [lastCheckAt] of 0 means "never checked", which is always
      * due; otherwise a check is due once [WINDOW_MS] has elapsed.
      */
-    fun isDue(now: Long, lastCheckAt: Long): Boolean =
-        lastCheckAt == 0L || now - lastCheckAt >= WINDOW_MS
+    fun isDue(
+        now: Long,
+        lastCheckAt: Long,
+    ): Boolean = lastCheckAt == 0L || now - lastCheckAt >= WINDOW_MS
 
     /**
      * What to do with a completed check: [UpdateCheckAction.NOTIFY] and record the time when a newer
      * version exists, [UpdateCheckAction.RECORD_ONLY] on a definitive "nothing to offer" answer, or
      * [UpdateCheckAction.IGNORE] — leaving the window untouched — when GitHub was never really reached.
      */
-    fun actionFor(result: UpdateCheckResult): UpdateCheckAction = when (result) {
-        is UpdateCheckResult.UpdateAvailable -> UpdateCheckAction.NOTIFY
-        UpdateCheckResult.UpToDate,
-        UpdateCheckResult.MissingAsset,
-        -> UpdateCheckAction.RECORD_ONLY
-        UpdateCheckResult.Offline,
-        UpdateCheckResult.RateLimited,
-        UpdateCheckResult.MalformedMetadata,
-        -> UpdateCheckAction.IGNORE
-    }
+    fun actionFor(result: UpdateCheckResult): UpdateCheckAction =
+        when (result) {
+            is UpdateCheckResult.UpdateAvailable -> UpdateCheckAction.NOTIFY
+            UpdateCheckResult.UpToDate,
+            UpdateCheckResult.MissingAsset,
+            -> UpdateCheckAction.RECORD_ONLY
+            UpdateCheckResult.Offline,
+            UpdateCheckResult.RateLimited,
+            UpdateCheckResult.MalformedMetadata,
+            -> UpdateCheckAction.IGNORE
+        }
 }

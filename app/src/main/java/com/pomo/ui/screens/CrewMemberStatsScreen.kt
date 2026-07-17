@@ -67,7 +67,10 @@ internal fun CrewMemberStatsScreen(
 }
 
 @Composable
-private fun MemberStatsHeader(row: CrewBoardRow, onBack: () -> Unit) {
+private fun MemberStatsHeader(
+    row: CrewBoardRow,
+    onBack: () -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         IconButton(onClick = onBack) {
             Icon(
@@ -100,10 +103,11 @@ private fun OwnerChip(row: CrewBoardRow) {
     val label = if (row.isSelf) "You · $fingerprint" else "Crew member · not you · $fingerprint"
     Text(
         text = label,
-        modifier = Modifier
-            .clip(RoundedCornerShape(6.dp))
-            .background(accent.copy(alpha = 0.14f))
-            .padding(horizontal = 8.dp, vertical = 4.dp),
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(6.dp))
+                .background(accent.copy(alpha = 0.14f))
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         style = MaterialTheme.typography.labelSmall,
         fontFamily = FontFamily.Monospace,
         color = accent,
@@ -112,13 +116,14 @@ private fun OwnerChip(row: CrewBoardRow) {
 
 @Composable
 private fun MemberStatsFooter(full: Boolean) {
-    val text = if (full) {
-        "Shared by them through the crew relay. Lifetime totals and records are theirs in full; " +
-            "the charts cover the last ${CrewValidation.MAX_HISTORY_DAYS} days."
-    } else {
-        "They're on an older build that shares only the last ${CrewValidation.MAX_DAILY_AGGREGATES} " +
-            "days of daily totals, so some of this page is thinner than yours."
-    }
+    val text =
+        if (full) {
+            "Shared by them through the crew relay. Lifetime totals and records are theirs in full; " +
+                "the charts cover the last ${CrewValidation.MAX_HISTORY_DAYS} days."
+        } else {
+            "They're on an older build that shares only the last ${CrewValidation.MAX_DAILY_AGGREGATES} " +
+                "days of daily totals, so some of this page is thinner than yours."
+        }
     Text(
         text = text,
         modifier = Modifier.fillMaxWidth(),

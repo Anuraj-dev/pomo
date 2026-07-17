@@ -8,7 +8,6 @@ import org.junit.Test
  * whose Keystore-backed cipher has no Robolectric equivalent, so it is exercised on device.
  */
 public class ProfileStoreTest {
-
     @Test
     public fun `a member who named themselves in a crew keeps that name`() {
         assertEquals("Asha", ProfileStore.inheritedName(listOf("Asha")))

@@ -5,8 +5,9 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 
 public class CrewStore(context: Context) {
-    private val prefs = context.applicationContext
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val prefs =
+        context.applicationContext
+            .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private val gson = Gson()
     private val cipher: CrewSecretCipher by lazy { CrewSecretCipher() }
 
@@ -51,10 +52,11 @@ public class CrewStore(context: Context) {
 
     public fun saveMembership(membership: CrewMembership) {
         require(membership.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !membership.isArchived)
-        val next = loadMemberships()
-            .filterNot { it.crewId == membership.crewId }
-            .plus(membership)
-            .sortedBy { it.crewId }
+        val next =
+            loadMemberships()
+                .filterNot { it.crewId == membership.crewId }
+                .plus(membership)
+                .sortedBy { it.crewId }
         saveMemberships(next, activeCrewId = membership.crewId)
     }
 
@@ -75,11 +77,12 @@ public class CrewStore(context: Context) {
         val removed = existing.firstOrNull { it.crewId == crewId } ?: return null
         val remaining = existing.filterNot { it.crewId == crewId }
         val activeCrewId = prefs.getString(ACTIVE_CREW_KEY, null)
-        val nextActive = when {
-            remaining.isEmpty() -> null
-            activeCrewId == crewId || activeCrewId == null -> remaining.first().crewId
-            else -> activeCrewId
-        }
+        val nextActive =
+            when {
+                remaining.isEmpty() -> null
+                activeCrewId == crewId || activeCrewId == null -> remaining.first().crewId
+                else -> activeCrewId
+            }
         saveMemberships(remaining, nextActive)
         return removed
     }
@@ -91,18 +94,23 @@ public class CrewStore(context: Context) {
      * A crew the device already holds is left untouched: its membership carries the display name
      * currently in use, which is fresher than whatever the backup froze.
      */
-    public fun mergeMemberships(memberships: List<CrewMembership>, preferredActiveCrewId: String?): Int {
+    public fun mergeMemberships(
+        memberships: List<CrewMembership>,
+        preferredActiveCrewId: String?,
+    ): Int {
         val existing = loadMemberships()
         val existingIds = existing.map { it.crewId }.toSet()
-        val added = memberships
-            .filter { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived }
-            .distinctBy { it.crewId }
-            .filterNot { it.crewId in existingIds }
+        val added =
+            memberships
+                .filter { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived }
+                .distinctBy { it.crewId }
+                .filterNot { it.crewId in existingIds }
         if (added.isEmpty()) return 0
         val next = (existing + added).sortedBy { it.crewId }
-        val active = activeCrewId()?.takeIf { id -> next.any { it.crewId == id } }
-            ?: preferredActiveCrewId?.takeIf { id -> next.any { it.crewId == id } }
-            ?: next.first().crewId
+        val active =
+            activeCrewId()?.takeIf { id -> next.any { it.crewId == id } }
+                ?: preferredActiveCrewId?.takeIf { id -> next.any { it.crewId == id } }
+                ?: next.first().crewId
         saveMemberships(next, active)
         return added.size
     }
@@ -114,7 +122,10 @@ public class CrewStore(context: Context) {
         return updated
     }
 
-    private fun saveMemberships(memberships: List<CrewMembership>, activeCrewId: String?) {
+    private fun saveMemberships(
+        memberships: List<CrewMembership>,
+        activeCrewId: String?,
+    ) {
         val encrypted = cipher.encryptString(gson.toJson(memberships))
         prefs.edit()
             .putString(SECURE_MEMBERSHIPS_KEY, encrypted)
@@ -126,22 +137,24 @@ public class CrewStore(context: Context) {
 
     private fun archiveLegacyMembershipsIfNeeded() {
         if (prefs.contains(LEGACY_ARCHIVE_COMPLETE_KEY)) return
-        val legacyJson = prefs.getString(LEGACY_MEMBERSHIPS_KEY, null)
-            ?: prefs.getString(LEGACY_CURRENT_CREW_KEY, null)?.let { "[$it]" }
-        val archived = legacyJson?.let { json ->
-            runCatching {
-                val type = object : TypeToken<List<LegacyMembership>>() {}.type
-                gson.fromJson<List<LegacyMembership>>(json, type).orEmpty()
-                    .filter { it.crewId.isNotBlank() }
-                    .map { legacy ->
-                        ArchivedMembership(
-                            crewId = legacy.crewId,
-                            crewName = "Archived Crew ${legacy.crewId.take(6)}",
-                            displayName = legacy.displayName.ifBlank { "Me" },
-                        )
-                    }
-            }.getOrDefault(emptyList())
-        }.orEmpty()
+        val legacyJson =
+            prefs.getString(LEGACY_MEMBERSHIPS_KEY, null)
+                ?: prefs.getString(LEGACY_CURRENT_CREW_KEY, null)?.let { "[$it]" }
+        val archived =
+            legacyJson?.let { json ->
+                runCatching {
+                    val type = object : TypeToken<List<LegacyMembership>>() {}.type
+                    gson.fromJson<List<LegacyMembership>>(json, type).orEmpty()
+                        .filter { it.crewId.isNotBlank() }
+                        .map { legacy ->
+                            ArchivedMembership(
+                                crewId = legacy.crewId,
+                                crewName = "Archived Crew ${legacy.crewId.take(6)}",
+                                displayName = legacy.displayName.ifBlank { "Me" },
+                            )
+                        }
+                }.getOrDefault(emptyList())
+            }.orEmpty()
         prefs.edit()
             .putString(ARCHIVED_MEMBERSHIPS_KEY, gson.toJson(archived))
             .putBoolean(LEGACY_ARCHIVE_COMPLETE_KEY, true)

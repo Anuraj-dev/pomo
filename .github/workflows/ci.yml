@@ -46,6 +46,9 @@ jobs:
           restore-keys: |
             gradle-${{ runner.os }}-
 
+      - name: Check code formatting
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" ktlintCheck
+
       - name: Unit tests
         run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" testDevDebugUnitTest
 
