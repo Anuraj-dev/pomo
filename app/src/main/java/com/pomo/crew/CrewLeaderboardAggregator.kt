@@ -34,9 +34,19 @@ public object CrewLeaderboardAggregator {
                         CrewRankingMode.AllTime -> snapshot.allTimeFocusMinutes
                         is CrewRankingMode.Day -> snapshot.focusMinutesOn(mode.localDate)
                     }
+                val selectedWorkBlocks =
+                    when (mode) {
+                        CrewRankingMode.Today -> todayAggregate?.completedWorkBlocks ?: 0
+                        CrewRankingMode.Yesterday -> snapshot.workBlocksOn(today.minusDays(1).toString())
+                        CrewRankingMode.SevenDays -> snapshot.sumWorkBlocks(today.minusDays(6), today)
+                        CrewRankingMode.ThirtyDays -> snapshot.sumWorkBlocks(today.minusDays(29), today)
+                        CrewRankingMode.AllTime -> snapshot.stats?.allTimeWorkBlocks ?: 0
+                        is CrewRankingMode.Day -> snapshot.workBlocksOn(mode.localDate)
+                    }
                 RankedSnapshot(
                     snapshot = snapshot,
                     selectedMinutes = selectedMinutes,
+                    selectedWorkBlocks = selectedWorkBlocks,
                     todayMinutes = todayAggregate?.focusMinutes ?: 0,
                     todayWorkBlocks = todayAggregate?.completedWorkBlocks ?: 0,
                     sevenDayMinutes = sevenDayMinutes,
@@ -91,6 +101,7 @@ public object CrewLeaderboardAggregator {
             selectedFocusMinutes = selectedMinutes,
             currentStreak = snapshot.currentStreak,
             todaySessionCount = todayWorkBlocks,
+            selectedSessionCount = selectedWorkBlocks,
             lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
             dailyAggregates = snapshot.dailyAggregates,
             isSelf = snapshot.identityPublicKey == selfIdentityPublicKey,
@@ -102,6 +113,18 @@ public object CrewLeaderboardAggregator {
 
     private fun CrewSnapshot.focusMinutesOn(localDate: String): Int =
         dailyAggregates.firstOrNull { it.localDate == localDate }?.focusMinutes ?: 0
+
+    private fun CrewSnapshot.workBlocksOn(localDate: String): Int =
+        dailyAggregates.firstOrNull { it.localDate == localDate }?.completedWorkBlocks ?: 0
+
+    private fun CrewSnapshot.sumWorkBlocks(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Int =
+        dailyAggregates.sumOf { aggregate ->
+            val date = LocalDate.parse(aggregate.localDate)
+            if (date < startDate || date > endDate) 0 else aggregate.completedWorkBlocks
+        }
 
     private fun CrewSnapshot.sumFocusMinutes(
         startDate: LocalDate,
@@ -129,6 +152,7 @@ public object CrewLeaderboardAggregator {
     private data class RankedSnapshot(
         val snapshot: CrewSnapshot,
         val selectedMinutes: Int,
+        val selectedWorkBlocks: Int,
         val todayMinutes: Int,
         val todayWorkBlocks: Int,
         val sevenDayMinutes: Int,

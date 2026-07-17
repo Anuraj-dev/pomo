@@ -590,6 +590,7 @@ private fun MemberDetailSheet(
     onViewStats: () -> Unit,
     onHide: () -> Unit,
 ) {
+    var showAvatarPreview by remember { mutableStateOf(false) }
     val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
     val blocks = row.dailyAggregates.sumOf { it.completedWorkBlocks }
     PomoSheet(title = row.displayName, onDismissRequest = onDismiss, skipPartiallyExpanded = true) {
@@ -600,7 +601,9 @@ private fun MemberDetailSheet(
                     .padding(horizontal = 20.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
-            MemberIdentityStrip(row)
+            MemberIdentityStrip(row, onAvatarTap = {
+                if (row.avatarBase64 != null) showAvatarPreview = true
+            })
             MemberHistoryBars(row)
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile(formatMinutes(row.thirtyDayFocusMinutes), "30 DAY", Modifier.weight(1f))
@@ -619,27 +622,25 @@ private fun MemberDetailSheet(
             Spacer(Modifier.height(20.dp))
         }
     }
+
+    if (showAvatarPreview && row.avatarBase64 != null) {
+        AvatarPreviewSheet(
+            avatarBase64 = row.avatarBase64,
+            displayName = row.displayName,
+            onDismiss = { showAvatarPreview = false },
+        )
+    }
 }
 
 @Composable
-private fun MemberIdentityStrip(row: CrewBoardRow) {
+private fun MemberIdentityStrip(row: CrewBoardRow, onAvatarTap: () -> Unit = {}) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Box(
-            modifier =
-                Modifier
-                    .size(42.dp)
-                    .clip(RoundedCornerShape(11.dp))
-                    .background(PomoTokens.colors.surfaceElevated),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                text = row.displayName.take(2).uppercase(Locale.ROOT),
-                style = MaterialTheme.typography.titleMedium,
-                color = PomoTokens.colors.accent,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        Avatar(
+            avatarBase64 = row.avatarBase64,
+            displayName = row.displayName,
+            size = 42.dp,
+            modifier = Modifier.clickable(onClick = onAvatarTap),
+        )
         Spacer(Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

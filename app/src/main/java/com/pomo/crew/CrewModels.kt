@@ -90,6 +90,7 @@ public data class CrewBoardRow(
     val selectedFocusMinutes: Int,
     val currentStreak: Int,
     val todaySessionCount: Int,
+    val selectedSessionCount: Int,
     val lastFocusedAtEpochSeconds: Long,
     val dailyAggregates: List<CrewDailyAggregate>,
     val isSelf: Boolean,
