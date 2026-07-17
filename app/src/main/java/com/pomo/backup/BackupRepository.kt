@@ -89,6 +89,7 @@ public class BackupRepository(context: Context) {
                                     currentStreak = snapshot.currentStreak,
                                     lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
                                     protocolVersion = snapshot.protocolVersion,
+                                    statsJson = snapshot.statsJson,
                                 )
                             },
                         dailyAggregates =
@@ -186,6 +187,7 @@ public class BackupRepository(context: Context) {
                             currentStreak = snapshot.currentStreak,
                             lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
                             protocolVersion = snapshot.protocolVersion,
+                            statsJson = snapshot.statsJson,
                         )
                     },
                 aggregates =

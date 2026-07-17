@@ -1,6 +1,7 @@
 package com.pomo.crew
 
 import android.content.Context
+import com.google.gson.Gson
 import com.pomo.db.AppDatabase
 import com.pomo.db.CrewDailyAggregateEntity
 import com.pomo.db.CrewHiddenMemberEntity
@@ -18,6 +19,7 @@ public data class CrewProjection(
 public class CrewProjectionStore(context: Context) {
     private val dao = AppDatabase.getInstance(context.applicationContext).crewDao()
     private val prefs = context.applicationContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val gson = Gson()
 
     public fun observe(crewId: String): Flow<CrewProjection> =
         combine(
@@ -130,6 +132,9 @@ public class CrewProjectionStore(context: Context) {
                 currentStreak = snapshot.currentStreak,
                 lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
                 version = snapshot.protocolVersion,
+                stats = snapshot.statsJson?.let { json ->
+                    runCatching { gson.fromJson(json, CrewStatsExtras::class.java) }.getOrNull()
+                },
             )
         }
     }
@@ -147,6 +152,7 @@ public class CrewProjectionStore(context: Context) {
             currentStreak = currentStreak,
             lastFocusedAtEpochSeconds = lastFocusedAtEpochSeconds,
             protocolVersion = version,
+            statsJson = stats?.let { gson.toJson(it) },
         )
 
     private fun CrewDailyAggregate.toEntity(snapshot: CrewSnapshot): CrewDailyAggregateEntity =

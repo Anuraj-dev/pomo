@@ -17,7 +17,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CrewHiddenMemberEntity::class,
         CrewRelayStateEntity::class,
     ],
-    version = 6,
+    version = 7,
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
@@ -44,6 +44,7 @@ public abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4)
                 .addMigrations(MIGRATION_4_5)
                 .addMigrations(MIGRATION_5_6)
+                .addMigrations(MIGRATION_6_7)
                 .build()
         }
 
@@ -79,6 +80,13 @@ public abstract class AppDatabase : RoomDatabase() {
             object : Migration(5, 6) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `sessions` ADD COLUMN `tag` TEXT")
+                }
+            }
+
+        public val MIGRATION_6_7: Migration =
+            object : Migration(6, 7) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE `crew_snapshots` ADD COLUMN `statsJson` TEXT")
                 }
             }
 
