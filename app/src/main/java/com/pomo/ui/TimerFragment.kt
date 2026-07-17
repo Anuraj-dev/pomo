@@ -7,6 +7,9 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
@@ -16,6 +19,7 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.tags.TagStore
 import com.pomo.timer.TimerState
 import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
@@ -51,12 +55,19 @@ public class TimerFragment : Fragment() {
         ComposeView(requireContext()).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
+                val ctx = context
+                val tagStore = remember { TagStore(ctx) }
+                var showTagPicker by remember { mutableStateOf(false) }
+                var currentSessionTag by remember { mutableStateOf<String?>(null) }
+
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val state by timerState.collectAsState()
                     val stats by timerStats.collectAsState()
                     val goal = mainActivity?.prefs?.dailyGoal ?: 8
                     val effectiveGoal = if ((state?.goal ?: 0) > 0) state!!.goal else goal
                     val workMinutes = mainActivity?.prefs?.pomodoroDuration ?: 25
+                    val availableTags = remember { tagStore.getTags() }
+
                     TimerScreen(
                         state = state,
                         stats = stats,
@@ -87,7 +98,30 @@ public class TimerFragment : Fragment() {
                             runCatching { findNavController().navigate(R.id.navigation_stats) }
                                 .onFailure { Log.w(TAG, "Could not navigate to stats", it) }
                         },
+                        currentTag = currentSessionTag,
+                        onTagSelected = { showTagPicker = true },
+                        availableTags = availableTags,
                     )
+
+                    if (showTagPicker) {
+                        TagPickerSheet(
+                            tags = availableTags,
+                            currentTag = currentSessionTag,
+                            onSelect = { tag ->
+                                currentSessionTag = tag
+                                showTagPicker = false
+                                viewLifecycleOwner.lifecycleScope.launch {
+                                    mainActivity?.service?.let { service ->
+                                        val latestSession = service.getLatestCompletedWorkSession()
+                                        if (latestSession != null) {
+                                            service.updateSessionTag(latestSession.start, tag)
+                                        }
+                                    }
+                                }
+                            },
+                            onDismiss = { showTagPicker = false },
+                        )
+                    }
                 }
             }
         }

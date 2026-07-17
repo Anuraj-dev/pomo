@@ -182,6 +182,11 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                             },
                         )
                     }
+                    if (tagManagerDialog.value) {
+                        TagManagerDialog(
+                            onDismiss = { tagManagerDialog.value = false },
+                        )
+                    }
                 }
             }
         }
@@ -259,6 +264,15 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                     title = getString(R.string.long_break_title),
                     summary = getString(R.string.long_break_summary),
                     default = 15,
+                ),
+            )
+
+            add(SettingsItem.Section(getString(R.string.category_session_tags)))
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.session_tags_title),
+                    summary = getString(R.string.session_tags_summary),
+                    onClick = ::showTagManager,
                 ),
             )
 
@@ -452,6 +466,12 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                 onFeedback = ::showMessage,
             ),
         )
+    }
+
+    private val tagManagerDialog = mutableStateOf(false)
+
+    private fun showTagManager() {
+        tagManagerDialog.value = true
     }
 
     override fun onResume() {

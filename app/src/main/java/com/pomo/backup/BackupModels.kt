@@ -37,6 +37,7 @@ public data class BackupSession(
     val type: String = "",
     val duration: Int = 0,
     val completed: Boolean = false,
+    val tag: String? = null,
 )
 
 /**

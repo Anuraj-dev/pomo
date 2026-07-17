@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -76,6 +77,9 @@ public fun TimerScreen(
     onReset: () -> Unit,
     onAddTime: (Int) -> Unit,
     onStatsClick: () -> Unit,
+    currentTag: String? = null,
+    onTagSelected: (String?) -> Unit = {},
+    availableTags: List<String> = emptyList(),
 ) {
     val colors = PomoTokens.colors
     val isRunning = state?.status == TimerState.STATUS_RUNNING
@@ -131,7 +135,18 @@ public fun TimerScreen(
             isRunning = isRunning,
         )
 
-        Spacer(Modifier.weight(1f))
+        Spacer(Modifier.height(24.dp))
+
+        val showTagChip = state?.phase != TimerState.PHASE_WORK && state?.status != TimerState.STATUS_RUNNING
+        if (showTagChip && availableTags.isNotEmpty()) {
+            TagChip(
+                tag = currentTag,
+                onClick = { onTagSelected(currentTag) },
+            )
+            Spacer(Modifier.weight(1f))
+        } else {
+            Spacer(Modifier.weight(1f))
+        }
 
         StatsStrip(stats, sessionsOverride = state?.completed, onClick = onStatsClick)
 
@@ -435,6 +450,37 @@ private fun StatDivider() {
                 .height(36.dp)
                 .background(PomoTokens.colors.outline),
     )
+}
+
+@Composable
+private fun TagChip(
+    tag: String?,
+    onClick: () -> Unit,
+) {
+    val colors = PomoTokens.colors
+    val displayText = tag ?: "untagged"
+    Row(
+        modifier =
+            Modifier
+                .clip(RoundedCornerShape(999.dp))
+                .background(colors.surfaceElevated)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Text(
+            text = displayText,
+            style = MaterialTheme.typography.labelMedium,
+            color = if (tag != null) colors.onSurface else colors.onSurfaceMuted,
+        )
+        Icon(
+            imageVector = Icons.Default.ArrowDropDown,
+            contentDescription = null,
+            tint = colors.accent,
+            modifier = Modifier.size(16.dp),
+        )
+    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)

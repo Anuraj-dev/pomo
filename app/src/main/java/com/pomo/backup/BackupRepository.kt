@@ -52,6 +52,7 @@ public class BackupRepository(context: Context) {
                                     type = session.type,
                                     duration = session.duration,
                                     completed = session.completed,
+                                    tag = session.tag,
                                 )
                             },
                     ),

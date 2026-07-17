@@ -144,6 +144,15 @@ public interface HistoryDao {
 
     @Query("SELECT COUNT(*) FROM sessions WHERE date = :date AND completed = 1 AND type = 'work'")
     public suspend fun getTodayCompletedCount(date: String): Int
+
+    @Query("UPDATE sessions SET tag = :tag WHERE start = :startTime")
+    public suspend fun updateSessionTag(
+        startTime: Long,
+        tag: String?,
+    )
+
+    @Query("SELECT * FROM sessions WHERE date = :date AND type = 'work' AND completed = 1 ORDER BY start DESC LIMIT 1")
+    public suspend fun getLatestCompletedWorkSession(date: String): SessionEntity?
 }
 
 /**

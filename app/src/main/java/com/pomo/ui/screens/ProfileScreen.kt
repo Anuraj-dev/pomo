@@ -21,6 +21,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Close
@@ -28,7 +29,6 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,7 +51,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.pomo.achievements.Achievement
 import com.pomo.crew.CrewValidation
 import com.pomo.ui.components.Avatar
@@ -153,9 +152,18 @@ public fun ProfileScreen(
         AvatarActionSheet(
             hasAvatar = avatarBase64 != null,
             onDismiss = { showAvatarSheet = false },
-            onView = { showAvatarSheet = false; showAvatarPreview = true },
-            onChange = { showAvatarSheet = false; onAvatarPick() },
-            onRemove = { showAvatarSheet = false; showRemoveConfirm = true },
+            onView = {
+                showAvatarSheet = false
+                showAvatarPreview = true
+            },
+            onChange = {
+                showAvatarSheet = false
+                onAvatarPick()
+            },
+            onRemove = {
+                showAvatarSheet = false
+                showRemoveConfirm = true
+            },
         )
     }
 
@@ -175,7 +183,10 @@ public fun ProfileScreen(
                     PomoButton(onClick = { showRemoveConfirm = false }, variant = PomoButtonVariant.Ghost) {
                         Text("Cancel")
                     }
-                    PomoButton(onClick = { showRemoveConfirm = false; onAvatarRemove() }) {
+                    PomoButton(onClick = {
+                        showRemoveConfirm = false
+                        onAvatarRemove()
+                    }) {
                         Text("Remove")
                     }
                 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.HorizontalDivider
@@ -28,11 +29,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.pomo.db.SessionEntity
 import com.pomo.stats.HourRhythm
 import com.pomo.stats.RhythmPattern
 import com.pomo.ui.HistoryItem
+import com.pomo.ui.TagPickerSheet
 import com.pomo.ui.components.EmptyState
 import com.pomo.ui.components.HourBarChart24
 import com.pomo.ui.components.PomoSheet
@@ -49,6 +53,10 @@ import java.util.Locale
 public fun HistoryScreen(
     items: List<HistoryItem>,
     loadRhythm: suspend (String) -> HourRhythm = { emptyRhythm() },
+    loadSessions: suspend (String) -> List<SessionEntity> = { emptyList() },
+    onTagSession: (Long, String?) -> Unit = { _, _ -> },
+    availableTags: List<String> = emptyList(),
+    isToday: (String) -> Boolean = { false },
 ) {
     val grouped = remember(items) { groupByMonth(items) }
     var selected by remember { mutableStateOf<HistoryItem?>(null) }
@@ -108,7 +116,15 @@ public fun HistoryScreen(
     }
 
     selected?.let { item ->
-        DayDetailSheet(item = item, loadRhythm = loadRhythm, onDismiss = { selected = null })
+        DayDetailSheet(
+            item = item,
+            loadRhythm = loadRhythm,
+            loadSessions = loadSessions,
+            onTagSession = onTagSession,
+            availableTags = availableTags,
+            isToday = isToday(item.date),
+            onDismiss = { selected = null },
+        )
     }
 }
 
@@ -176,11 +192,20 @@ private fun HistoryRow(
 private fun DayDetailSheet(
     item: HistoryItem,
     loadRhythm: suspend (String) -> HourRhythm,
+    loadSessions: suspend (String) -> List<SessionEntity>,
+    onTagSession: (Long, String?) -> Unit,
+    availableTags: List<String>,
+    isToday: Boolean,
     onDismiss: () -> Unit,
 ) {
     val rhythm by produceState(initialValue = emptyRhythm(), item.date) {
         value = runCatching { loadRhythm(item.date) }.getOrElse { emptyRhythm() }
     }
+    val sessions by produceState(initialValue = emptyList<SessionEntity>(), item.date) {
+        value = runCatching { loadSessions(item.date) }.getOrElse { emptyList() }
+    }
+    var tagPickerSession by remember { mutableStateOf<Long?>(null) }
+
     PomoSheet(title = formatFullDate(item.date), onDismissRequest = onDismiss) {
         Column(
             modifier =
@@ -203,7 +228,92 @@ private fun DayDetailSheet(
                     color = PomoTokens.colors.onSurfaceMuted,
                 )
             }
+            if (sessions.isNotEmpty()) {
+                Column {
+                    Text(
+                        "Sessions",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    sessions.filter { it.type == "work" && it.completed }.forEach { session ->
+                        SessionRow(
+                            session = session,
+                            isToday = isToday,
+                            onTagClick = { tagPickerSession = session.start },
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(12.dp))
+        }
+    }
+
+    tagPickerSession?.let { startTime ->
+        val currentSession = sessions.find { it.start == startTime }
+        TagPickerSheet(
+            tags = availableTags,
+            currentTag = currentSession?.tag,
+            onSelect = { tag ->
+                onTagSession(startTime, tag)
+                tagPickerSession = null
+            },
+            onDismiss = { tagPickerSession = null },
+        )
+    }
+}
+
+@Composable
+private fun SessionRow(
+    session: SessionEntity,
+    isToday: Boolean,
+    onTagClick: () -> Unit,
+) {
+    val displayTime =
+        remember(session.start) {
+            SimpleDateFormat("HH:mm", Locale.US).format(session.start * 1000L)
+        }
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = displayTime,
+            style = MaterialTheme.typography.bodyMedium,
+            color = PomoTokens.colors.onSurfaceMuted,
+            modifier = Modifier.padding(end = 12.dp),
+        )
+        Text(
+            text = formatMinutes(session.duration / 60),
+            style = TimerTextStyle.copy(fontSize = 14.sp),
+            color = PomoTokens.colors.onSurface,
+            modifier = Modifier.padding(end = 12.dp),
+        )
+        if (isToday) {
+            Row(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(PomoTokens.colors.surfaceElevated)
+                        .clickable(onClick = onTagClick)
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = session.tag ?: "tag",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (session.tag != null) PomoTokens.colors.onSurface else PomoTokens.colors.onSurfaceMuted,
+                )
+            }
+        } else if (session.tag != null) {
+            Text(
+                text = session.tag,
+                style = MaterialTheme.typography.labelSmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
         }
     }
 }
