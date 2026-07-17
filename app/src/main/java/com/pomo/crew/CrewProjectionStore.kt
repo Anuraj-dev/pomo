@@ -132,9 +132,10 @@ public class CrewProjectionStore(context: Context) {
                 currentStreak = snapshot.currentStreak,
                 lastFocusedAtEpochSeconds = snapshot.lastFocusedAtEpochSeconds,
                 version = snapshot.protocolVersion,
-                stats = snapshot.statsJson?.let { json ->
-                    runCatching { gson.fromJson(json, CrewStatsExtras::class.java) }.getOrNull()
-                },
+                stats =
+                    snapshot.statsJson?.let { json ->
+                        runCatching { gson.fromJson(json, CrewStatsExtras::class.java) }.getOrNull()
+                    },
             )
         }
     }
