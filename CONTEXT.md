@@ -85,8 +85,8 @@ _Avoid_: Crew id, channel name, mutable title.
 
 **Profile**:
 A member-owned identity surface that can carry durable self-described fields
-beyond the Display name. A Profile belongs to one member identity, not to a
-Pomo account or a Crew.
+beyond the Display name, including an optional compressed profile photo. A Profile
+belongs to one member identity, not to a Pomo account or a Crew.
 _Avoid_: account, login, persona.
 
 **Identity key**:
