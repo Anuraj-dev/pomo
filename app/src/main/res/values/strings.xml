@@ -124,6 +124,22 @@
     <string name="long_break_title">Long Break</string>
     <string name="long_break_summary">Duration of long breaks (minutes)</string>
 
+    <!-- Session Tags -->
+    <string name="category_session_tags">Session Tags</string>
+    <string name="session_tags_title">Session Tags</string>
+    <string name="session_tags_summary">Label work blocks to track what you focused on</string>
+    <string name="session_tags_manage">Manage Tags</string>
+    <string name="session_tags_add">Add tag</string>
+    <string name="session_tags_add_hint">Tag name</string>
+    <string name="session_tags_edit">Edit tag</string>
+    <string name="session_tags_delete">Delete</string>
+    <string name="session_tags_delete_confirm">Delete tag \"%1$s\"? Sessions with this tag will become untagged.</string>
+    <string name="session_tags_empty">No tags yet. Add one to start labeling sessions.</string>
+    <string name="session_tags_add_done">Tag added</string>
+    <string name="session_tags_edit_done">Tag renamed</string>
+    <string name="session_tags_delete_done">Tag deleted</string>
+    <string name="session_tags_untagged">untagged</string>
+
     <!-- Goals -->
     <string name="category_goals">Goals</string>
     <string name="theme_mode_title">Theme mode</string>

@@ -94,6 +94,18 @@ public class HistoryCacheRepository(context: Context) {
         return dao.getTodayCompletedCount(date)
     }
 
+    public suspend fun updateSessionTag(
+        startTime: Long,
+        tag: String?,
+    ) {
+        dao.updateSessionTag(startTime, tag)
+    }
+
+    public suspend fun getLatestCompletedWorkSession(): SessionEntity? {
+        val date = getEffectiveDateString()
+        return dao.getLatestCompletedWorkSession(date)
+    }
+
     public suspend fun getCompletedCountForDate(date: String): Int = dao.getTodayCompletedCount(date)
 
     public fun getEffectiveDateString(): String {

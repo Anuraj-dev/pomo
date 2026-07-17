@@ -24,6 +24,7 @@ public data class CrewSnapshotEntity(
     val currentStreak: Int,
     val lastFocusedAtEpochSeconds: Long,
     val protocolVersion: Int,
+    val statsJson: String? = null,
 )
 
 @Entity(

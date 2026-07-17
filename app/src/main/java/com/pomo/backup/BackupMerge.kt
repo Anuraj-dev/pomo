@@ -37,6 +37,7 @@ public object BackupMerge {
                     duration = session.duration,
                     completed = session.completed,
                     synced = true,
+                    tag = session.tag,
                 )
             added++
         }

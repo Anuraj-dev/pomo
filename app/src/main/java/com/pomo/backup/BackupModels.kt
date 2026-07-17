@@ -37,6 +37,7 @@ public data class BackupSession(
     val type: String = "",
     val duration: Int = 0,
     val completed: Boolean = false,
+    val tag: String? = null,
 )
 
 /**
@@ -77,6 +78,7 @@ public data class BackupSnapshot(
     val currentStreak: Int = 0,
     val lastFocusedAtEpochSeconds: Long = 0L,
     val protocolVersion: Int = 0,
+    val statsJson: String? = null,
 )
 
 public data class BackupDailyAggregate(

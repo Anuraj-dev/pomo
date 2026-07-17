@@ -67,6 +67,8 @@ PomodoroService -> OfflineTimer/Room -> UI, notification, widget, PhoneServer
 
 ## Development Rules
 
+- Do NOT run lint or tests locally. Just create a branch, commit, and open a PR.
+  CI/CD handles formatting, linting, and testing. Local runs muddy the setup.
 - Keep changes minimal and Kotlin-first.
 - Read relevant files before editing.
 - Do not restore old laptop sync paths.

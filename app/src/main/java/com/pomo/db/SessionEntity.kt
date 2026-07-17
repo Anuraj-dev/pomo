@@ -30,4 +30,5 @@ public data class SessionEntity(
     val duration: Int,
     val completed: Boolean,
     val synced: Boolean = true,
+    val tag: String? = null,
 )

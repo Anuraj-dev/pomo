@@ -689,6 +689,25 @@ public class PomodoroService : Service(), TimerObserver {
         return historyCacheRepository.getHistoryPayload()
     }
 
+    public suspend fun updateSessionTag(
+        startTime: Long,
+        tag: String?,
+    ) {
+        commandMutex.withLock {
+            withContext(Dispatchers.IO) {
+                historyCacheRepository.updateSessionTag(startTime, tag)
+            }
+        }
+    }
+
+    public suspend fun getLatestCompletedWorkSession(): com.pomo.db.SessionEntity? {
+        return commandMutex.withLock {
+            withContext(Dispatchers.IO) {
+                historyCacheRepository.getLatestCompletedWorkSession()
+            }
+        }
+    }
+
     private fun getDurationForPhase(phase: String): Double {
         val minutes =
             when (phase) {

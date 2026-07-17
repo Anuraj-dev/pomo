@@ -633,7 +633,10 @@ private fun MemberDetailSheet(
 }
 
 @Composable
-private fun MemberIdentityStrip(row: CrewBoardRow, onAvatarTap: () -> Unit = {}) {
+private fun MemberIdentityStrip(
+    row: CrewBoardRow,
+    onAvatarTap: () -> Unit = {},
+) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Avatar(
             avatarBase64 = row.avatarBase64,
