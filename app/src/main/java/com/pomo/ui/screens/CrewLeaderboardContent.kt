@@ -1,9 +1,12 @@
 package com.pomo.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -12,11 +15,13 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -46,6 +51,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
@@ -182,7 +189,8 @@ internal fun CrewBoardContent(
         }
         item(key = "leaderboard-heading") {
             SectionHeader("Leaderboard")
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
+            LeaderboardColumnHeader()
         }
         items(visibleRows, key = { it.identityPublicKey }) { row ->
             CrewRow(
@@ -274,7 +282,7 @@ private fun CrewHeader(
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = board.crewName,
-                style = MaterialTheme.typography.displaySmall,
+                style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -286,7 +294,14 @@ private fun CrewHeader(
                 fontFamily = FontFamily.Monospace,
             )
         }
-        IconButton(onClick = onPickDay) {
+        IconButton(
+            onClick = onPickDay,
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(8.dp)),
+        ) {
             Icon(
                 Icons.Outlined.CalendarMonth,
                 contentDescription = "Pick a day",
@@ -294,7 +309,15 @@ private fun CrewHeader(
                 modifier = Modifier.size(20.dp),
             )
         }
-        IconButton(onClick = onManage) {
+        Spacer(Modifier.width(8.dp))
+        IconButton(
+            onClick = onManage,
+            modifier =
+                Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(8.dp)),
+        ) {
             Icon(
                 Icons.Outlined.Settings,
                 contentDescription = "Manage Crew",
@@ -313,11 +336,11 @@ private fun RankingWindowControl(
     SegmentedToggle(
         options =
             listOf(
-                SegmentedToggleOption(TOGGLE_TODAY, "Today"),
-                SegmentedToggleOption(TOGGLE_YESTERDAY, "Yest"),
-                SegmentedToggleOption(TOGGLE_SEVEN_DAYS, "7D"),
-                SegmentedToggleOption(TOGGLE_THIRTY_DAYS, "30D"),
-                SegmentedToggleOption(TOGGLE_ALL_TIME, "All"),
+                SegmentedToggleOption(TOGGLE_TODAY, "Today", weight = 1.1f),
+                SegmentedToggleOption(TOGGLE_YESTERDAY, "Yesterday", weight = 1.5f),
+                SegmentedToggleOption(TOGGLE_SEVEN_DAYS, "7D", weight = 0.8f),
+                SegmentedToggleOption(TOGGLE_THIRTY_DAYS, "30D", weight = 0.9f),
+                SegmentedToggleOption(TOGGLE_ALL_TIME, "All", weight = 0.8f),
             ),
         // A picked day matches no option, so the row shows nothing selected and the
         // day chip below carries the current window instead.
@@ -435,10 +458,20 @@ private fun CrewSummary(rows: List<CrewBoardRow>) {
     val participating = rows.filter { it.selectedFocusMinutes > 0 }
     val total = participating.sumOf { it.selectedFocusMinutes }
     val median = participating.map { it.selectedFocusMinutes }.sorted().median()
-    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        StatTile(formatMinutes(total), "CREW FOCUS", Modifier.weight(1f))
-        StatTile(participating.size.toString(), "ACTIVE", Modifier.weight(1f))
-        StatTile(formatMinutes(median), "MEDIAN", Modifier.weight(1f))
+    Row(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(10.dp))
+                .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        StatTile(formatMinutes(total), "CREW FOCUS", Modifier.weight(1f).padding(start = 14.dp))
+        Box(Modifier.width(1.dp).height(42.dp).background(PomoTokens.colors.outline))
+        StatTile(participating.size.toString(), "ACTIVE", Modifier.weight(1f).padding(start = 14.dp))
+        Box(Modifier.width(1.dp).height(42.dp).background(PomoTokens.colors.outline))
+        StatTile(formatMinutes(median), "MEDIAN", Modifier.weight(1f).padding(start = 14.dp))
     }
 }
 
@@ -456,7 +489,7 @@ private fun YourStanding(
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(PomoTokens.colors.surfaceElevated)
-                .drawBehind { drawRect(accent, size = Size(3.dp.toPx(), size.height)) }
+                .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(12.dp))
                 .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp),
     ) {
         Text("YOUR STANDING", style = MaterialTheme.typography.labelSmall, color = PomoTokens.colors.onSurfaceMuted)
@@ -477,6 +510,202 @@ private fun YourStanding(
             Spacer(Modifier.weight(1f))
             Text(context, style = MaterialTheme.typography.labelSmall, color = PomoTokens.colors.onSurfaceMuted)
         }
+        CrewPositionScale(rows)
+    }
+}
+
+@Composable
+private fun CrewPositionScale(rows: List<CrewBoardRow>) {
+    val ranked = rows.filter { it.rank != null && it.selectedFocusMinutes > 0 }
+    if (ranked.size < 2) return
+
+    val maxMinutes = ranked.maxOf { it.selectedFocusMinutes }.toLong()
+    val outline = PomoTokens.colors.outlineStrong
+    val muted = PomoTokens.colors.onSurfaceMuted
+    val accent = PomoTokens.colors.accent
+    val fontScale = LocalDensity.current.fontScale.coerceIn(1f, 2f)
+    val description =
+        ranked.joinToString(prefix = "Crew positions. ", separator = ". ") { row ->
+            "rank ${row.rank}, ${row.displayName}, ${formatMinutes(row.selectedFocusMinutes)}"
+        }
+
+    Spacer(Modifier.height(12.dp))
+    BoxWithConstraints(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clearAndSetSemantics { contentDescription = description },
+    ) {
+        val lineInset = 4.dp
+        val lineWidth = maxWidth - lineInset * 2
+        val labelWidth = 32.dp * fontScale
+        val rankBandHeight = 18.dp * fontScale
+        val lineY = rankBandHeight + 8.dp
+        val tickLabelY = lineY + 10.dp
+        val chartHeight = tickLabelY + 16.dp * fontScale
+        val maxIntervals = (lineWidth / labelWidth).toInt().coerceIn(2, 8)
+        val stepMinutes = positionScaleStepMinutes(maxMinutes, maxIntervals)
+        val axisMaxMinutes = ((maxMinutes + stepMinutes - 1L) / stepMinutes) * stepMinutes
+        val ticks = generateSequence(0L) { previous -> (previous + stepMinutes).takeIf { it <= axisMaxMinutes } }.toList()
+        val markers =
+            ranked
+                .groupBy { it.rank }
+                .values
+                .map { tied -> tied.firstOrNull { it.isSelf } ?: tied.first() }
+                .sortedBy { it.selectedFocusMinutes }
+        val minimumLabelGap = labelWidth / lineWidth
+        val labeledRanks = readableMarkerRanks(markers, axisMaxMinutes, minimumLabelGap)
+
+        Canvas(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .height(chartHeight),
+        ) {
+            val startX = lineInset.toPx()
+            val endX = size.width - lineInset.toPx()
+            val lineYPx = lineY.toPx()
+            drawLine(outline, Offset(startX, lineYPx), Offset(endX, lineYPx), strokeWidth = 1.dp.toPx())
+            ticks.forEach { tick ->
+                val x = startX + (endX - startX) * tick / axisMaxMinutes.toFloat()
+                drawLine(
+                    outline,
+                    Offset(x, lineYPx - 3.dp.toPx()),
+                    Offset(x, lineYPx + 3.dp.toPx()),
+                    strokeWidth = 1.dp.toPx(),
+                )
+            }
+        }
+        ticks.forEach { tick ->
+            val ratio = tick / axisMaxMinutes.toFloat()
+            Text(
+                text = positionScaleTickLabel(tick),
+                modifier =
+                    Modifier
+                        .width(labelWidth)
+                        .offset(
+                            x = (lineInset + lineWidth * ratio - labelWidth / 2).coerceIn(0.dp, maxWidth - labelWidth),
+                            y = tickLabelY,
+                        ),
+                style = MaterialTheme.typography.labelSmall,
+                color = muted,
+                fontFamily = FontFamily.Monospace,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
+        markers.forEach { row ->
+            val ratio = row.selectedFocusMinutes / axisMaxMinutes.toFloat()
+            val markerColor = if (row.isSelf) accent else MaterialTheme.colorScheme.onSurface
+            if (row.rank in labeledRanks) {
+                Text(
+                    text = "#${row.rank}",
+                    modifier =
+                        Modifier
+                            .width(labelWidth)
+                            .offset(
+                                x = (lineInset + lineWidth * ratio - labelWidth / 2).coerceIn(0.dp, maxWidth - labelWidth),
+                                y = 0.dp,
+                            ),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = markerColor,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                )
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .size(8.dp)
+                        .offset(
+                            x = (lineInset + lineWidth * ratio - 4.dp).coerceIn(0.dp, maxWidth - 8.dp),
+                            y = lineY - 4.dp,
+                        )
+                        .clip(CircleShape)
+                        .background(markerColor),
+            )
+        }
+    }
+}
+
+private fun positionScaleStepMinutes(
+    maxMinutes: Long,
+    maxIntervals: Int,
+): Long {
+    val targetHours = kotlin.math.ceil(maxMinutes / 60.0 / maxIntervals).toLong().coerceAtLeast(1L)
+    var magnitude = 1L
+    while (targetHours > magnitude * 10L) magnitude *= 10L
+    val stepHours =
+        when {
+            targetHours <= magnitude -> magnitude
+            targetHours <= magnitude * 2L -> magnitude * 2L
+            targetHours <= magnitude * 5L -> magnitude * 5L
+            else -> magnitude * 10L
+        }
+    return stepHours * 60L
+}
+
+private fun readableMarkerRanks(
+    rows: List<CrewBoardRow>,
+    axisMaxMinutes: Long,
+    minimumGap: Float,
+): Set<Int?> {
+    val required = rows.filter { it.rank == 1 || it.isSelf }.mapTo(mutableSetOf()) { it.rank }
+    var lastLabeledRatio = Float.NEGATIVE_INFINITY
+    rows.forEach { row ->
+        val ratio = row.selectedFocusMinutes / axisMaxMinutes.toFloat()
+        if (row.rank in required || ratio - lastLabeledRatio >= minimumGap) {
+            required += row.rank
+            lastLabeledRatio = ratio
+        }
+    }
+    return required
+}
+
+private fun positionScaleTickLabel(minutes: Long): String {
+    if (minutes == 0L) return "0"
+    val hours = minutes / 60L
+    return when {
+        hours < 1_000L -> "${hours}h"
+        hours < 1_000_000L -> "${hours / 1_000L}kh"
+        else -> "${hours / 1_000_000L}Mh"
+    }
+}
+
+@Composable
+private fun LeaderboardColumnHeader() {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            "POS",
+            modifier = Modifier.width(42.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = PomoTokens.colors.onSurfaceMuted,
+        )
+        Text(
+            "MEMBER",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.labelSmall,
+            color = PomoTokens.colors.onSurfaceMuted,
+        )
+        Text(
+            "TREND",
+            modifier = Modifier.width(46.dp),
+            style = MaterialTheme.typography.labelSmall,
+            color = PomoTokens.colors.onSurfaceMuted,
+        )
+        Spacer(Modifier.width(12.dp))
+        Text(
+            "FOCUS",
+            style = MaterialTheme.typography.labelSmall,
+            color = PomoTokens.colors.onSurfaceMuted,
+            textAlign = TextAlign.End,
+        )
     }
 }
 
@@ -498,6 +727,7 @@ private fun CrewRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .background(if (row.isSelf) PomoTokens.colors.surfaceElevated else MaterialTheme.colorScheme.background)
                 .clickable(onClick = onClick)
                 .alpha(if (row.isStale) 0.58f else 1f)
                 .semantics {
