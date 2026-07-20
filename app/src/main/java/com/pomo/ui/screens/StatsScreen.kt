@@ -877,7 +877,7 @@ private fun computeTagDistribution(
     val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
     val grouped = workSessions.groupBy { it.tag!! }
     return grouped.map { (tag, group) ->
-        TagSlice(tag = tag, count = group.size, minutes = group.sumOf { (it.duration + 59) / 60 })
+        TagSlice(tag = tag, count = group.size, minutes = (group.sumOf { it.duration } + 59) / 60)
     }.sortedByDescending { it.count }
 }
 
