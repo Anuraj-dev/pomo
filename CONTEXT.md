@@ -37,6 +37,29 @@ _Avoid_: completed, session count (when it could mean the headline metric).
 A target expressed as a count of completed Work blocks per local calendar day.
 Remains count-based even though Focus minutes is the headline metric elsewhere.
 
+## Session Tags
+
+**Session tag**:
+A freeform string label the member assigns to a Work block *before* it starts.
+Tags classify blocks for later review — Work, Study, Personal, or whatever the
+member invents. Every new Work block carries one; there are no untagged blocks
+going forward. The tag is locked (immutable) for the duration of the Work phase.
+_Avoid_: status tag, label, category, topic.
+
+**Default tag**:
+The tag that is pre-selected for the next Work block. Persists in TagStore
+across app restarts. Initial value is "Work". Updated whenever the member
+explicitly picks a different tag; that choice carries forward until changed
+again.
+_Avoid_: auto-tag, preselected tag, last tag.
+
+**Active tag**:
+The tag carried by the current session in TimerState. Before a Work block it
+equals the Default tag; once the timer starts it is locked. Survives process
+death because it lives on TimerState. Read at session-completion time to record
+the tag in Room.
+_Avoid_: current tag, running tag.
+
 ## Cues
 
 **Completion cue**:

@@ -78,6 +78,7 @@ public class HistoryCacheRepository(context: Context) {
                     duration = segment.duration,
                     completed = segmentCompleted,
                     synced = true,
+                    tag = if (index == 0) session.tag else null,
                 )
             dao.insertSessionWithDayStats(
                 date = segment.date,

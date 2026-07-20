@@ -56,6 +56,7 @@ import com.patrykandpatrick.vico.core.chart.values.AxisValuesOverrider
 import com.patrykandpatrick.vico.core.chart.values.ChartValues
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
+import com.pomo.db.SessionEntity
 import com.pomo.stats.BestDay
 import com.pomo.stats.BestWeek
 import com.pomo.stats.ChartTrend
@@ -65,6 +66,7 @@ import com.pomo.stats.Lifetime
 import com.pomo.stats.Records
 import com.pomo.stats.StatsSnapshot
 import com.pomo.stats.WeekShape
+import com.pomo.timer.TimerState
 import com.pomo.ui.components.EmptyState
 import com.pomo.ui.components.HourBarChart24
 import com.pomo.ui.components.SectionHeader
@@ -72,6 +74,7 @@ import com.pomo.ui.components.rhythmCaption
 import com.pomo.ui.theme.PomoTokens
 import com.pomo.ui.theme.TimerTextStyle
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
@@ -83,11 +86,13 @@ import kotlin.math.roundToInt
 @Composable
 public fun StatsScreen(
     snapshot: StatsSnapshot,
+    sessions: List<SessionEntity> = emptyList(),
     onExport: () -> Unit,
     onShare: () -> Unit,
 ) {
     StatsContent(
         snapshot = snapshot,
+        sessions = sessions,
         emptyBody = "Finish a focus session and the stats will start to fill in here.",
         header = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -128,6 +133,7 @@ public fun StatsScreen(
 @Composable
 internal fun StatsContent(
     snapshot: StatsSnapshot,
+    sessions: List<SessionEntity> = emptyList(),
     emptyBody: String,
     header: @Composable () -> Unit,
     rhythmTitle: String = "When you focus",
@@ -189,6 +195,13 @@ internal fun StatsContent(
         HabitHeatmap(snapshot.habit)
         Spacer(Modifier.height(14.dp))
         HabitFooterFacts(snapshot)
+
+        if (sessions.isNotEmpty()) {
+            Spacer(Modifier.height(36.dp))
+            SectionHeader("Tags")
+            Spacer(Modifier.height(14.dp))
+            TagPieChart(sessions = sessions)
+        }
 
         Spacer(Modifier.height(36.dp))
         SectionHeader("Which days")
@@ -674,6 +687,243 @@ private fun niceHourStep(maxHours: Float): Int {
             else -> 10f
         }
     return (niceNorm * mag).roundToInt().coerceAtLeast(1)
+}
+
+private data class TagSlice(
+    val tag: String,
+    val count: Int,
+    val minutes: Int,
+)
+
+private enum class TagRange(val label: String) {
+    Today("Today"),
+    Yesterday("Yesterday"),
+    Days7("7D"),
+    Days30("30D"),
+    All("All"),
+}
+
+private val tagPalette =
+    listOf(
+        Color(0xFF4CAF50),
+        Color(0xFF2196F3),
+        Color(0xFFFF9800),
+        Color(0xFFE91E63),
+        Color(0xFF9C27B0),
+        Color(0xFF00BCD4),
+        Color(0xFFFF5722),
+        Color(0xFF607D8B),
+    )
+
+@Composable
+private fun TagPieChart(sessions: List<SessionEntity>) {
+    var range by remember { mutableStateOf(TagRange.Days7) }
+
+    val slices = remember(sessions, range) { computeTagDistribution(sessions, range, nowFormatted()) }
+    val totalSessions = slices.sumOf { it.count }
+
+    if (totalSessions == 0) {
+        Text(
+            text = "No tagged sessions in this range.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = PomoTokens.colors.onSurfaceMuted,
+        )
+        return
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        TagRangePills(ranges = TagRange.entries, selected = range, onSelect = { range = it })
+    }
+    Spacer(Modifier.height(16.dp))
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        PieChartCanvas(slices = slices, total = totalSessions)
+        Spacer(Modifier.width(24.dp))
+        TagLegend(slices = slices)
+    }
+
+    Spacer(Modifier.height(8.dp))
+    val maxSlice = slices.maxByOrNull { it.count }
+    if (maxSlice != null) {
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            val rangeLabel =
+                when (range) {
+                    TagRange.Today -> "today"
+                    TagRange.Yesterday -> "yesterday"
+                    TagRange.Days7 -> "last 7 days"
+                    TagRange.Days30 -> "last 30 days"
+                    TagRange.All -> "all time"
+                }
+            Text(
+                text = "$totalSessions session${if (totalSessions == 1) "" else "s"} · $rangeLabel",
+                style = MaterialTheme.typography.labelSmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Text(
+                text = "most: ${maxSlice.tag} (${maxSlice.count})",
+                style = MaterialTheme.typography.labelSmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PieChartCanvas(
+    slices: List<TagSlice>,
+    total: Int,
+) {
+    val accent = PomoTokens.colors.accent
+    Canvas(modifier = Modifier.size(130.dp)) {
+        val totalF = total.toFloat()
+        var startAngle = -90f
+        val canvasSize = this.size
+        slices.forEachIndexed { index, slice ->
+            val sweepAngle = (slice.count / totalF) * 360f
+            val color = tagPalette.getOrElse(index % tagPalette.size) { accent }
+            drawArc(
+                color = color,
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = true,
+                topLeft = Offset.Zero,
+                size = canvasSize,
+            )
+            startAngle += sweepAngle
+        }
+    }
+}
+
+@Composable
+private fun TagLegend(slices: List<TagSlice>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        slices.forEachIndexed { index, slice ->
+            val color = tagPalette.getOrElse(index % tagPalette.size) { PomoTokens.colors.accent }
+            val hours = slice.minutes / 60
+            val mins = slice.minutes % 60
+            val timeStr = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(color),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = slice.tag,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    text = "${slice.count}",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = timeStr,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = PomoTokens.colors.onSurfaceMuted,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TagRangePills(
+    ranges: List<TagRange>,
+    selected: TagRange,
+    onSelect: (TagRange) -> Unit,
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        ranges.forEach { r ->
+            val active = r == selected
+            Box(
+                modifier =
+                    Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(if (active) PomoTokens.colors.accent else Color.Transparent)
+                        .border(1.dp, if (active) PomoTokens.colors.accent else PomoTokens.colors.outline, RoundedCornerShape(4.dp))
+                        .clickable { onSelect(r) }
+                        .padding(horizontal = 10.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = r.label,
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                    color = if (active) MaterialTheme.colorScheme.background else PomoTokens.colors.onSurfaceMuted,
+                )
+            }
+        }
+    }
+}
+
+private fun computeTagDistribution(
+    sessions: List<SessionEntity>,
+    range: TagRange,
+    today: String,
+): List<TagSlice> {
+    val filtered = filterSessionsByRange(sessions, range, today)
+    val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
+    val grouped = workSessions.groupBy { it.tag!! }
+    return grouped.map { (tag, group) ->
+        TagSlice(tag = tag, count = group.size, minutes = group.sumOf { (it.duration + 59) / 60 })
+    }.sortedByDescending { it.count }
+}
+
+private fun filterSessionsByRange(
+    sessions: List<SessionEntity>,
+    range: TagRange,
+    today: String,
+): List<SessionEntity> {
+    val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val referenceDate =
+        try {
+            fmt.parse(today) ?: Date()
+        } catch (_: Exception) {
+            Date()
+        }
+    return when (range) {
+        TagRange.Today -> sessions.filter { it.date == today }
+        TagRange.Yesterday -> {
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -1)
+                }
+            val yesterday = fmt.format(cal.time)
+            sessions.filter { it.date == yesterday }
+        }
+        TagRange.Days7 -> {
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -6)
+                }
+            val cutoff = fmt.format(cal.time)
+            sessions.filter { it.date >= cutoff }
+        }
+        TagRange.Days30 -> {
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -29)
+                }
+            val cutoff = fmt.format(cal.time)
+            sessions.filter { it.date >= cutoff }
+        }
+        TagRange.All -> sessions
+    }
 }
 
 private fun nowFormatted(): String = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())

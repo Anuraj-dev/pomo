@@ -78,6 +78,7 @@ public class OfflineTimer(
                 start = sessionStart,
                 duration = completionState.duration.toInt(),
                 completed = true,
+                tag = completionState.tag.ifEmpty { null },
             )
 
         val job =
@@ -244,6 +245,7 @@ public class OfflineTimer(
                 start = sessionStart,
                 duration = elapsedSeconds.toInt(),
                 completed = false,
+                tag = state.tag.ifEmpty { null },
             )
         scope.launch {
             historyRepository.saveLocalSession(session)

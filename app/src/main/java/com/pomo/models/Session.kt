@@ -5,4 +5,5 @@ public data class Session(
     val start: Long,
     val duration: Int,
     val completed: Boolean,
+    val tag: String? = null,
 )

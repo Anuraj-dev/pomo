@@ -30,7 +30,12 @@ public class TagStore(context: Context) {
     }
 
     public fun removeTag(name: String): List<String> {
-        return getTags().filter { it != name }.also { setTags(it) }
+        val wasDefault = getDefaultTag() == name
+        val result = getTags().filter { it != name }.also { setTags(it) }
+        if (wasDefault) {
+            setDefaultTag(DEFAULT_TAGS.first())
+        }
+        return result
     }
 
     public fun renameTag(
@@ -40,9 +45,12 @@ public class TagStore(context: Context) {
         if (oldName == newName) return RenameResult.Success(getTags())
         val current = getTags()
         if (current.contains(newName)) return RenameResult.Duplicate(newName)
-        return current.map { if (it == oldName) newName else it }
-            .also { setTags(it) }
-            .let { RenameResult.Success(it) }
+        val wasDefault = getDefaultTag() == oldName
+        val result = current.map { if (it == oldName) newName else it }.also { setTags(it) }
+        if (wasDefault) {
+            setDefaultTag(newName)
+        }
+        return RenameResult.Success(result)
     }
 
     public sealed interface RenameResult {
@@ -53,8 +61,18 @@ public class TagStore(context: Context) {
 
     public fun hasTag(name: String): Boolean = getTags().contains(name)
 
+    public fun getDefaultTag(): String {
+        val stored = prefs.getString(PREF_KEY_DEFAULT_TAG, null) ?: return DEFAULT_TAGS.first()
+        return if (getTags().contains(stored)) stored else DEFAULT_TAGS.first()
+    }
+
+    public fun setDefaultTag(tag: String) {
+        prefs.edit().putString(PREF_KEY_DEFAULT_TAG, tag).apply()
+    }
+
     public companion object {
         private const val PREF_KEY_TAGS = "pomo_session_tags"
-        private val DEFAULT_TAGS = listOf("Work", "Study", "Personal", "Exercise")
+        private const val PREF_KEY_DEFAULT_TAG = "pomo_default_tag"
+        internal val DEFAULT_TAGS = listOf("Work", "Study", "Personal", "Exercise")
     }
 }

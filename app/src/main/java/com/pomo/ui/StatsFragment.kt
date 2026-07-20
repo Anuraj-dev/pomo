@@ -72,8 +72,10 @@ public class StatsFragment : Fragment() {
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: com.pomo.ui.theme.ThemeMode.System) {
                     val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
                     val days by daysFlow.collectAsState(initial = emptyList())
+                    val sessions by sessionsFlow.collectAsState(initial = emptyList())
                     StatsScreen(
                         snapshot = snapshot,
+                        sessions = sessions,
                         onExport = { exportStats(days) },
                         onShare = { shareStatsScreenshot() },
                     )

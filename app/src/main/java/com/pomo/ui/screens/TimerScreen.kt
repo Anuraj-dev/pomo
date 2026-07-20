@@ -139,11 +139,14 @@ public fun TimerScreen(
 
         Spacer(Modifier.height(24.dp))
 
-        val showTagChip = state?.phase != TimerState.PHASE_WORK && state?.status != TimerState.STATUS_RUNNING
-        if (showTagChip && availableTags.isNotEmpty()) {
+        val isWorkRunning =
+            state?.phase == TimerState.PHASE_WORK &&
+                (state.status == TimerState.STATUS_RUNNING || state.status == TimerState.STATUS_PAUSED)
+        if (availableTags.isNotEmpty()) {
             TagChip(
                 tag = currentTag,
-                onClick = { onTagSelected(currentTag) },
+                onClick = { if (!isWorkRunning) onTagSelected(currentTag) },
+                enabled = !isWorkRunning,
             )
             Spacer(Modifier.weight(1f))
         } else {
@@ -458,15 +461,22 @@ private fun StatDivider() {
 private fun TagChip(
     tag: String?,
     onClick: () -> Unit,
+    enabled: Boolean = true,
 ) {
     val colors = PomoTokens.colors
     val displayText = tag ?: stringResource(R.string.session_tags_untagged)
     Row(
         modifier =
             Modifier
-                .clip(RoundedCornerShape(999.dp))
-                .background(colors.surfaceElevated)
-                .clickable(onClick = onClick)
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (enabled) colors.surfaceElevated else colors.surfaceElevated.copy(alpha = 0.4f))
+                .then(
+                    if (enabled) {
+                        Modifier.clickable(onClick = onClick)
+                    } else {
+                        Modifier
+                    },
+                )
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -479,7 +489,7 @@ private fun TagChip(
         Icon(
             imageVector = Icons.Default.ArrowDropDown,
             contentDescription = null,
-            tint = colors.accent,
+            tint = if (enabled) colors.accent else colors.accent.copy(alpha = 0.3f),
             modifier = Modifier.size(16.dp),
         )
     }
