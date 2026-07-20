@@ -59,8 +59,7 @@ public class TimerFragment : Fragment() {
                 val ctx = context
                 val tagStore = remember { TagStore(ctx) }
                 var showTagPicker by remember { mutableStateOf(false) }
-                var currentSessionStart by remember { mutableStateOf<Long?>(null) }
-                var currentSessionTag by remember { mutableStateOf<String?>(null) }
+                val defaultTag = remember { tagStore.getDefaultTag() }
 
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val state by timerState.collectAsState()
@@ -69,33 +68,19 @@ public class TimerFragment : Fragment() {
                     val effectiveGoal = if ((state?.goal ?: 0) > 0) state!!.goal else goal
                     val workMinutes = mainActivity?.prefs?.pomodoroDuration ?: 25
                     val availableTags = remember { tagStore.getTags() }
-                    var lastPhase by remember { mutableStateOf(state?.phase) }
+                    var tagInitialized by remember { mutableStateOf(false) }
 
-                    // When work completes (phase transitions away from WORK), capture the session
-                    LaunchedEffect(state?.phase) {
-                        val prev = lastPhase
-                        val curr = state?.phase
-                        lastPhase = curr
-                        if (prev == TimerState.PHASE_WORK && curr != TimerState.PHASE_WORK && curr != null) {
-                            viewLifecycleOwner.lifecycleScope.launch {
-                                mainActivity?.service?.let { service ->
-                                    val session = service.getLatestCompletedWorkSession()
-                                    if (session != null) {
-                                        currentSessionStart = session.start
-                                        currentSessionTag = session.tag
-                                    }
-                                }
+                    // Initialize active tag from default on first non-null state
+                    LaunchedEffect(state) {
+                        if (!tagInitialized && state != null) {
+                            tagInitialized = true
+                            if (state?.tag?.isEmpty() == true) {
+                                mainActivity?.service?.setActiveTag(defaultTag)
                             }
                         }
                     }
 
-                    // Reset when a new work block starts
-                    LaunchedEffect(state?.phase, state?.status) {
-                        if (state?.phase == TimerState.PHASE_WORK && state?.status == TimerState.STATUS_RUNNING) {
-                            currentSessionStart = null
-                            currentSessionTag = null
-                        }
-                    }
+                    val displayTag = state?.tag?.takeIf { it.isNotEmpty() } ?: defaultTag
 
                     TimerScreen(
                         state = state,
@@ -127,7 +112,7 @@ public class TimerFragment : Fragment() {
                             runCatching { findNavController().navigate(R.id.navigation_stats) }
                                 .onFailure { Log.w(TAG, "Could not navigate to stats", it) }
                         },
-                        currentTag = currentSessionTag,
+                        currentTag = displayTag,
                         onTagSelected = { showTagPicker = true },
                         availableTags = availableTags,
                     )
@@ -135,16 +120,12 @@ public class TimerFragment : Fragment() {
                     if (showTagPicker) {
                         TagPickerSheet(
                             tags = availableTags,
-                            currentTag = currentSessionTag,
+                            currentTag = displayTag,
                             onSelect = { tag ->
-                                currentSessionTag = tag
                                 showTagPicker = false
-                                val startTime = currentSessionStart
-                                if (startTime != null) {
-                                    viewLifecycleOwner.lifecycleScope.launch {
-                                        mainActivity?.service?.updateSessionTag(startTime, tag)
-                                    }
-                                }
+                                val resolvedTag = tag ?: defaultTag
+                                tagStore.setDefaultTag(resolvedTag)
+                                mainActivity?.service?.setActiveTag(resolvedTag)
                             },
                             onDismiss = { showTagPicker = false },
                         )

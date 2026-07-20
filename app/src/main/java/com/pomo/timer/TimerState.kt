@@ -41,6 +41,8 @@ public class TimerState {
     @SerializedName("last_action_time")
     public var last_action_time: Long = 0
 
+    @JvmField @SerializedName("tag") public var tag: String = ""
+
     @JvmField public var version: Int = 2
 
     public fun copy(): TimerState {
@@ -55,6 +57,7 @@ public class TimerState {
         new.goal = goal
         new.date = date
         new.last_action_time = last_action_time
+        new.tag = tag
         new.version = version
         return new
     }

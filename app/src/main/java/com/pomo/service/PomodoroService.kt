@@ -191,6 +191,7 @@ public class PomodoroService : Service(), TimerObserver {
         if (newState.date != last.date) return true
         if (newState.start_time != last.start_time) return true
         if (newState.duration != last.duration) return true
+        if (newState.tag != last.tag) return true
 
         if (newState.status != TimerState.STATUS_RUNNING && newState.remaining != last.remaining) {
             return true
@@ -509,7 +510,8 @@ public class PomodoroService : Service(), TimerObserver {
             before.phase != after.phase ||
             doublesDiffer(before.remaining, after.remaining) ||
             doublesDiffer(before.start_time, after.start_time) ||
-            before.last_action_time != after.last_action_time
+            before.last_action_time != after.last_action_time ||
+            before.tag != after.tag
     }
 
     private fun doublesDiffer(
@@ -639,6 +641,18 @@ public class PomodoroService : Service(), TimerObserver {
                 currentState.copy()
             }
         }
+
+    public fun setActiveTag(tag: String) {
+        serviceScope.launch {
+            commandMutex.withLock {
+                withContext(Dispatchers.Main) {
+                    currentState.tag = tag
+                    saveCurrentState()
+                    broadcastStateUpdate()
+                }
+            }
+        }
+    }
 
     public fun getConfigPayload(): ConfigPayload {
         return ConfigPayload(
