@@ -44,7 +44,8 @@ public class TagStore(context: Context) {
         if (oldName == newName) return RenameResult.Success(getTags())
         val current = getTags()
         if (current.contains(newName)) return RenameResult.Duplicate(newName)
-        val result = current.map { if (it == oldName) newName else it }
+        val result = current
+            .map { if (it == oldName) newName else it }
             .also { setTags(it) }
         if (getDefaultTag() == oldName) {
             setDefaultTag(newName)
@@ -58,7 +59,7 @@ public class TagStore(context: Context) {
         public data class Duplicate(val existingTag: String) : RenameResult
     }
 
-        public fun hasTag(name: String): Boolean = getTags().contains(name)
+    public fun hasTag(name: String): Boolean = getTags().contains(name)
 
     public fun getDefaultTag(): String {
         val stored = prefs.getString(PREF_KEY_DEFAULT_TAG, null) ?: return DEFAULT_TAGS.first()

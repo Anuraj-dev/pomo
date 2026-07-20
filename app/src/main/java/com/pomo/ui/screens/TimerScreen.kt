@@ -139,8 +139,8 @@ public fun TimerScreen(
 
         Spacer(Modifier.height(24.dp))
 
-        val isWorkRunning = state?.phase == TimerState.PHASE_WORK &&
-            (state?.status == TimerState.STATUS_RUNNING || state?.status == TimerState.STATUS_PAUSED)
+        val isWorkRunning = state?.phase == TimerState.PHASE_WORK
+            && (state?.status == TimerState.STATUS_RUNNING || state?.status == TimerState.STATUS_PAUSED)
         if (availableTags.isNotEmpty()) {
             TagChip(
                 tag = currentTag,
@@ -474,7 +474,7 @@ private fun TagChip(
                         Modifier.clickable(onClick = onClick)
                     } else {
                         Modifier
-                    }
+                    },
                 )
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,

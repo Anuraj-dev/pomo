@@ -718,9 +718,7 @@ private val tagPalette =
 private fun TagPieChart(sessions: List<SessionEntity>) {
     var range by remember { mutableStateOf(TagRange.Days7) }
 
-    val slices = remember(sessions, range) {
-        computeTagDistribution(sessions, range, nowFormatted())
-    }
+    val slices = remember(sessions, range) { computeTagDistribution(sessions, range, nowFormatted()) }
     val totalSessions = slices.sumOf { it.count }
 
     if (totalSessions == 0) {

@@ -41,7 +41,9 @@ public class TimerState {
     @SerializedName("last_action_time")
     public var last_action_time: Long = 0
 
-    @JvmField @SerializedName("tag") public var tag: String = ""
+    @JvmField
+    @SerializedName("tag")
+    public var tag: String = ""
 
     @JvmField public var version: Int = 2
 
