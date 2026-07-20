@@ -141,7 +141,7 @@ public fun TimerScreen(
 
         val isWorkRunning =
             state?.phase == TimerState.PHASE_WORK &&
-                (state?.status == TimerState.STATUS_RUNNING || state?.status == TimerState.STATUS_PAUSED)
+                (state.status == TimerState.STATUS_RUNNING || state.status == TimerState.STATUS_PAUSED)
         if (availableTags.isNotEmpty()) {
             TagChip(
                 tag = currentTag,
