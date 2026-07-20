@@ -722,6 +722,14 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
     val slices = remember(sessions, range) { computeTagDistribution(sessions, range, nowFormatted()) }
     val totalSessions = slices.sumOf { it.count }
 
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        TagRangePills(ranges = TagRange.entries, selected = range, onSelect = { range = it })
+    }
+    Spacer(Modifier.height(16.dp))
+
     if (totalSessions == 0) {
         Text(
             text = "No tagged sessions in this range.",
@@ -730,14 +738,6 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
         )
         return
     }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
-        TagRangePills(ranges = TagRange.entries, selected = range, onSelect = { range = it })
-    }
-    Spacer(Modifier.height(16.dp))
 
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -877,7 +877,7 @@ private fun computeTagDistribution(
     val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
     val grouped = workSessions.groupBy { it.tag!! }
     return grouped.map { (tag, group) ->
-        TagSlice(tag = tag, count = group.size, minutes = group.sumOf { (it.duration + 59) / 60 })
+        TagSlice(tag = tag, count = group.size, minutes = (group.sumOf { it.duration } + 59) / 60)
     }.sortedByDescending { it.count }
 }
 
