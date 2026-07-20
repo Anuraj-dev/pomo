@@ -646,6 +646,11 @@ public class PomodoroService : Service(), TimerObserver {
         serviceScope.launch {
             commandMutex.withLock {
                 withContext(Dispatchers.Main) {
+                    val isWorkRunning =
+                        currentState.phase == TimerState.PHASE_WORK &&
+                            (currentState.status == TimerState.STATUS_RUNNING ||
+                                currentState.status == TimerState.STATUS_PAUSED)
+                    if (isWorkRunning) return@withContext
                     currentState.tag = tag
                     saveCurrentState()
                     broadcastStateUpdate()

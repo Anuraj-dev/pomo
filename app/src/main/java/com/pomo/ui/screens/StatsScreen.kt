@@ -57,6 +57,7 @@ import com.patrykandpatrick.vico.core.chart.values.ChartValues
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.pomo.db.SessionEntity
+import com.pomo.timer.TimerState
 import com.pomo.stats.BestDay
 import com.pomo.stats.BestWeek
 import com.pomo.stats.ChartTrend
@@ -873,10 +874,10 @@ private fun computeTagDistribution(
     today: String,
 ): List<TagSlice> {
     val filtered = filterSessionsByRange(sessions, range, today)
-    val workSessions = filtered.filter { it.type == "work" && it.tag != null }
+    val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
     val grouped = workSessions.groupBy { it.tag!! }
     return grouped.map { (tag, group) ->
-        TagSlice(tag = tag, count = group.size, minutes = group.sumOf { it.duration / 60 })
+        TagSlice(tag = tag, count = group.size, minutes = group.sumOf { (it.duration + 59) / 60 })
     }.sortedByDescending { it.count }
 }
 
