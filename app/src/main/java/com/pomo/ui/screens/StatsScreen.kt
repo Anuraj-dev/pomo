@@ -887,20 +887,38 @@ private fun filterSessionsByRange(
     today: String,
 ): List<SessionEntity> {
     val fmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    val referenceDate =
+        try {
+            fmt.parse(today) ?: Date()
+        } catch (_: Exception) {
+            Date()
+        }
     return when (range) {
         TagRange.Today -> sessions.filter { it.date == today }
         TagRange.Yesterday -> {
-            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -1)
+                }
             val yesterday = fmt.format(cal.time)
             sessions.filter { it.date == yesterday }
         }
         TagRange.Days7 -> {
-            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -6) }
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -6)
+                }
             val cutoff = fmt.format(cal.time)
             sessions.filter { it.date >= cutoff }
         }
         TagRange.Days30 -> {
-            val cal = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -29) }
+            val cal =
+                Calendar.getInstance().apply {
+                    time = referenceDate
+                    add(Calendar.DAY_OF_YEAR, -29)
+                }
             val cutoff = fmt.format(cal.time)
             sessions.filter { it.date >= cutoff }
         }

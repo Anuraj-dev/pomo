@@ -30,8 +30,9 @@ public class TagStore(context: Context) {
     }
 
     public fun removeTag(name: String): List<String> {
+        val wasDefault = getDefaultTag() == name
         val result = getTags().filter { it != name }.also { setTags(it) }
-        if (getDefaultTag() == name) {
+        if (wasDefault) {
             setDefaultTag(DEFAULT_TAGS.first())
         }
         return result
@@ -44,8 +45,9 @@ public class TagStore(context: Context) {
         if (oldName == newName) return RenameResult.Success(getTags())
         val current = getTags()
         if (current.contains(newName)) return RenameResult.Duplicate(newName)
+        val wasDefault = getDefaultTag() == oldName
         val result = current.map { if (it == oldName) newName else it }.also { setTags(it) }
-        if (getDefaultTag() == oldName) {
+        if (wasDefault) {
             setDefaultTag(newName)
         }
         return RenameResult.Success(result)

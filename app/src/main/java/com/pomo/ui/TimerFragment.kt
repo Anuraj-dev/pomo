@@ -59,7 +59,7 @@ public class TimerFragment : Fragment() {
                 val ctx = context
                 val tagStore = remember { TagStore(ctx) }
                 var showTagPicker by remember { mutableStateOf(false) }
-                val defaultTag = remember { tagStore.getDefaultTag() }
+                var defaultTag by remember { mutableStateOf(tagStore.getDefaultTag()) }
 
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val state by timerState.collectAsState()
@@ -123,9 +123,11 @@ public class TimerFragment : Fragment() {
                             currentTag = displayTag,
                             onSelect = { tag ->
                                 showTagPicker = false
-                                val resolvedTag = tag ?: defaultTag
-                                tagStore.setDefaultTag(resolvedTag)
-                                mainActivity?.service?.setActiveTag(resolvedTag)
+                                if (tag != null) {
+                                    defaultTag = tag
+                                    tagStore.setDefaultTag(tag)
+                                    mainActivity?.service?.setActiveTag(tag)
+                                }
                             },
                             onDismiss = { showTagPicker = false },
                         )
