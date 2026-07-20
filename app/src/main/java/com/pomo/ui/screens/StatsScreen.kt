@@ -722,6 +722,14 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
     val slices = remember(sessions, range) { computeTagDistribution(sessions, range, nowFormatted()) }
     val totalSessions = slices.sumOf { it.count }
 
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.End,
+    ) {
+        TagRangePills(ranges = TagRange.entries, selected = range, onSelect = { range = it })
+    }
+    Spacer(Modifier.height(16.dp))
+
     if (totalSessions == 0) {
         Text(
             text = "No tagged sessions in this range.",
@@ -730,14 +738,6 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
         )
         return
     }
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End,
-    ) {
-        TagRangePills(ranges = TagRange.entries, selected = range, onSelect = { range = it })
-    }
-    Spacer(Modifier.height(16.dp))
 
     Row(
         modifier = Modifier.fillMaxWidth(),
