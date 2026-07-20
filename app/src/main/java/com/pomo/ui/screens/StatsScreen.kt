@@ -57,7 +57,6 @@ import com.patrykandpatrick.vico.core.chart.values.ChartValues
 import com.patrykandpatrick.vico.core.entry.ChartEntryModelProducer
 import com.patrykandpatrick.vico.core.entry.FloatEntry
 import com.pomo.db.SessionEntity
-import com.pomo.timer.TimerState
 import com.pomo.stats.BestDay
 import com.pomo.stats.BestWeek
 import com.pomo.stats.ChartTrend
@@ -67,6 +66,7 @@ import com.pomo.stats.Lifetime
 import com.pomo.stats.Records
 import com.pomo.stats.StatsSnapshot
 import com.pomo.stats.WeekShape
+import com.pomo.timer.TimerState
 import com.pomo.ui.components.EmptyState
 import com.pomo.ui.components.HourBarChart24
 import com.pomo.ui.components.SectionHeader
