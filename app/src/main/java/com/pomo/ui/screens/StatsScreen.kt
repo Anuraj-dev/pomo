@@ -799,7 +799,6 @@ private fun TagPieChart(
     }
 }
 
-@Composable
 private fun sliceColor(
     slice: TagSlice,
     tagColorSlots: Map<String, Int>,
