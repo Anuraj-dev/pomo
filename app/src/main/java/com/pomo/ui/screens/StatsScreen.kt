@@ -87,12 +87,14 @@ import kotlin.math.roundToInt
 public fun StatsScreen(
     snapshot: StatsSnapshot,
     sessions: List<SessionEntity> = emptyList(),
+    tagColorSlots: Map<String, Int> = emptyMap(),
     onExport: () -> Unit,
     onShare: () -> Unit,
 ) {
     StatsContent(
         snapshot = snapshot,
         sessions = sessions,
+        tagColorSlots = tagColorSlots,
         emptyBody = "Finish a focus session and the stats will start to fill in here.",
         header = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -134,6 +136,7 @@ public fun StatsScreen(
 internal fun StatsContent(
     snapshot: StatsSnapshot,
     sessions: List<SessionEntity> = emptyList(),
+    tagColorSlots: Map<String, Int> = emptyMap(),
     emptyBody: String,
     header: @Composable () -> Unit,
     rhythmTitle: String = "When you focus",
@@ -200,7 +203,7 @@ internal fun StatsContent(
             Spacer(Modifier.height(36.dp))
             SectionHeader("Tags")
             Spacer(Modifier.height(14.dp))
-            TagPieChart(sessions = sessions)
+            TagPieChart(sessions = sessions, tagColorSlots = tagColorSlots)
         }
 
         Spacer(Modifier.height(36.dp))
@@ -693,6 +696,7 @@ private data class TagSlice(
     val tag: String,
     val count: Int,
     val minutes: Int,
+    val isOther: Boolean = false,
 )
 
 private enum class TagRange(val label: String) {
@@ -705,18 +709,39 @@ private enum class TagRange(val label: String) {
 
 private val tagPalette =
     listOf(
-        Color(0xFF4CAF50),
-        Color(0xFF2196F3),
-        Color(0xFFFF9800),
-        Color(0xFFE91E63),
-        Color(0xFF9C27B0),
-        Color(0xFF00BCD4),
-        Color(0xFFFF5722),
-        Color(0xFF607D8B),
+        Color(0xFF64B5F6), // blue
+        Color(0xFF81C784), // green
+        Color(0xFFFFB74D), // amber
+        Color(0xFFF06292), // pink
+        Color(0xFFBA68C8), // purple
+        Color(0xFF4DD0E1), // cyan
+        Color(0xFFFF8A65), // orange
+        Color(0xFF90A4AE), // blue-grey
+        Color(0xFFAED581), // lime
+        Color(0xFF7986CB), // indigo
     )
 
+private val tagPaletteLight =
+    listOf(
+        Color(0xFF1565C0),
+        Color(0xFF2E7D32),
+        Color(0xFFEF6C00),
+        Color(0xFFC2185B),
+        Color(0xFF7B1FA2),
+        Color(0xFF00838F),
+        Color(0xFFD84315),
+        Color(0xFF455A64),
+        Color(0xFF558B2F),
+        Color(0xFF3949AB),
+    )
+
+private const val MAX_VISIBLE_TAGS = 8
+
 @Composable
-private fun TagPieChart(sessions: List<SessionEntity>) {
+private fun TagPieChart(
+    sessions: List<SessionEntity>,
+    tagColorSlots: Map<String, Int>,
+) {
     var range by remember { mutableStateOf(TagRange.Days7) }
 
     val slices = remember(sessions, range) { computeTagDistribution(sessions, range, nowFormatted()) }
@@ -743,9 +768,9 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        PieChartCanvas(slices = slices, total = totalSessions)
+        PieChartCanvas(slices = slices, total = totalSessions, tagColorSlots = tagColorSlots)
         Spacer(Modifier.width(24.dp))
-        TagLegend(slices = slices)
+        TagLegend(slices = slices, tagColorSlots = tagColorSlots)
     }
 
     Spacer(Modifier.height(8.dp))
@@ -778,20 +803,36 @@ private fun TagPieChart(sessions: List<SessionEntity>) {
 private fun PieChartCanvas(
     slices: List<TagSlice>,
     total: Int,
+    tagColorSlots: Map<String, Int>,
 ) {
-    val accent = PomoTokens.colors.accent
+    val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
     Canvas(modifier = Modifier.size(130.dp)) {
         val totalF = total.toFloat()
         var startAngle = -90f
         val canvasSize = this.size
-        slices.forEachIndexed { index, slice ->
+        slices.forEach { slice ->
             val sweepAngle = (slice.count / totalF) * 360f
-            val color = tagPalette.getOrElse(index % tagPalette.size) { accent }
+            val color =
+                if (slice.isOther) {
+                    PomoTokens.colors.onSurfaceMuted
+                } else {
+                    palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
+                }
+            val separator = MaterialTheme.colorScheme.background
             drawArc(
                 color = color,
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = true,
+                topLeft = Offset.Zero,
+                size = canvasSize,
+            )
+            drawArc(
+                color = separator,
+                startAngle = startAngle,
+                sweepAngle = sweepAngle,
+                useCenter = true,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.5.dp.toPx()),
                 topLeft = Offset.Zero,
                 size = canvasSize,
             )
@@ -801,10 +842,19 @@ private fun PieChartCanvas(
 }
 
 @Composable
-private fun TagLegend(slices: List<TagSlice>) {
+private fun TagLegend(
+    slices: List<TagSlice>,
+    tagColorSlots: Map<String, Int>,
+) {
+    val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        slices.forEachIndexed { index, slice ->
-            val color = tagPalette.getOrElse(index % tagPalette.size) { PomoTokens.colors.accent }
+        slices.forEach { slice ->
+            val color =
+                if (slice.isOther) {
+                    PomoTokens.colors.onSurfaceMuted
+                } else {
+                    palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
+                }
             val hours = slice.minutes / 60
             val mins = slice.minutes % 60
             val timeStr = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
@@ -876,10 +926,27 @@ private fun computeTagDistribution(
     val filtered = filterSessionsByRange(sessions, range, today)
     val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
     val grouped = workSessions.groupBy { it.tag!! }
-    return grouped.map { (tag, group) ->
+    val groupedSlices = grouped.map { (tag, group) ->
         TagSlice(tag = tag, count = group.size, minutes = (group.sumOf { it.duration } + 59) / 60)
-    }.sortedByDescending { it.count }
+    }.sortedWith(compareByDescending<TagSlice> { it.count }.thenBy { it.tag })
+    if (groupedSlices.size <= MAX_VISIBLE_TAGS) return groupedSlices
+    val visible = groupedSlices.take(MAX_VISIBLE_TAGS)
+    val remainder = groupedSlices.drop(MAX_VISIBLE_TAGS)
+    return visible +
+        TagSlice(
+            tag = "Other",
+            count = remainder.sumOf { it.count },
+            minutes = remainder.sumOf { it.minutes },
+            isOther = true,
+        )
 }
+
+private fun stableTagSlot(
+    tag: String,
+    tagColorSlots: Map<String, Int>,
+    paletteSize: Int,
+): Int =
+    Math.floorMod(tagColorSlots[tag] ?: tag.hashCode(), paletteSize)
 
 private fun filterSessionsByRange(
     sessions: List<SessionEntity>,

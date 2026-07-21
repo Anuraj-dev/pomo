@@ -22,6 +22,7 @@ import com.pomo.db.HistoryCacheRepository
 import com.pomo.db.SessionEntity
 import com.pomo.stats.StatsAggregator
 import com.pomo.stats.StatsSnapshot
+import com.pomo.tags.TagStore
 import com.pomo.ui.screens.StatsScreen
 import com.pomo.ui.theme.PomoTheme
 import com.pomo.util.DateLogic
@@ -73,9 +74,14 @@ public class StatsFragment : Fragment() {
                     val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
                     val days by daysFlow.collectAsState(initial = emptyList())
                     val sessions by sessionsFlow.collectAsState(initial = emptyList())
+                    val tagColorSlots =
+                        androidx.compose.runtime.remember(sessions) {
+                            TagStore(ctx).getColorSlots(sessions.mapNotNull { it.tag })
+                        }
                     StatsScreen(
                         snapshot = snapshot,
                         sessions = sessions,
+                        tagColorSlots = tagColorSlots,
                         onExport = { exportStats(days) },
                         onShare = { shareStatsScreenshot() },
                     )
