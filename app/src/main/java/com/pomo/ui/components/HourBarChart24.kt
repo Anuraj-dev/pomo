@@ -120,7 +120,6 @@ public fun HourBarChart24(
                     }
                 }
             }
-            }
         }
         Spacer(Modifier.height(6.dp))
         // Axis: 6 / 12 / 18 only, plus 0 and 24 implied by edges.
