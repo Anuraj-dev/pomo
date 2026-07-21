@@ -1,5 +1,6 @@
 package com.pomo.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -13,12 +14,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.AccessTime
+import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.History
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,6 +40,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pomo.db.SessionEntity
@@ -47,6 +59,7 @@ import com.pomo.ui.theme.PomoTokens
 import com.pomo.ui.theme.TimerTextStyle
 import java.text.SimpleDateFormat
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -59,8 +72,26 @@ public fun HistoryScreen(
     availableTags: List<String> = emptyList(),
     isToday: (String) -> Boolean = { false },
 ) {
-    val grouped = remember(items) { groupByMonth(items) }
+    val monthOptions = remember(items) { monthOptions(items) }
+    val currentMonthKey = remember { currentMonthKey() }
+    var selectedMonthKey by remember { mutableStateOf(currentMonthKey) }
     var selected by remember { mutableStateOf<HistoryItem?>(null) }
+    val selectedLabel =
+        monthOptions.firstOrNull { it.key == selectedMonthKey }?.label
+            ?: if (selectedMonthKey == ALL_MONTHS_KEY) "All time" else formatMonthLabel(selectedMonthKey)
+    val visibleItems =
+        remember(items, selectedMonthKey) {
+            if (selectedMonthKey == ALL_MONTHS_KEY) items else items.filter { it.date.startsWith(selectedMonthKey) }
+        }
+    val grouped = remember(visibleItems, selectedMonthKey) {
+        if (selectedMonthKey == ALL_MONTHS_KEY) {
+            groupByMonth(visibleItems)
+        } else {
+            listOf(selectedLabel to visibleItems)
+        }
+    }
+    val totalMinutes = visibleItems.sumOf { it.entry.work_minutes }
+    val totalBlocks = visibleItems.sumOf { it.entry.completed }
 
     Column(
         modifier =
@@ -69,13 +100,26 @@ public fun HistoryScreen(
                 .background(MaterialTheme.colorScheme.background)
                 .padding(horizontal = 20.dp),
     ) {
-        Spacer(Modifier.height(16.dp))
-        Text(
-            "History",
-            style = MaterialTheme.typography.displayMedium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(20.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Bottom,
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "History",
+                    style = MaterialTheme.typography.displayMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+                Spacer(Modifier.height(4.dp))
+                MonthSelector(
+                    label = selectedLabel,
+                    options = monthOptions,
+                    selectedKey = selectedMonthKey,
+                    onSelect = { selectedMonthKey = it },
+                )
+            }
+        }
 
         if (items.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -88,28 +132,40 @@ public fun HistoryScreen(
             return@Column
         }
 
+        Spacer(Modifier.height(24.dp))
+        MonthSummary(totalMinutes = totalMinutes, totalBlocks = totalBlocks)
+        Spacer(Modifier.height(20.dp))
+
+        if (visibleItems.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+            ) {
+                EmptyState(
+                    headline = "No focus this month",
+                    body = "Choose All time or another month to view your completed blocks.",
+                    icon = Icons.Outlined.History,
+                )
+            }
+            return@Column
+        }
+
         LazyColumn(
-            contentPadding = PaddingValues(top = 8.dp, bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
+            contentPadding = PaddingValues(bottom = 40.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             grouped.forEach { (monthLabel, entries) ->
-                stickyHeader(key = "header_$monthLabel") {
-                    Column(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.background),
-                    ) {
-                        Spacer(Modifier.height(20.dp))
-                        MonthHeader(monthLabel, entries)
-                        Spacer(Modifier.height(8.dp))
+                if (selectedMonthKey == ALL_MONTHS_KEY) {
+                    stickyHeader(key = "header_$monthLabel") {
+                        MonthSectionHeader(monthLabel)
                     }
                 }
                 items(entries, key = { it.date }) { entry ->
-                    HistoryRow(entry, onClick = { selected = entry })
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f),
-                        thickness = 1.dp,
+                    HistoryRow(
+                        item = entry,
+                        loadRhythm = loadRhythm,
+                        isToday = isToday(entry.date),
+                        onClick = { selected = entry },
                     )
                 }
             }
@@ -129,65 +185,307 @@ public fun HistoryScreen(
     }
 }
 
+private const val ALL_MONTHS_KEY: String = "__all__"
+
+private data class MonthOption(
+    val key: String,
+    val label: String,
+)
+
 @Composable
-private fun MonthHeader(
+private fun MonthSelector(
     label: String,
-    entries: List<HistoryItem>,
+    options: List<MonthOption>,
+    selectedKey: String,
+    onSelect: (String) -> Unit,
 ) {
-    val focusMinutes = entries.sumOf { it.entry.work_minutes }
-    val blocks = entries.sumOf { it.entry.completed }
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        Row(
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable { expanded = true }
+                    .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.titleLarge,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Icon(
+                imageVector = Icons.Outlined.KeyboardArrowDown,
+                contentDescription = "Choose history period",
+                tint = PomoTokens.colors.onSurfaceMuted,
+                modifier = Modifier.size(20.dp),
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(PomoTokens.colors.surfaceElevated),
+        ) {
+            options.forEach { option ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            option.label,
+                            color = if (option.key == selectedKey) PomoTokens.colors.accent else PomoTokens.colors.onSurface,
+                        )
+                    },
+                    onClick = {
+                        onSelect(option.key)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthSummary(
+    totalMinutes: Int,
+    totalBlocks: Int,
+) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.Bottom,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(PomoTokens.colors.surface)
+                .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            label.uppercase(),
-            style = MaterialTheme.typography.labelSmall,
-            color = PomoTokens.colors.onSurfaceMuted,
+        SummaryMetric(
+            icon = Icons.Outlined.AccessTime,
+            value = formatMinutes(totalMinutes),
+            label = "TOTAL TIME",
+            modifier = Modifier.weight(1f),
         )
-        Text(
-            "${formatMinutes(focusMinutes)} · $blocks blocks",
-            style = MaterialTheme.typography.labelSmall,
-            color = PomoTokens.colors.onSurfaceFaint,
+        Box(
+            modifier =
+                Modifier
+                    .width(1.dp)
+                    .height(42.dp)
+                    .background(PomoTokens.colors.outline),
+        )
+        SummaryMetric(
+            icon = Icons.Outlined.GridView,
+            value = totalBlocks.toString(),
+            label = "TOTAL BLOCKS",
+            modifier = Modifier.weight(1f),
         )
     }
 }
 
 @Composable
+private fun SummaryMetric(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    label: String,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = PomoTokens.colors.onSurfaceMuted,
+            modifier = Modifier.size(21.dp),
+        )
+        Column {
+            Text(
+                value,
+                style = TimerTextStyle.copy(fontSize = 21.sp),
+                color = PomoTokens.colors.onSurface,
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MonthSectionHeader(label: String) {
+    Text(
+        text = label.uppercase(Locale.US),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(MaterialTheme.colorScheme.background)
+                .padding(top = 8.dp, bottom = 2.dp),
+        style = MaterialTheme.typography.labelSmall,
+        color = PomoTokens.colors.onSurfaceMuted,
+    )
+}
+
+@Composable
 private fun HistoryRow(
     item: HistoryItem,
+    loadRhythm: suspend (String) -> HourRhythm,
+    isToday: Boolean,
     onClick: () -> Unit,
 ) {
-    val displayDate = remember(item.date) { formatDate(item.date) }
+    val date = remember(item.date) { parseDate(item.date) }
+    val dayNumber = date?.let { SimpleDateFormat("d", Locale.US).format(it) } ?: "?"
+    val weekday = date?.let { SimpleDateFormat("EEE", Locale.US).format(it).uppercase(Locale.US) } ?: ""
     val blocks = item.entry.completed
     Row(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(18.dp))
+                .background(PomoTokens.colors.surface)
                 .clickable(onClick = onClick)
-                .padding(vertical = 14.dp),
+                .padding(horizontal = 14.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(Modifier.weight(1f)) {
+        DateChip(dayNumber = dayNumber, weekday = weekday, isToday = isToday)
+        Spacer(Modifier.width(14.dp))
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                displayDate,
+                text = formatFullDate(item.date),
                 style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = PomoTokens.colors.onSurface,
+                maxLines = 1,
             )
             Text(
-                if (blocks == 1) "1 block" else "$blocks blocks",
+                text = if (blocks == 1) "1 block" else "$blocks blocks",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = PomoTokens.colors.onSurfaceMuted,
             )
         }
+        DailyRhythmPreview(loadRhythm = loadRhythm, date = item.date)
+        Spacer(Modifier.width(12.dp))
+        Icon(
+            imageVector = Icons.Outlined.AccessTime,
+            contentDescription = null,
+            tint = PomoTokens.colors.accent,
+            modifier = Modifier.size(20.dp),
+        )
+        Spacer(Modifier.width(5.dp))
         Text(
-            formatMinutes(item.entry.work_minutes),
-            style = TimerTextStyle.copy(fontSize = 18.sp),
-            color = MaterialTheme.colorScheme.onSurface,
+            text = formatMinutes(item.entry.work_minutes),
+            style = TimerTextStyle.copy(fontSize = 17.sp),
+            color = PomoTokens.colors.onSurface,
+        )
+        Icon(
+            imageVector = Icons.Outlined.ChevronRight,
+            contentDescription = "View ${formatFullDate(item.date)} details",
+            tint = PomoTokens.colors.onSurfaceMuted,
+            modifier = Modifier.size(22.dp),
         )
     }
 }
+
+@Composable
+private fun DateChip(
+    dayNumber: String,
+    weekday: String,
+    isToday: Boolean,
+) {
+    Column(
+        modifier =
+            Modifier
+                .size(width = 58.dp, height = 62.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(if (isToday) PomoTokens.colors.accent else PomoTokens.colors.surfaceElevated)
+                .padding(vertical = 7.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Text(
+            dayNumber,
+            style = MaterialTheme.typography.headlineMedium,
+            color = PomoTokens.colors.onSurface,
+        )
+        Text(
+            weekday,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.04.sp),
+            color = if (isToday) PomoTokens.colors.onSurface else PomoTokens.colors.onSurfaceMuted,
+        )
+    }
+}
+
+@Composable
+private fun DailyRhythmPreview(
+    loadRhythm: suspend (String) -> HourRhythm,
+    date: String,
+) {
+    val rhythm by produceState(initialValue = emptyRhythm(), date) {
+        value = runCatching { loadRhythm(date) }.getOrElse { emptyRhythm() }
+    }
+    val signal = PomoTokens.colors.accent
+    val muted = PomoTokens.colors.onSurfaceMuted
+    val outline = PomoTokens.colors.outline
+    Canvas(
+        modifier =
+            Modifier
+                .width(58.dp)
+                .height(40.dp),
+    ) {
+        val groupCount = 7
+        val gap = 3.dp.toPx()
+        val barWidth = (size.width - gap * (groupCount - 1)) / groupCount
+        val max = (rhythm.buckets.maxOrNull() ?: 0).coerceAtLeast(1)
+        repeat(groupCount) { group ->
+            val start = group * rhythm.buckets.size / groupCount
+            val end = ((group + 1) * rhythm.buckets.size / groupCount).coerceAtMost(rhythm.buckets.size)
+            val amount = rhythm.buckets.slice(start until end).maxOrNull() ?: 0
+            val height = if (amount == 0) 3.dp.toPx() else 6.dp.toPx() + (amount.toFloat() / max) * (size.height - 8.dp.toPx())
+            val left = group * (barWidth + gap)
+            val top = size.height - height
+            val isPeakGroup = rhythm.peakHour?.let { it in start until end } == true
+            drawRoundRect(
+                color = if (isPeakGroup) signal else muted,
+                topLeft = Offset(left, top),
+                size = Size(barWidth, height),
+                cornerRadius = CornerRadius(2.dp.toPx()),
+            )
+        }
+        drawRect(
+            color = outline,
+            topLeft = Offset(0f, size.height - 1.dp.toPx()),
+            size = Size(size.width, 1.dp.toPx()),
+        )
+    }
+}
+
+private fun monthOptions(items: List<HistoryItem>): List<MonthOption> {
+    val all = listOf(MonthOption(ALL_MONTHS_KEY, "All time"))
+    val options =
+        (items.map { it.date.take(7) } + currentMonthKey())
+            .distinct()
+            .sortedDescending()
+            .map { MonthOption(it, formatMonthLabel(it)) }
+    return options + all
+}
+
+private fun currentMonthKey(): String = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
+
+private fun formatMonthLabel(key: String): String =
+    runCatching {
+        val input = SimpleDateFormat("yyyy-MM", Locale.US)
+        val output = SimpleDateFormat("MMMM yyyy", Locale.US)
+        output.format(input.parse(key) ?: return@runCatching key)
+    }.getOrDefault(key)
+
+private fun parseDate(iso: String): Date? =
+    runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }.getOrNull()
+
+/*
+ * The selected day's detail still owns the full rhythm chart and sessions list. The compact
+ * preview above intentionally samples the same rhythm data into seven bars so the list stays
+ * glanceable without introducing a second history model.
+ */
 
 @Composable
 private fun DayDetailSheet(
@@ -344,15 +642,6 @@ private fun groupByMonth(items: List<HistoryItem>): List<Pair<String, List<Histo
     }
     return out.map { it.first to it.second.toList() }
 }
-
-private fun formatDate(iso: String): String =
-    try {
-        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-        val output = SimpleDateFormat("EEE, MMM d", Locale.US)
-        input.parse(iso)?.let { output.format(it) } ?: iso
-    } catch (_: Exception) {
-        iso
-    }
 
 private fun formatFullDate(iso: String): String =
     try {
