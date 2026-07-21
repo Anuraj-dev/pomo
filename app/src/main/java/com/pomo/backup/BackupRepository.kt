@@ -117,13 +117,10 @@ public class BackupRepository(context: Context) {
     public suspend fun writeTo(uri: Uri): Boolean =
         withContext(Dispatchers.IO) {
             val json = BackupCodec.encode(export())
-            runCatching {
-                appContext.contentResolver.openOutputStream(uri, "wt")?.use { stream ->
-                    stream.write(json.toByteArray(Charsets.UTF_8))
-                    stream.flush()
-                } ?: return@runCatching false
-                true
-            }.getOrDefault(false)
+            BackupFileWriter.write(
+                openOutputStream = { mode -> appContext.contentResolver.openOutputStream(uri, mode) },
+                json = json,
+            )
         }
 
     public suspend fun readFrom(uri: Uri): PomoBackup? =
