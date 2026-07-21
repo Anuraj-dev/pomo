@@ -803,9 +803,10 @@ private fun sliceColor(
     slice: TagSlice,
     tagColorSlots: Map<String, Int>,
     palette: List<Color>,
+    mutedColor: Color,
 ): Color =
     if (slice.isOther) {
-        PomoTokens.colors.onSurfaceMuted
+        mutedColor
     } else {
         palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
     }
@@ -817,6 +818,7 @@ private fun PieChartCanvas(
     tagColorSlots: Map<String, Int>,
 ) {
     val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
+    val mutedColor = PomoTokens.colors.onSurfaceMuted
     Canvas(modifier = Modifier.size(130.dp)) {
         val totalF = total.toFloat()
         var startAngle = -90f
@@ -825,7 +827,7 @@ private fun PieChartCanvas(
             val sweepAngle = (slice.count / totalF) * 360f
             val separator = MaterialTheme.colorScheme.background
             drawArc(
-                color = sliceColor(slice, tagColorSlots, palette),
+                color = sliceColor(slice, tagColorSlots, palette, mutedColor),
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = true,
@@ -852,6 +854,7 @@ private fun TagLegend(
     tagColorSlots: Map<String, Int>,
 ) {
     val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
+    val mutedColor = PomoTokens.colors.onSurfaceMuted
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         slices.forEach { slice ->
             val hours = slice.minutes / 60
@@ -863,7 +866,7 @@ private fun TagLegend(
                         Modifier
                             .size(8.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(sliceColor(slice, tagColorSlots, palette)),
+                            .background(sliceColor(slice, tagColorSlots, palette, mutedColor)),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
