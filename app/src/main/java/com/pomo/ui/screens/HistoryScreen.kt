@@ -3,6 +3,7 @@ package com.pomo.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -22,9 +23,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.ChevronRight
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.GridView
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.LocalCafe
+import androidx.compose.material.icons.outlined.RadioButtonChecked
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -53,7 +58,6 @@ import com.pomo.ui.TagPickerSheet
 import com.pomo.ui.components.EmptyState
 import com.pomo.ui.components.HourBarChart24
 import com.pomo.ui.components.PomoSheet
-import com.pomo.ui.components.StatTile
 import com.pomo.ui.components.rhythmCaption
 import com.pomo.ui.theme.PomoTokens
 import com.pomo.ui.theme.TimerTextStyle
@@ -103,7 +107,8 @@ public fun HistoryScreen(
         Spacer(Modifier.height(20.dp))
         Row(
             modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.Bottom,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
@@ -119,6 +124,13 @@ public fun HistoryScreen(
                     onSelect = { selectedMonthKey = it },
                 )
             }
+            if (items.isNotEmpty()) {
+                MonthSummary(
+                    totalMinutes = totalMinutes,
+                    totalBlocks = totalBlocks,
+                    modifier = Modifier.width(184.dp),
+                )
+            }
         }
 
         if (items.isEmpty()) {
@@ -132,9 +144,7 @@ public fun HistoryScreen(
             return@Column
         }
 
-        Spacer(Modifier.height(24.dp))
-        MonthSummary(totalMinutes = totalMinutes, totalBlocks = totalBlocks)
-        Spacer(Modifier.height(20.dp))
+        Spacer(Modifier.height(16.dp))
 
         if (visibleItems.isEmpty()) {
             Box(
@@ -179,7 +189,6 @@ public fun HistoryScreen(
             loadSessions = loadSessions,
             onTagSession = onTagSession,
             availableTags = availableTags,
-            isToday = isToday(item.date),
             onDismiss = { selected = null },
         )
     }
@@ -211,7 +220,7 @@ private fun MonthSelector(
         ) {
             Text(
                 text = label,
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.titleMedium,
                 color = PomoTokens.colors.onSurfaceMuted,
             )
             Icon(
@@ -248,14 +257,14 @@ private fun MonthSelector(
 private fun MonthSummary(
     totalMinutes: Int,
     totalBlocks: Int,
+    modifier: Modifier = Modifier,
 ) {
     Row(
         modifier =
-            Modifier
-                .fillMaxWidth()
+            modifier
                 .clip(RoundedCornerShape(18.dp))
                 .background(PomoTokens.colors.surface)
-                .padding(horizontal = 18.dp, vertical = 16.dp),
+                .padding(horizontal = 10.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         SummaryMetric(
@@ -268,7 +277,7 @@ private fun MonthSummary(
             modifier =
                 Modifier
                     .width(1.dp)
-                    .height(42.dp)
+                    .height(34.dp)
                     .background(PomoTokens.colors.outline),
         )
         SummaryMetric(
@@ -289,24 +298,24 @@ private fun SummaryMetric(
 ) {
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             imageVector = icon,
             contentDescription = null,
             tint = PomoTokens.colors.onSurfaceMuted,
-            modifier = Modifier.size(21.dp),
+            modifier = Modifier.size(16.dp),
         )
         Column {
             Text(
                 value,
-                style = TimerTextStyle.copy(fontSize = 21.sp),
+                style = TimerTextStyle.copy(fontSize = 14.sp),
                 color = PomoTokens.colors.onSurface,
             )
             Text(
                 label,
-                style = MaterialTheme.typography.labelSmall,
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, letterSpacing = 0.06.sp),
                 color = PomoTokens.colors.onSurfaceMuted,
             )
         }
@@ -342,46 +351,46 @@ private fun HistoryRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(18.dp))
+                .clip(RoundedCornerShape(14.dp))
                 .background(PomoTokens.colors.surface)
                 .clickable(onClick = onClick)
-                .padding(horizontal = 14.dp, vertical = 14.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         DateChip(dayNumber = dayNumber, weekday = weekday, isToday = isToday)
-        Spacer(Modifier.width(14.dp))
+        Spacer(Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = formatFullDate(item.date),
-                style = MaterialTheme.typography.titleMedium,
+                text = formatCompactDate(item.date),
+                style = MaterialTheme.typography.titleMedium.copy(fontSize = 13.sp),
                 color = PomoTokens.colors.onSurface,
                 maxLines = 1,
             )
             Text(
                 text = if (blocks == 1) "1 block" else "$blocks blocks",
-                style = MaterialTheme.typography.bodySmall,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                 color = PomoTokens.colors.onSurfaceMuted,
             )
         }
         DailyRhythmPreview(loadRhythm = loadRhythm, date = item.date)
-        Spacer(Modifier.width(12.dp))
+        Spacer(Modifier.width(8.dp))
         Icon(
             imageVector = Icons.Outlined.AccessTime,
             contentDescription = null,
             tint = PomoTokens.colors.accent,
-            modifier = Modifier.size(20.dp),
+            modifier = Modifier.size(17.dp),
         )
-        Spacer(Modifier.width(5.dp))
+        Spacer(Modifier.width(4.dp))
         Text(
             text = formatMinutes(item.entry.work_minutes),
-            style = TimerTextStyle.copy(fontSize = 17.sp),
+            style = TimerTextStyle.copy(fontSize = 14.sp),
             color = PomoTokens.colors.onSurface,
         )
         Icon(
             imageVector = Icons.Outlined.ChevronRight,
-            contentDescription = "View ${formatFullDate(item.date)} details",
+            contentDescription = "View ${formatCompactDate(item.date)} details",
             tint = PomoTokens.colors.onSurfaceMuted,
-            modifier = Modifier.size(22.dp),
+            modifier = Modifier.size(18.dp),
         )
     }
 }
@@ -395,21 +404,21 @@ private fun DateChip(
     Column(
         modifier =
             Modifier
-                .size(width = 58.dp, height = 62.dp)
-                .clip(RoundedCornerShape(14.dp))
+                .size(width = 42.dp, height = 48.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(if (isToday) PomoTokens.colors.accent else PomoTokens.colors.surfaceElevated)
-                .padding(vertical = 7.dp),
+                .padding(vertical = 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
         Text(
             dayNumber,
-            style = MaterialTheme.typography.headlineMedium,
+            style = MaterialTheme.typography.headlineMedium.copy(fontSize = 18.sp),
             color = PomoTokens.colors.onSurface,
         )
         Text(
             weekday,
-            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.04.sp),
+            style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, letterSpacing = 0.04.sp),
             color = if (isToday) PomoTokens.colors.onSurface else PomoTokens.colors.onSurfaceMuted,
         )
     }
@@ -429,18 +438,18 @@ private fun DailyRhythmPreview(
     Canvas(
         modifier =
             Modifier
-                .width(58.dp)
-                .height(40.dp),
+                .width(62.dp)
+                .height(32.dp),
     ) {
-        val groupCount = 7
-        val gap = 3.dp.toPx()
+        val groupCount = 10
+        val gap = 2.dp.toPx()
         val barWidth = (size.width - gap * (groupCount - 1)) / groupCount
         val max = (rhythm.buckets.maxOrNull() ?: 0).coerceAtLeast(1)
         repeat(groupCount) { group ->
             val start = group * rhythm.buckets.size / groupCount
             val end = ((group + 1) * rhythm.buckets.size / groupCount).coerceAtMost(rhythm.buckets.size)
             val amount = rhythm.buckets.slice(start until end).maxOrNull() ?: 0
-            val height = if (amount == 0) 3.dp.toPx() else 6.dp.toPx() + (amount.toFloat() / max) * (size.height - 8.dp.toPx())
+            val height = if (amount == 0) 2.dp.toPx() else 4.dp.toPx() + (amount.toFloat() / max) * (size.height - 6.dp.toPx())
             val left = group * (barWidth + gap)
             val top = size.height - height
             val isPeakGroup = rhythm.peakHour?.let { it in start until end } == true
@@ -483,7 +492,7 @@ private fun parseDate(iso: String): Date? =
 
 /*
  * The selected day's detail still owns the full rhythm chart and sessions list. The compact
- * preview above intentionally samples the same rhythm data into seven bars so the list stays
+ * preview above intentionally samples the same rhythm data into ten bars so the list stays
  * glanceable without introducing a second history model.
  */
 
@@ -494,7 +503,6 @@ private fun DayDetailSheet(
     loadSessions: suspend (String) -> List<SessionEntity>,
     onTagSession: (Long, String?) -> Unit,
     availableTags: List<String>,
-    isToday: Boolean,
     onDismiss: () -> Unit,
 ) {
     val rhythm by produceState(initialValue = emptyRhythm(), item.date) {
@@ -505,47 +513,119 @@ private fun DayDetailSheet(
         sessions = runCatching { loadSessions(item.date) }.getOrElse { emptyList() }
     }
     var tagPickerSession by remember { mutableStateOf<Long?>(null) }
+    val workSessions = sessions.filter { it.type == "work" && it.completed }
 
     PomoSheet(title = formatFullDate(item.date), onDismissRequest = onDismiss) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
+                    .padding(horizontal = 20.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatTile(formatMinutes(item.entry.work_minutes), "FOCUS", Modifier.weight(1f))
-                StatTile(item.entry.completed.toString(), "BLOCKS", Modifier.weight(1f))
-                StatTile(formatMinutes(item.entry.break_minutes), "BREAK", Modifier.weight(1f))
-            }
-            Column {
-                HourBarChart24(rhythm)
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    rhythmCaption(rhythm),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = PomoTokens.colors.onSurfaceMuted,
+            Text(
+                text =
+                    "${workSessions.size} sessions  •  ${rhythmCaption(rhythm)}  •  Tap a tag to edit",
+                style = MaterialTheme.typography.bodyMedium,
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                DetailMetricCard(
+                    icon = Icons.Outlined.RadioButtonChecked,
+                    value = formatMinutes(item.entry.work_minutes),
+                    label = "Focus",
+                    accent = PomoTokens.colors.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                DetailMetricCard(
+                    icon = Icons.Outlined.GridView,
+                    value = item.entry.completed.toString(),
+                    label = "Blocks",
+                    accent = PomoTokens.colors.accent,
+                    modifier = Modifier.weight(1f),
+                )
+                DetailMetricCard(
+                    icon = Icons.Outlined.LocalCafe,
+                    value = formatMinutes(item.entry.break_minutes),
+                    label = "Break",
+                    accent = PomoTokens.colors.onSurfaceMuted,
+                    modifier = Modifier.weight(1f),
                 )
             }
-            if (sessions.isNotEmpty()) {
-                Column {
+
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(16.dp))
+                        .padding(horizontal = 14.dp, vertical = 14.dp),
+            ) {
+                HourBarChart24(rhythm, showScale = true)
+                Spacer(Modifier.height(10.dp))
+                androidx.compose.material3.HorizontalDivider(color = PomoTokens.colors.outline.copy(alpha = 0.45f))
+                Spacer(Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    androidx.compose.material3.Icon(
+                        imageVector = Icons.Outlined.ShowChart,
+                        contentDescription = null,
+                        tint = PomoTokens.colors.accent,
+                        modifier = Modifier.size(22.dp),
+                    )
                     Text(
-                        "Sessions",
-                        style = MaterialTheme.typography.labelSmall,
+                        text = rhythmCaption(rhythm),
+                        style = MaterialTheme.typography.bodyMedium,
                         color = PomoTokens.colors.onSurfaceMuted,
                     )
-                    Spacer(Modifier.height(8.dp))
-                    sessions.filter { it.type == "work" && it.completed }.forEach { session ->
-                        SessionRow(
-                            session = session,
-                            isToday = isToday,
-                            onTagClick = { tagPickerSession = session.start },
+                }
+            }
+
+            if (workSessions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Bottom,
+                    ) {
+                        Text(
+                            "Sessions",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = PomoTokens.colors.onSurface,
+                            modifier = Modifier.weight(1f),
                         )
+                        Text(
+                            "Tap tag to change",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PomoTokens.colors.onSurfaceMuted,
+                        )
+                    }
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(14.dp)),
+                    ) {
+                        workSessions.forEachIndexed { index, session ->
+                            SessionRow(
+                                session = session,
+                                onTagClick = { tagPickerSession = session.start },
+                            )
+                            if (index < workSessions.lastIndex) {
+                                androidx.compose.material3.HorizontalDivider(
+                                    color = PomoTokens.colors.outline.copy(alpha = 0.45f),
+                                )
+                            }
+                        }
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
         }
     }
 
@@ -570,7 +650,6 @@ private fun DayDetailSheet(
 @Composable
 private fun SessionRow(
     session: SessionEntity,
-    isToday: Boolean,
     onTagClick: () -> Unit,
 ) {
     val displayTime =
@@ -581,41 +660,91 @@ private fun SessionRow(
         modifier =
             Modifier
                 .fillMaxWidth()
-                .padding(vertical = 8.dp),
+                .padding(horizontal = 12.dp, vertical = 9.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Text(
             text = displayTime,
-            style = MaterialTheme.typography.bodyMedium,
-            color = PomoTokens.colors.onSurfaceMuted,
-            modifier = Modifier.padding(end = 12.dp),
+            style = TimerTextStyle.copy(fontSize = 14.sp),
+            color = PomoTokens.colors.onSurface,
+            modifier = Modifier.width(62.dp),
         )
         Text(
             text = formatMinutes(session.duration / 60),
             style = TimerTextStyle.copy(fontSize = 14.sp),
-            color = PomoTokens.colors.onSurface,
-            modifier = Modifier.padding(end = 12.dp),
+            color = PomoTokens.colors.onSurfaceMuted,
+            modifier = Modifier.width(48.dp),
         )
-        if (isToday) {
-            Row(
+        Row(
+            modifier =
+                Modifier
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(PomoTokens.colors.surfaceElevated)
+                    .clickable(onClick = onTagClick)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
+        ) {
+            Box(
                 modifier =
                     Modifier
+                        .size(7.dp)
                         .clip(RoundedCornerShape(999.dp))
-                        .background(PomoTokens.colors.surfaceElevated)
-                        .clickable(onClick = onTagClick)
-                        .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = session.tag ?: "tag",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (session.tag != null) PomoTokens.colors.onSurface else PomoTokens.colors.onSurfaceMuted,
-                )
-            }
-        } else if (session.tag != null) {
+                        .background(if (session.tag == "Study") PomoTokens.colors.accent else PomoTokens.colors.onSurfaceMuted),
+            )
             Text(
-                text = session.tag,
+                text = session.tag ?: "tag",
                 style = MaterialTheme.typography.labelSmall,
+                color = if (session.tag != null) PomoTokens.colors.onSurface else PomoTokens.colors.onSurfaceMuted,
+            )
+        }
+        Spacer(Modifier.weight(1f))
+        androidx.compose.material3.IconButton(
+            onClick = onTagClick,
+            modifier = Modifier.size(36.dp),
+        ) {
+            androidx.compose.material3.Icon(
+                imageVector = Icons.Outlined.Edit,
+                contentDescription = "Edit ${session.tag ?: "tag"}",
+                tint = PomoTokens.colors.onSurfaceMuted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun DetailMetricCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    value: String,
+    label: String,
+    accent: androidx.compose.ui.graphics.Color,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier =
+            modifier
+                .clip(RoundedCornerShape(14.dp))
+                .border(1.dp, PomoTokens.colors.outline, RoundedCornerShape(14.dp))
+                .padding(horizontal = 10.dp, vertical = 11.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        androidx.compose.material3.Icon(
+            imageVector = icon,
+            contentDescription = null,
+            tint = accent,
+            modifier = Modifier.size(20.dp),
+        )
+        Column {
+            Text(
+                value,
+                style = TimerTextStyle.copy(fontSize = 15.sp),
+                color = PomoTokens.colors.onSurface,
+            )
+            Text(
+                label,
+                style = MaterialTheme.typography.bodySmall.copy(fontSize = 11.sp),
                 color = PomoTokens.colors.onSurfaceMuted,
             )
         }
@@ -647,6 +776,15 @@ private fun formatFullDate(iso: String): String =
     try {
         val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         val output = SimpleDateFormat("EEEE, MMMM d", Locale.US)
+        input.parse(iso)?.let { output.format(it) } ?: iso
+    } catch (_: Exception) {
+        iso
+    }
+
+private fun formatCompactDate(iso: String): String =
+    try {
+        val input = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val output = SimpleDateFormat("EEEE, MMM d", Locale.US)
         input.parse(iso)?.let { output.format(it) } ?: iso
     } catch (_: Exception) {
         iso

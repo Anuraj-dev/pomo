@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.weight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,6 +34,7 @@ import com.pomo.ui.theme.PomoTokens
 public fun HourBarChart24(
     rhythm: HourRhythm,
     modifier: Modifier = Modifier,
+    showScale: Boolean = false,
 ) {
     val signal = PomoTokens.colors.accent
     val muted = PomoTokens.colors.onSurfaceMuted
@@ -48,47 +50,76 @@ public fun HourBarChart24(
                 .fillMaxWidth()
                 .semantics { contentDescription = "Hour of day chart. $description" },
     ) {
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .height(140.dp),
+        if (showScale) {
+            Text(
+                text = "Focus (min)",
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
+            )
+            Spacer(Modifier.height(6.dp))
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.Bottom,
         ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height
-                val baseline = h - 1f
-                val barCount = 24
-                val gapPx = 4f
-                val barW = (w - gapPx * (barCount - 1)) / barCount
-                val minBarH = 2f
-                val maxBarH = h - 4f
-
-                // Baseline hairline.
-                drawRect(
-                    color = outline,
-                    topLeft = Offset(0f, baseline),
-                    size = Size(w, 1f),
-                )
-
-                for (hr in 0 until barCount) {
-                    val frac = rhythm.buckets[hr].toFloat() / max
-                    val barH = if (rhythm.buckets[hr] == 0) minBarH else (minBarH + frac * (maxBarH - minBarH))
-                    val left = hr * (barW + gapPx)
-                    val top = baseline - barH
-                    val color =
-                        when {
-                            rhythm.buckets[hr] == 0 -> outline
-                            peak == hr -> signal
-                            else -> muted
-                        }
-                    drawRoundRect(
-                        color = color,
-                        topLeft = Offset(left, top),
-                        size = Size(barW, barH),
-                        cornerRadius = CornerRadius(2f, 2f),
-                    )
+            if (showScale) {
+                Column(
+                    modifier = Modifier.height(140.dp),
+                    verticalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    listOf("60", "45", "30", "15", "0").forEach { label ->
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                            color = faint,
+                        )
+                    }
                 }
+                Spacer(Modifier.width(8.dp))
+            }
+            Box(
+                modifier =
+                    Modifier
+                        .weight(1f)
+                        .height(140.dp),
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val w = size.width
+                    val h = size.height
+                    val baseline = h - 1f
+                    val barCount = 24
+                    val gapPx = 4f
+                    val barW = (w - gapPx * (barCount - 1)) / barCount
+                    val minBarH = 2f
+                    val maxBarH = h - 4f
+
+                    // Baseline hairline.
+                    drawRect(
+                        color = outline,
+                        topLeft = Offset(0f, baseline),
+                        size = Size(w, 1f),
+                    )
+
+                    for (hr in 0 until barCount) {
+                        val frac = rhythm.buckets[hr].toFloat() / max
+                        val barH = if (rhythm.buckets[hr] == 0) minBarH else (minBarH + frac * (maxBarH - minBarH))
+                        val left = hr * (barW + gapPx)
+                        val top = baseline - barH
+                        val color =
+                            when {
+                                rhythm.buckets[hr] == 0 -> outline
+                                peak == hr -> signal
+                                else -> muted
+                            }
+                        drawRoundRect(
+                            color = color,
+                            topLeft = Offset(left, top),
+                            size = Size(barW, barH),
+                            cornerRadius = CornerRadius(2f, 2f),
+                        )
+                    }
+                }
+            }
             }
         }
         Spacer(Modifier.height(6.dp))
@@ -109,7 +140,7 @@ public fun HourBarChart24(
 }
 
 internal fun rhythmCaption(rhythm: HourRhythm): String {
-    // Always name the peak hour when there is one — a visible peak bar should never be
+    // Always name the peak hour when there is one, a visible peak bar should never be
     // captioned "scattered". The period is derived straight from the peak hour.
     val peak = rhythm.peakHour ?: return "Not enough data yet"
     val hourLabel = formatHour(peak)
@@ -120,7 +151,7 @@ internal fun rhythmCaption(rhythm: HourRhythm): String {
             in 17..20 -> "evening focus"
             else -> "late-night focus"
         }
-    return "Peak $hourLabel — $period"
+    return "Peak $hourLabel, $period"
 }
 
 private fun formatHour(h: Int): String {
