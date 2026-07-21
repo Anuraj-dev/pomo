@@ -709,16 +709,16 @@ private enum class TagRange(val label: String) {
 
 private val tagPalette =
     listOf(
-        Color(0xFF64B5F6), // blue
-        Color(0xFF81C784), // green
-        Color(0xFFFFB74D), // amber
-        Color(0xFFF06292), // pink
-        Color(0xFFBA68C8), // purple
-        Color(0xFF4DD0E1), // cyan
-        Color(0xFFFF8A65), // orange
-        Color(0xFF90A4AE), // blue-grey
-        Color(0xFFAED581), // lime
-        Color(0xFF7986CB), // indigo
+        Color(0xFF64B5F6),
+        Color(0xFF81C784),
+        Color(0xFFFFB74D),
+        Color(0xFFF06292),
+        Color(0xFFBA68C8),
+        Color(0xFF4DD0E1),
+        Color(0xFFFF8A65),
+        Color(0xFF90A4AE),
+        Color(0xFFAED581),
+        Color(0xFF7986CB),
     )
 
 private val tagPaletteLight =
@@ -800,6 +800,18 @@ private fun TagPieChart(
 }
 
 @Composable
+private fun sliceColor(
+    slice: TagSlice,
+    tagColorSlots: Map<String, Int>,
+    palette: List<Color>,
+): Color =
+    if (slice.isOther) {
+        PomoTokens.colors.onSurfaceMuted
+    } else {
+        palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
+    }
+
+@Composable
 private fun PieChartCanvas(
     slices: List<TagSlice>,
     total: Int,
@@ -812,15 +824,9 @@ private fun PieChartCanvas(
         val canvasSize = this.size
         slices.forEach { slice ->
             val sweepAngle = (slice.count / totalF) * 360f
-            val color =
-                if (slice.isOther) {
-                    PomoTokens.colors.onSurfaceMuted
-                } else {
-                    palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
-                }
             val separator = MaterialTheme.colorScheme.background
             drawArc(
-                color = color,
+                color = sliceColor(slice, tagColorSlots, palette),
                 startAngle = startAngle,
                 sweepAngle = sweepAngle,
                 useCenter = true,
@@ -849,12 +855,6 @@ private fun TagLegend(
     val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         slices.forEach { slice ->
-            val color =
-                if (slice.isOther) {
-                    PomoTokens.colors.onSurfaceMuted
-                } else {
-                    palette[stableTagSlot(slice.tag, tagColorSlots, palette.size)]
-                }
             val hours = slice.minutes / 60
             val mins = slice.minutes % 60
             val timeStr = if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
@@ -864,7 +864,7 @@ private fun TagLegend(
                         Modifier
                             .size(8.dp)
                             .clip(RoundedCornerShape(2.dp))
-                            .background(color),
+                            .background(sliceColor(slice, tagColorSlots, palette)),
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
@@ -926,17 +926,20 @@ private fun computeTagDistribution(
     val filtered = filterSessionsByRange(sessions, range, today)
     val workSessions = filtered.filter { it.type == TimerState.PHASE_WORK && it.tag != null }
     val grouped = workSessions.groupBy { it.tag!! }
-    val groupedSlices = grouped.map { (tag, group) ->
-        TagSlice(tag = tag, count = group.size, minutes = (group.sumOf { it.duration } + 59) / 60)
-    }.sortedWith(compareByDescending<TagSlice> { it.count }.thenBy { it.tag })
+    val groupedSlices =
+        grouped.map { (tag, group) ->
+            TagSlice(tag = tag, count = group.size, minutes = (group.sumOf { it.duration } + 59) / 60)
+        }.sortedWith(compareByDescending<TagSlice> { it.count }.thenBy { it.tag })
     if (groupedSlices.size <= MAX_VISIBLE_TAGS) return groupedSlices
     val visible = groupedSlices.take(MAX_VISIBLE_TAGS)
     val remainder = groupedSlices.drop(MAX_VISIBLE_TAGS)
+    val remainderTags = remainder.map { it.tag }.toSet()
+    val remainderSeconds = workSessions.filter { it.tag in remainderTags }.sumOf { it.duration }
     return visible +
         TagSlice(
             tag = "Other",
             count = remainder.sumOf { it.count },
-            minutes = remainder.sumOf { it.minutes },
+            minutes = (remainderSeconds + 59) / 60,
             isOther = true,
         )
 }
@@ -945,8 +948,7 @@ private fun stableTagSlot(
     tag: String,
     tagColorSlots: Map<String, Int>,
     paletteSize: Int,
-): Int =
-    Math.floorMod(tagColorSlots[tag] ?: tag.hashCode(), paletteSize)
+): Int = Math.floorMod(tagColorSlots[tag] ?: tag.hashCode(), paletteSize)
 
 private fun filterSessionsByRange(
     sessions: List<SessionEntity>,

@@ -36,6 +36,7 @@ public class TagStore(context: Context) {
     public fun removeTag(name: String): List<String> {
         val wasDefault = getDefaultTag() == name
         val result = getTags().filter { it != name }.also { setTags(it) }
+        purgeColorSlot(name)
         if (wasDefault) {
             setDefaultTag(DEFAULT_TAGS.first())
         }
@@ -95,7 +96,7 @@ public class TagStore(context: Context) {
         private const val PREF_KEY_TAGS = "pomo_session_tags"
         private const val PREF_KEY_DEFAULT_TAG = "pomo_default_tag"
         private const val PREF_KEY_TAG_COLOR_SLOTS = "pomo_tag_color_slots"
-        private const val COLOR_SLOT_COUNT = 10
+        internal const val COLOR_SLOT_COUNT = 10
         internal val DEFAULT_TAGS = listOf("Work", "Study", "Personal", "Exercise")
     }
 
@@ -128,5 +129,10 @@ public class TagStore(context: Context) {
 
     private fun nextColorSlot(used: Set<Int>): Int {
         return (0 until COLOR_SLOT_COUNT).firstOrNull { it !in used } ?: 0
+    }
+
+    private fun purgeColorSlot(tag: String) {
+        val slots = readColorSlots().toMutableMap()
+        if (slots.remove(tag) != null) writeColorSlots(slots)
     }
 }
