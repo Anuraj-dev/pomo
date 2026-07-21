@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Color
+import android.os.Build
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -598,8 +599,16 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
 
     private fun launchBackupExport() {
         val today = LocalDate.now().toString()
-        runCatching { exportBackupLauncher.launch(BackupRepository.suggestedFileName(today)) }
-            .onFailure { showMessage(R.string.backup_no_file_picker) }
+        val fileName = BackupRepository.suggestedFileName(today)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            viewLifecycleOwner.lifecycleScope.launch {
+                val uri = backupRepository.writeToDownloads(fileName)
+                showMessage(if (uri != null) R.string.backup_export_done else R.string.backup_export_failed)
+            }
+        } else {
+            runCatching { exportBackupLauncher.launch(fileName) }
+                .onFailure { showMessage(R.string.backup_no_file_picker) }
+        }
     }
 
     private fun launchBackupImport() {

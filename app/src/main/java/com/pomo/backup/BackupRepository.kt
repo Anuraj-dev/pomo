@@ -1,7 +1,11 @@
 package com.pomo.backup
 
+import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import com.pomo.BuildConfig
 import com.pomo.crew.CrewIdentityStore
 import com.pomo.crew.CrewMembership
@@ -121,6 +125,44 @@ public class BackupRepository(context: Context) {
                 openOutputStream = { mode -> appContext.contentResolver.openOutputStream(uri, mode) },
                 json = json,
             )
+        }
+
+    /**
+     * Publishes a completed backup directly into Downloads on Android 10+.
+     *
+     * MediaStore keeps pending rows hidden until the final update, so file managers and upload
+     * targets never observe the zero-byte document created while the export is still running.
+     */
+    public suspend fun writeToDownloads(fileName: String): Uri? =
+        withContext(Dispatchers.IO) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return@withContext null
+
+            val resolver = appContext.contentResolver
+            val values =
+                ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, MIME_TYPE)
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return@withContext null
+
+            runCatching {
+                val json = BackupCodec.encode(export())
+                val written =
+                    BackupFileWriter.write(
+                        openOutputStream = { mode -> resolver.openOutputStream(uri, mode) },
+                        json = json,
+                    )
+                check(written) { "Could not write backup" }
+
+                val published = ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }
+                check(resolver.update(uri, published, null, null) == 1) { "Could not publish backup" }
+                uri
+            }.getOrElse {
+                resolver.delete(uri, null, null)
+                null
+            }
         }
 
     public suspend fun readFrom(uri: Uri): PomoBackup? =
