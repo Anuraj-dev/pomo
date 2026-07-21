@@ -819,13 +819,13 @@ private fun PieChartCanvas(
 ) {
     val palette = if (PomoTokens.colors.isDark) tagPalette else tagPaletteLight
     val mutedColor = PomoTokens.colors.onSurfaceMuted
+    val separator = MaterialTheme.colorScheme.background
     Canvas(modifier = Modifier.size(130.dp)) {
         val totalF = total.toFloat()
         var startAngle = -90f
         val canvasSize = this.size
         slices.forEach { slice ->
             val sweepAngle = (slice.count / totalF) * 360f
-            val separator = MaterialTheme.colorScheme.background
             drawArc(
                 color = sliceColor(slice, tagColorSlots, palette, mutedColor),
                 startAngle = startAngle,
