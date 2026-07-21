@@ -1,10 +1,10 @@
 package com.pomo.backup
 
-import java.io.ByteArrayOutputStream
-import java.io.IOException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 
 public class BackupFileWriterTest {
     @Test
