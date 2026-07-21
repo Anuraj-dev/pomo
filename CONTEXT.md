@@ -60,6 +60,12 @@ death because it lives on TimerState. Read at session-completion time to record
 the tag in Room.
 _Avoid_: current tag, running tag.
 
+**Tag palette**:
+A set of categorical data colors used to distinguish Session tags in Stats.
+It is separate from Pomo's signal accent and state colors; a tag's color should
+remain stable across Stats windows and display surfaces.
+_Avoid_: theme accent, status color, tag meaning.
+
 ## Cues
 
 **Completion cue**:

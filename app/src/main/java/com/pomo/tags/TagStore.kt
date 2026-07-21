@@ -3,6 +3,7 @@ package com.pomo.tags
 import android.content.Context
 import androidx.preference.PreferenceManager
 import org.json.JSONArray
+import org.json.JSONObject
 
 public class TagStore(context: Context) {
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context.applicationContext)
@@ -26,12 +27,16 @@ public class TagStore(context: Context) {
     public fun addTag(name: String): List<String> {
         val current = getTags()
         if (current.contains(name)) return current
-        return (current + name).also { setTags(it) }
+        return (current + name).also {
+            setTags(it)
+            getColorSlots(listOf(name))
+        }
     }
 
     public fun removeTag(name: String): List<String> {
         val wasDefault = getDefaultTag() == name
         val result = getTags().filter { it != name }.also { setTags(it) }
+        purgeColorSlot(name)
         if (wasDefault) {
             setDefaultTag(DEFAULT_TAGS.first())
         }
@@ -47,10 +52,27 @@ public class TagStore(context: Context) {
         if (current.contains(newName)) return RenameResult.Duplicate(newName)
         val wasDefault = getDefaultTag() == oldName
         val result = current.map { if (it == oldName) newName else it }.also { setTags(it) }
+        renameColorSlot(oldName, newName)
         if (wasDefault) {
             setDefaultTag(newName)
         }
         return RenameResult.Success(result)
+    }
+
+    /** Return stable presentation slots for tags, assigning slots only when first encountered. */
+    public fun getColorSlots(tags: Collection<String>): Map<String, Int> {
+        val slots = readColorSlots().toMutableMap()
+        val used = slots.values.toMutableSet()
+        var changed = false
+        tags.filter { it.isNotBlank() }.distinct().forEach { tag ->
+            if (tag !in slots) {
+                slots[tag] = nextColorSlot(used)
+                used += slots.getValue(tag)
+                changed = true
+            }
+        }
+        if (changed) writeColorSlots(slots)
+        return slots
     }
 
     public sealed interface RenameResult {
@@ -73,6 +95,44 @@ public class TagStore(context: Context) {
     public companion object {
         private const val PREF_KEY_TAGS = "pomo_session_tags"
         private const val PREF_KEY_DEFAULT_TAG = "pomo_default_tag"
+        private const val PREF_KEY_TAG_COLOR_SLOTS = "pomo_tag_color_slots"
+        internal const val COLOR_SLOT_COUNT = 10
         internal val DEFAULT_TAGS = listOf("Work", "Study", "Personal", "Exercise")
+    }
+
+    private fun renameColorSlot(
+        oldName: String,
+        newName: String,
+    ) {
+        val slots = getColorSlots(listOf(oldName)).toMutableMap()
+        slots[newName] = slots.remove(oldName) ?: 0
+        writeColorSlots(slots)
+    }
+
+    private fun readColorSlots(): Map<String, Int> {
+        val raw = prefs.getString(PREF_KEY_TAG_COLOR_SLOTS, null) ?: return emptyMap()
+        return try {
+            val json = JSONObject(raw)
+            json.keys().asSequence().associateWith { key ->
+                json.optInt(key, 0).coerceIn(0, COLOR_SLOT_COUNT - 1)
+            }
+        } catch (_: Exception) {
+            emptyMap()
+        }
+    }
+
+    private fun writeColorSlots(slots: Map<String, Int>) {
+        val json = JSONObject()
+        slots.forEach { (tag, slot) -> json.put(tag, slot) }
+        prefs.edit().putString(PREF_KEY_TAG_COLOR_SLOTS, json.toString()).apply()
+    }
+
+    private fun nextColorSlot(used: Set<Int>): Int {
+        return (0 until COLOR_SLOT_COUNT).firstOrNull { it !in used } ?: 0
+    }
+
+    private fun purgeColorSlot(tag: String) {
+        val slots = readColorSlots().toMutableMap()
+        if (slots.remove(tag) != null) writeColorSlots(slots)
     }
 }
