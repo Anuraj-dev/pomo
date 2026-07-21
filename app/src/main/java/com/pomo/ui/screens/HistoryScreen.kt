@@ -29,7 +29,7 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LocalCafe
 import androidx.compose.material.icons.outlined.RadioButtonChecked
-import androidx.compose.material.icons.outlined.ShowChart
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -573,7 +573,7 @@ private fun DayDetailSheet(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     androidx.compose.material3.Icon(
-                        imageVector = Icons.Outlined.ShowChart,
+                        imageVector = Icons.AutoMirrored.Outlined.ShowChart,
                         contentDescription = null,
                         tint = PomoTokens.colors.accent,
                         modifier = Modifier.size(22.dp),
