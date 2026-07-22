@@ -23,6 +23,25 @@ print or consume the same JSON payload; it does not change the protocol.
 The Android scanner entry uses the same payload shape and only compares it to
 the current phone pairing token; scanning does not mutate canonical phone state.
 
+## Discovery
+
+While the phone API is serving, the phone advertises itself over mDNS:
+
+```text
+service type: _pomo._tcp
+service name: Pomo
+port:         the configured phone API port (default 9876)
+```
+
+LAN clients should resolve the phone's address this way rather than storing an
+IP, which changes whenever the router issues a new DHCP lease. Discovery does
+not carry the pairing token — clients still need the token from the pairing
+payload. Advertising follows the phone API's own settings: it stops when the
+API is disabled and when wifi-only mode has no active LAN network.
+
+Clients on networks that block multicast should fall back to a manually
+configured host and port.
+
 ## Authentication
 
 REST requests must include:
@@ -239,9 +258,39 @@ change:
 Clients should treat WebSocket updates as display/cache updates. Commands should
 still use the authenticated REST endpoints.
 
+### Event Frames
+
+Events describe something that happened, as opposed to current state. They are
+sent to every subscribed client:
+
+```json
+{
+  "type": "event",
+  "event": "phase_complete",
+  "phase": "work"
+}
+```
+
+```text
+event: phase_complete
+phase: work | short | long
+```
+
+`phase_complete` fires only when a phase runs down to zero on its own. Skip,
+reset and pause produce a state message and no event, which is what lets a
+hardware client sound an alarm on a real completion and stay silent on a manual
+action. The event is sent immediately before the state message for the same
+transition.
+
+Clients MUST ignore frames whose `type` they do not recognise. New event types
+may be added without a protocol version bump.
+
 ## Client Contract
 
-Desktop clients should:
+Remote clients (desktop and hardware) should:
+
+- Discover the phone through mDNS where possible, with a manual host fallback.
+- Ignore WebSocket frames with an unrecognised `type`.
 
 - Store `url` and `token` from the pairing payload.
 - Use REST endpoints for commands.
