@@ -406,12 +406,15 @@ public class PomodoroService : Service(), TimerObserver {
     }
 
     /**
-     * Dispatches a phase-completion event to remote clients. Both this event and
-     * the following state broadcast are queued from the main scope in order, but
-     * backpressure on a client's channel may cause the state frame to arrive first.
-     * This is safe: hardware clients consume the two frames independently — the
-     * buzzer reacts to the event, the display to the state, and neither waits for
-     * the other.
+     * Tells remote clients a phase ended on its own. Hardware clients ring on this
+     * and stay silent on skip or reset, which a state snapshot alone cannot
+     * distinguish — that distinction is the whole reason the event exists.
+     *
+     * This is dispatched before the state broadcast, but ordering is by dispatch
+     * only: both are separate coroutines on the main scope, and backpressure on a
+     * client's channel can let the state frame arrive first. That is safe, because
+     * remote clients consume the two independently — the buzzer reacts to the
+     * event, the display to the state, and neither waits for the other.
      */
     private fun broadcastPhaseComplete(completedPhase: String) {
         serviceScope.launch {
