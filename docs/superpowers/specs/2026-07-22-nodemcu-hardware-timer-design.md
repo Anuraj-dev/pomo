@@ -354,8 +354,12 @@ Android unit-testable:
 
 - `PomoServiceAdvertiser` register/unregister idempotency against a fake
   `NsdManager` wrapper.
-- `PhoneServer.broadcastEvent` frame shape.
-- A regression test that `desktop-client/` state parsing ignores `type: event`.
+- `PhoneServer.broadcastEvent` frame shape, and that an event frame is
+  structurally distinguishable from a state frame.
+
+`desktop-client/` needs no regression test: it polls REST and opens no
+WebSocket, so it cannot observe the new frame. Confirm with a grep for
+`WebSocket` under `desktop-client/src/` before merging rather than assuming it.
 
 Firmware is verified on real hardware — there is no emulator worth the effort:
 
