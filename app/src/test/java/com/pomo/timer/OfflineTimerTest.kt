@@ -23,13 +23,18 @@ public class OfflineTimerTest {
     private class RecordingObserver : TimerObserver {
         public val updates: MutableList<TimerState> = mutableListOf()
         public val completions: MutableList<TimerState> = mutableListOf()
+        public val completedPhases: MutableList<String> = mutableListOf()
 
         override fun onTimerUpdate(state: TimerState) {
             updates += state.copy()
         }
 
-        override fun onTimerComplete(state: TimerState) {
+        override fun onTimerComplete(
+            state: TimerState,
+            completedPhase: String,
+        ) {
             completions += state.copy()
+            completedPhases += completedPhase
         }
     }
 
@@ -298,5 +303,6 @@ public class OfflineTimerTest {
             assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
             assertEquals(300.0, timer.state.remaining, 0.001)
             assertEquals(1, observer.completions.size)
+            assertEquals(TimerState.PHASE_WORK, observer.completedPhases.single())
         }
 }

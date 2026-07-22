@@ -332,8 +332,10 @@ public class PomodoroService : Service(), TimerObserver {
         broadcastStateUpdate()
     }
 
-    override fun onTimerComplete(state: TimerState) {
-        val completedPhase = currentState.phase
+    override fun onTimerComplete(
+        state: TimerState,
+        completedPhase: String,
+    ) {
         this.currentState = state
         saveCurrentState()
         updateNotification()
