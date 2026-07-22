@@ -158,6 +158,8 @@ private fun groupSettings(items: List<SettingsItem>): List<SettingsGroup> {
 public fun SettingsScreen(
     sharedPreferences: SharedPreferences,
     items: List<SettingsItem>,
+    title: String = "Settings",
+    backContentDescription: String = "Back",
     showUpdateSection: Boolean = false,
     onBack: (() -> Unit)? = null,
 ) {
@@ -177,7 +179,7 @@ public fun SettingsScreen(
                 IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back to profile",
+                        contentDescription = backContentDescription,
                         tint = MaterialTheme.colorScheme.onSurface,
                     )
                 }
@@ -186,7 +188,7 @@ public fun SettingsScreen(
                 Spacer(Modifier.width(12.dp))
             }
             Text(
-                "Settings",
+                title,
                 style = MaterialTheme.typography.displayMedium,
                 color = MaterialTheme.colorScheme.onSurface,
             )
