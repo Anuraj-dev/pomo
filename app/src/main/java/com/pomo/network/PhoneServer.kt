@@ -144,14 +144,32 @@ public class PhoneServer(
     }
 
     public suspend fun broadcastState() {
-        val message = stateMessage()
+        sendToAll(stateMessage())
+    }
+
+    /**
+     * Sends a one-shot event frame to every subscribed client.
+     *
+     * Events describe things that happened, not current state — a hardware
+     * client cannot tell a natural phase completion from a manual skip using
+     * state snapshots alone. Clients that do not recognise the frame type
+     * ignore it, so this is safe to add to an existing protocol.
+     */
+    public suspend fun broadcastEvent(
+        event: String,
+        phase: String,
+    ) {
+        sendToAll(PhoneMessages.event(gson, event, phase))
+    }
+
+    private suspend fun sendToAll(message: String) {
         val deadSessions = mutableListOf<DefaultWebSocketServerSession>()
         val activeSessions = synchronized(sessionsLock) { sessions.toList() }
 
         activeSessions.forEach { session ->
             try {
                 session.send(Frame.Text(message))
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 deadSessions.add(session)
             }
         }

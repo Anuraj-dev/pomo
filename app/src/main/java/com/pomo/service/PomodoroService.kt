@@ -21,6 +21,7 @@ import com.pomo.cues.CueVariant
 import com.pomo.cues.StateCueEngine
 import com.pomo.cues.StateCueEvent
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.network.PhoneMessages
 import com.pomo.network.PhoneServer
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
@@ -336,6 +337,7 @@ public class PomodoroService : Service(), TimerObserver {
         this.currentState = state
         saveCurrentState()
         updateNotification()
+        broadcastPhaseComplete(completedPhase)
         broadcastStateUpdate()
         StateCueEvent.forCompletedPhase(completedPhase)?.let { cueEngine.playCompletion(it) }
         if (completedPhase == TimerState.PHASE_WORK) {
@@ -398,6 +400,17 @@ public class PomodoroService : Service(), TimerObserver {
         TimerWidgetProvider.updateAllWidgets(this, currentState)
         serviceScope.launch {
             phoneServer.broadcastState()
+        }
+    }
+
+    /**
+     * Tells remote clients a phase ended on its own, before the state broadcast
+     * that follows. Hardware clients ring on this and stay silent on skip or
+     * reset, which a state snapshot alone cannot distinguish.
+     */
+    private fun broadcastPhaseComplete(completedPhase: String) {
+        serviceScope.launch {
+            phoneServer.broadcastEvent(PhoneMessages.EVENT_PHASE_COMPLETE, completedPhase)
         }
     }
 
