@@ -114,3 +114,6 @@ icon_*.png
 
 # local recovery reference APK (do not commit)
 base.apk
+
+# Firmware credentials (copy secrets.h.example and fill in locally)
+firmware/PomoLink/secrets.h
