@@ -12,9 +12,9 @@ public interface TimerObserver {
      *
      * [state] has ALREADY advanced to the next phase by the time this fires, so
      * `state.phase` is the phase that is starting. [completedPhase] is the phase
-     * that just ended — callers that need to describe what finished (completion
-     * cues, history attribution, the `phase_complete` broadcast) must use
-     * [completedPhase], never `state.phase`.
+     * that just ended — callers that need to name what finished (completion
+     * cues, the `phase_complete` broadcast, or any future consumer that
+     * describes what finished) must use [completedPhase], never `state.phase`.
      */
     public fun onTimerComplete(
         state: TimerState,

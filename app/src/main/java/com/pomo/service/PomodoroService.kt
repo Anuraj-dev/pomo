@@ -410,11 +410,13 @@ public class PomodoroService : Service(), TimerObserver {
      * and stay silent on skip or reset, which a state snapshot alone cannot
      * distinguish — that distinction is the whole reason the event exists.
      *
-     * This is dispatched before the state broadcast, but ordering is by dispatch
-     * only: both are separate coroutines on the main scope, and backpressure on a
-     * client's channel can let the state frame arrive first. That is safe, because
-     * remote clients consume the two independently — the buzzer reacts to the
-     * event, the display to the state, and neither waits for the other.
+     * This is dispatched before the state broadcast, but the two are independent,
+     * fire-and-forget coroutines with no joint failure handling: a dead-session
+     * drop can deliver one frame and not the other. Dispatch order is not a
+     * delivery guarantee, so remote clients must treat the event and the state
+     * snapshot as independent rather than assuming they arrive as a pair — the
+     * buzzer reacts to the event, the display to the state, and neither waits
+     * for the other.
      */
     private fun broadcastPhaseComplete(completedPhase: String) {
         serviceScope.launch {
