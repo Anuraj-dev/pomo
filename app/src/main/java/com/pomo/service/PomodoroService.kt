@@ -23,6 +23,7 @@ import com.pomo.cues.StateCueEvent
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneMessages
 import com.pomo.network.PhoneServer
+import com.pomo.network.PomoServiceAdvertiser
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
 import com.pomo.timer.OfflineTimer
@@ -50,6 +51,7 @@ public class PomodoroService : Service(), TimerObserver {
     private var currentState: TimerState = TimerState()
     private lateinit var phoneServer: PhoneServer
     private var activePhoneServerPort: Int = PhoneServer.DEFAULT_PORT
+    private lateinit var serviceAdvertiser: PomoServiceAdvertiser
     private lateinit var cueEngine: StateCueEngine
     private lateinit var crewRepository: CrewRepository
     private lateinit var alertsNotifier: AlertsNotifier
@@ -117,6 +119,7 @@ public class PomodoroService : Service(), TimerObserver {
         offlineTimer = OfflineTimer(this, prefs, historyCacheRepository, serviceScope)
         activePhoneServerPort = prefs.phoneServerPort
         phoneServer = PhoneServer(this, activePhoneServerPort)
+        serviceAdvertiser = PomoServiceAdvertiser.forContext(this)
 
         val savedState = prefs.loadTimerState()
         var shouldCompleteRestoredTimer = false
@@ -243,6 +246,9 @@ public class PomodoroService : Service(), TimerObserver {
             Log.w(TAG, "Failed to unregister network callback", e)
         }
         serviceScope.cancel()
+        // Unregister the advertisement before killing the server, so a client never
+        // resolves a record pointing at a socket that has already closed.
+        serviceAdvertiser.stop()
         phoneServer.stop()
         cueEngine.release()
     }
@@ -631,17 +637,30 @@ public class PomodoroService : Service(), TimerObserver {
         val newPort = prefs.phoneServerPort
         val shouldServe = isPhoneServerServing
         if (!shouldServe) {
+            serviceAdvertiser.stop()
             phoneServer.stop()
             return
         }
 
-        if (newPort == activePhoneServerPort && phoneServer.isRunning) return
+        if (newPort == activePhoneServerPort && phoneServer.isRunning) {
+            // Already serving on the right port. Still call advertise() — it is
+            // idempotent, and this covers the case where the server survived but
+            // mDNS registration previously failed.
+            serviceAdvertiser.advertise(activePhoneServerPort)
+            return
+        }
 
         Log.d(TAG, "Restarting phone API on port $newPort")
+        serviceAdvertiser.stop()
         phoneServer.stop()
         activePhoneServerPort = newPort
         phoneServer = PhoneServer(this, activePhoneServerPort)
         phoneServer.start()
+        // start() swallows a failed bind and leaves the server down. Advertising a
+        // port nothing is listening on would send clients to a dead socket.
+        if (phoneServer.isRunning) {
+            serviceAdvertiser.advertise(activePhoneServerPort)
+        }
     }
 
     public fun rotatePairingToken(): String {
@@ -649,10 +668,14 @@ public class PomodoroService : Service(), TimerObserver {
         // Force a full stop+start so existing WebSocket clients are disconnected and
         // must re-pair with the new token. restartPhoneServerIfNeeded() skips the
         // restart when the port is unchanged and the server is already running.
+        serviceAdvertiser.stop()
         phoneServer.stop()
         if (isPhoneServerServing) {
             phoneServer = PhoneServer(this, activePhoneServerPort)
             phoneServer.start()
+            if (phoneServer.isRunning) {
+                serviceAdvertiser.advertise(activePhoneServerPort)
+            }
         }
         broadcastStateUpdate()
         return token
