@@ -10,10 +10,17 @@ import android.util.Log
  * so the registration state machine can be tested without the Android framework.
  */
 public interface NsdRegistrar {
+    /**
+     * Starts registering the service. Registration is two-phase: an implementation
+     * accepts the request synchronously and may only learn that it failed afterwards,
+     * so a normal return is not success. [onFailed] reports that asynchronous failure
+     * and must not be invoked from inside this call.
+     */
     public fun register(
         serviceName: String,
         serviceType: String,
         port: Int,
+        onFailed: () -> Unit,
     )
 
     public fun unregister()
@@ -28,13 +35,20 @@ public interface NsdRegistrar {
  * failures are logged and swallowed so a non-critical feature can never take
  * the timer down.
  *
- * Not thread-safe by itself. [PomodoroService] drives it from the service
- * lifecycle and its config-change path, both on the main thread.
+ * Not thread-safe by itself. There are three paths that mutate its state and all
+ * of them are the main thread: [PomodoroService] drives it from the service
+ * lifecycle and from its config-change path, and NsdManager delivers registration
+ * callbacks on the main looper. Handing the registrar an NsdManager driven off a
+ * different looper (or the API 31+ executor overload) would break that and require
+ * real synchronisation here.
  */
 public class PomoServiceAdvertiser(
     private val registrar: NsdRegistrar,
 ) {
     private var advertisedPort: Int? = null
+
+    /** Identifies the live registration, so a late failure from a superseded one can be ignored. */
+    private var registrationGeneration: Int = 0
 
     public val isAdvertising: Boolean
         get() = advertisedPort != null
@@ -44,8 +58,18 @@ public class PomoServiceAdvertiser(
         if (advertisedPort == port) return
         if (advertisedPort != null) stop()
 
+        val generation = ++registrationGeneration
         try {
-            registrar.register(SERVICE_NAME, SERVICE_TYPE, port)
+            registrar.register(SERVICE_NAME, SERVICE_TYPE, port) {
+                // The failure is reported after register() returned, so a later
+                // advertise() may already have superseded this registration. Compare
+                // generations rather than ports: the same port can be re-registered,
+                // and that newer registration is not ours to clear.
+                if (registrationGeneration == generation) {
+                    advertisedPort = null
+                    Log.w(TAG, "mDNS registration failed asynchronously on port $port")
+                }
+            }
             advertisedPort = port
             Log.d(TAG, "Advertising $SERVICE_NAME ($SERVICE_TYPE) on port $port")
         } catch (e: Exception) {
@@ -80,6 +104,7 @@ public class PomoServiceAdvertiser(
             serviceName: String,
             serviceType: String,
             port: Int,
+            onFailed: () -> Unit,
         ) {
             val info =
                 NsdServiceInfo().apply {
@@ -98,6 +123,13 @@ public class PomoServiceAdvertiser(
                         errorCode: Int,
                     ) {
                         Log.w(TAG, "mDNS registration failed, code $errorCode")
+                        // Drop the dead listener so a later unregister cannot pass it
+                        // on: unregisterService with a listener whose registration
+                        // never succeeded throws IllegalArgumentException. Only when
+                        // it is still the current one, because this failure may
+                        // belong to a registration that was already superseded.
+                        if (listener === this) listener = null
+                        onFailed()
                     }
 
                     override fun onServiceUnregistered(info: NsdServiceInfo) {
