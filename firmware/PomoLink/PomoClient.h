@@ -44,8 +44,15 @@ class PomoClient {
 
   String host_;
   uint16_t port_ = 0;
+  // Any contact at all, REST included — keeps the display honest.
   unsigned long lastContactAt_ = 0;
+  // WebSocket frames only. A REST poll must not vouch for the socket, or a
+  // half-open socket could never be detected while REST still answers.
+  unsigned long lastSocketContactAt_ = 0;
   unsigned long lastPollAt_ = 0;
-  unsigned long retryAfter_ = 0;
+  // Start-plus-interval rather than an absolute deadline: comparing millis()
+  // against a stored deadline breaks across the ~49.7-day rollover.
+  unsigned long retryStartedAt_ = 0;
+  unsigned long retryDelayMs_ = 0;
   uint8_t retryCount_ = 0;
 };

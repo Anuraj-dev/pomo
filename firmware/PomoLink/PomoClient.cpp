@@ -5,8 +5,23 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266mDNS.h>
 #include <WebSocketsClient.h>
+#include <string.h>
 
 #include "secrets.h"
+
+// KNOWN LIMITATION — this client is not actually non-blocking.
+//
+// HTTPClient::GET/POST, MDNS.queryService() and the TCP connect that happens
+// inside WebSocketsClient::loop() are all synchronous. When the phone is
+// unreachable, loop() can stall for roughly kHttpTimeoutMs on a poll or a
+// command, plus the mDNS query time on a rediscovery pass. During that stall
+// the buzzer, the button debounce and the display do not advance.
+//
+// This is accepted deliberately rather than overlooked: the timeouts below are
+// kept short so the worst-case stall stays sub-second-ish and the UI only
+// hitches rather than freezing. Making it genuinely non-blocking means
+// replacing HTTPClient with an async TCP state machine (ESPAsyncTCP), which is
+// a larger change than the first flash warrants.
 
 namespace {
 
@@ -14,7 +29,11 @@ const unsigned long kPollIntervalMs = 30000;
 const unsigned long kStaleAfterMs = 45000;
 const unsigned long kBaseRetryMs = 1000;
 const unsigned long kMaxRetryMs = 30000;
-const uint16_t kHttpTimeoutMs = 4000;
+// A 401 must not brick the device: a rogue LAN responder could answer the mDNS
+// query and reject us forever. Re-discover after this long instead.
+const unsigned long kUnpairedRetryMs = 300000;  // 5 minutes
+// Short on purpose — see the blocking note above.
+const uint16_t kHttpTimeoutMs = 1500;
 
 WebSocketsClient webSocket;
 PomoClient* activeClient = nullptr;
@@ -43,11 +62,14 @@ void PomoClient::scheduleRetry() {
   unsigned long backoff = kBaseRetryMs << (retryCount_ < 5 ? retryCount_ : 5);
   if (backoff > kMaxRetryMs) backoff = kMaxRetryMs;
   if (retryCount_ < 5) retryCount_++;
-  retryAfter_ = millis() + backoff;
+  retryStartedAt_ = millis();
+  retryDelayMs_ = backoff;
 }
 
 void PomoClient::tick() {
-  webSocket.loop();
+  // Not pumped while unpaired: the socket would otherwise keep auto-reconnecting
+  // and re-sending the token the phone has already rejected.
+  if (state_ != CONN_UNPAIRED) webSocket.loop();
 
   switch (state_) {
     case CONN_BOOT:
@@ -68,8 +90,18 @@ void PomoClient::tick() {
       tickHeartbeat();
       break;
     case CONN_UNPAIRED:
-      // Terminal until reflashed with a valid token. Retrying would only
-      // hammer the phone's unauthorized rate limiter.
+      // Not terminal, but deliberately slow. A 401 from a rogue mDNS responder
+      // must not brick the device, so after kUnpairedRetryMs we re-discover and
+      // may find the real phone. A genuinely rotated token simply 401s again
+      // five minutes later, which is a slow blink of '?' on the LCD rather than
+      // hammering the phone's unauthorized rate limiter — and still tells the
+      // user to reflash.
+      if (millis() - retryStartedAt_ >= retryDelayMs_) {
+        Serial.println("[PomoClient] unpaired cooldown over, re-discovering");
+        retryCount_ = 0;
+        retryDelayMs_ = 0;
+        setState(CONN_DISCOVERING);
+      }
       break;
   }
 }
@@ -83,7 +115,7 @@ void PomoClient::tickWifi() {
     Serial.println("[PomoClient] mDNS responder failed to start");
   }
   retryCount_ = 0;
-  retryAfter_ = 0;
+  retryDelayMs_ = 0;
   setState(CONN_DISCOVERING);
 }
 
@@ -92,22 +124,29 @@ void PomoClient::tickDiscovery() {
     setState(CONN_WIFI);
     return;
   }
-  if (millis() < retryAfter_) return;
+  if (retryDelayMs_ != 0 && millis() - retryStartedAt_ < retryDelayMs_) return;
 
-  MDNS.update();
-  const int found = MDNS.queryService("pomo", "tcp");
-  if (found > 0) {
-    host_ = MDNS.IP(0).toString();
-    port_ = MDNS.port(0);
-    Serial.printf("[PomoClient] discovered %s:%u\n", host_.c_str(), port_);
-  } else if (strlen(POMO_HOST_FALLBACK) > 0) {
+  // A configured host wins outright. mDNS hands the pairing token to whatever
+  // answers _pomo._tcp first, and a bearer token cannot authenticate the server
+  // it is sent to — so pinning the host in secrets.h is the way to opt out of
+  // trusting the LAN, not merely a fallback for routers that block multicast.
+  if (strlen(POMO_HOST_FALLBACK) > 0) {
     host_ = POMO_HOST_FALLBACK;
     port_ = POMO_PORT_FALLBACK;
-    Serial.printf("[PomoClient] mDNS miss, using fallback %s:%u\n", host_.c_str(), port_);
+    Serial.printf("[PomoClient] using configured host %s:%u (mDNS not queried)\n",
+                  host_.c_str(), port_);
   } else {
-    Serial.println("[PomoClient] mDNS miss, no fallback configured");
-    scheduleRetry();
-    return;
+    MDNS.update();
+    const int found = MDNS.queryService("pomo", "tcp");
+    if (found <= 0) {
+      Serial.println("[PomoClient] mDNS miss, no configured host");
+      scheduleRetry();
+      return;
+    }
+    host_ = MDNS.IP(0).toString();
+    port_ = MDNS.port(0);
+    Serial.printf("[PomoClient] discovered %s:%u via mDNS (first of %d responders)\n",
+                  host_.c_str(), port_, found);
   }
 
   webSocket.begin(host_, port_, "/ws");
@@ -124,6 +163,9 @@ void PomoClient::tickDiscovery() {
   webSocket.setReconnectInterval(kMaxRetryMs);
 
   lastContactAt_ = millis();
+  // Seeded too, so the socket gets a full kStaleAfterMs window to make its
+  // first connection instead of timing out on the very next heartbeat.
+  lastSocketContactAt_ = lastContactAt_;
   lastPollAt_ = 0;
   setState(CONN_CONNECTING);
 }
@@ -143,12 +185,14 @@ void PomoClient::tickHeartbeat() {
   if (now - lastPollAt_ >= kPollIntervalMs) {
     lastPollAt_ = now;
     if (fetchStatus()) {
+      // Deliberately does NOT promote to CONN_SYNCED and does NOT touch
+      // lastSocketContactAt_. REST answering proves the phone is alive, not
+      // that the socket is; only a socket frame earns the synced marker.
       lastContactAt_ = now;
-      if (state_ != CONN_UNPAIRED) setState(CONN_SYNCED);
     }
   }
 
-  if (state_ != CONN_UNPAIRED && (now - lastContactAt_) >= kStaleAfterMs) {
+  if (state_ != CONN_UNPAIRED && (now - lastSocketContactAt_) >= kStaleAfterMs) {
     Serial.println("[PomoClient] no contact, going offline");
     webSocket.disconnect();
     scheduleRetry();
@@ -160,6 +204,10 @@ void PomoClient::tickHeartbeat() {
 }
 
 void PomoClient::onWebSocketText(const char* payload, size_t length) {
+  // A frame that arrives after the token was rejected must not resurrect the
+  // connection or silently re-enable commands.
+  if (state_ == CONN_UNPAIRED) return;
+
   JsonDocument doc;
   const DeserializationError error = deserializeJson(doc, payload, length);
   if (error) {
@@ -169,6 +217,7 @@ void PomoClient::onWebSocketText(const char* payload, size_t length) {
 
   const char* type = doc["type"] | "";
   lastContactAt_ = millis();
+  lastSocketContactAt_ = lastContactAt_;
 
   if (strcmp(type, "state") == 0) {
     JsonObject data = doc["data"];
@@ -210,6 +259,9 @@ bool PomoClient::fetchStatus() {
   if (code == 401) {
     Serial.println("[PomoClient] token rejected");
     http.end();
+    webSocket.disconnect();
+    retryStartedAt_ = millis();
+    retryDelayMs_ = kUnpairedRetryMs;
     setState(CONN_UNPAIRED);
     return false;
   }
@@ -246,6 +298,10 @@ bool PomoClient::postCommand(const char* path, const char* body) {
   http.end();
 
   if (code == 401) {
+    Serial.println("[PomoClient] token rejected");
+    webSocket.disconnect();
+    retryStartedAt_ = millis();
+    retryDelayMs_ = kUnpairedRetryMs;
     setState(CONN_UNPAIRED);
     return false;
   }

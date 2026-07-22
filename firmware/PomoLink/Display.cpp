@@ -52,9 +52,18 @@ void Display::render(const TimerModel& model, ConnState conn) {
     // Idle shows the configured phase length rather than a zeroed countdown.
     seconds = (long)model.duration();
   }
-  const long minutes = seconds / 60;
+  long minutes = seconds / 60;
   const long secs = seconds % 60;
-  snprintf(row0, sizeof(row0), "%-11s%02ld:%02ld", phaseLabel(model), minutes, secs);
+  // %02ld is a MINIMUM width, so a three-digit minute count would push the row
+  // to 17 characters and snprintf would drop the last digit. /api/extend is
+  // uncapped, so this is reachable. Borrow a column from the label instead.
+  // Both branches produce exactly 16 characters.
+  if (minutes > 999) minutes = 999;
+  if (minutes > 99) {
+    snprintf(row0, sizeof(row0), "%-10s%3ld:%02ld", phaseLabel(model), minutes, secs);
+  } else {
+    snprintf(row0, sizeof(row0), "%-11s%02ld:%02ld", phaseLabel(model), minutes, secs);
+  }
 
   // Row 1: progress left, connection marker at column 15.
   char left[16];

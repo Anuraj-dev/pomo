@@ -6,6 +6,8 @@
 //
 // See firmware/README.md for wiring, libraries and flashing steps.
 
+#include <string.h>
+
 #include "Buttons.h"
 #include "Buzzer.h"
 #include "Display.h"
@@ -16,6 +18,11 @@ namespace {
 
 const uint8_t kButtonPin = 0;   // GPIO0, the onboard FLASH button
 const uint8_t kBuzzerPin = D5;
+
+// Declared before use so the Arduino builder does not synthesise a conflicting
+// global prototype for it — the generated declaration would be ambiguous with
+// this anonymous-namespace definition at the point it is taken as a pointer.
+void onPhaseComplete(const char* phase);
 
 TimerModel model;
 Display display;

@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <string.h>
 
 enum ConnState {
   CONN_BOOT,
