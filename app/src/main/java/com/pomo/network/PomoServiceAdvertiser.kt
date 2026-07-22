@@ -15,15 +15,15 @@ public interface NsdRegistrar {
      *
      * Registrations are handed back individually because NsdManager identifies one by
      * the listener instance it was given: tearing a registration down needs that exact
-     * instance, and there may be more than one in flight at a time.
+     * instance, and a superseded registration can still be in flight when the next one
+     * starts.
      */
     public interface Registration {
         /**
          * Asks the framework to tear this registration down.
          *
-         * Throws when the registration has not finished coming up yet — NsdManager
-         * rejects `unregisterService` for a listener whose registration never
-         * completed — so callers must tolerate that and keep the handle.
+         * May throw when the registration has not come up yet, and may fail
+         * asynchronously. Callers must tolerate both.
          */
         public fun unregister()
     }
@@ -32,19 +32,18 @@ public interface NsdRegistrar {
      * Starts registering the service and returns a handle to it.
      *
      * Registration is two-phase: an implementation accepts the request synchronously
-     * and may only learn the outcome afterwards, so a normal return is not success.
+     * and only learns the outcome afterwards, so a normal return is not success.
      * Neither callback may be invoked from inside this call.
      *
-     * Both callbacks are terminal — once either fires the framework is finished with
-     * that handle and it can be dropped. [onFailed] means the registration never came
-     * up, [onUnregistered] that it was torn down.
+     * [onRegistered] means the service is now published and answering queries.
+     * [onFailed] means it never came up and the handle is dead.
      */
     public fun register(
         serviceName: String,
         serviceType: String,
         port: Int,
+        onRegistered: (Registration) -> Unit,
         onFailed: (Registration) -> Unit,
-        onUnregistered: (Registration) -> Unit,
     ): Registration
 }
 
@@ -57,12 +56,13 @@ public interface NsdRegistrar {
  * failures are logged and swallowed so a non-critical feature can never take
  * the timer down.
  *
- * Nothing here tries to decide which registration is "the current one" inside the
- * registrar. Every handle the framework has accepted and not yet reported as
- * finished is kept in [outstanding], and each one removes itself when its terminal
- * callback arrives; [stop] tears down all of them. That is what makes a registration
- * cancelled while still pending recoverable: the framework rejects the teardown, the
- * handle stays, and the next [stop] tries again.
+ * At most one registration is ever wanted, so at most one is tracked — [live]. The
+ * complication is that a registration can be superseded or stopped while it is still
+ * coming up, and a teardown asked for at that point may not take. Rather than track
+ * which teardowns were refused and retry them, a registration that comes up when it is
+ * no longer [live] tears itself down on the spot. That needs no retry bookkeeping and
+ * holds whether or not the framework accepts a teardown of a pending registration —
+ * which is not something this code can observe.
  *
  * Not thread-safe by itself. There are three paths that mutate its state and all
  * of them are the main thread: [PomodoroService] drives it from the service
@@ -80,9 +80,6 @@ public class PomoServiceAdvertiser(
         val registration: NsdRegistrar.Registration,
     )
 
-    /** Every handle the framework has accepted and not yet reported as finished with. */
-    private val outstanding = mutableListOf<NsdRegistrar.Registration>()
-
     private var live: LiveRegistration? = null
 
     public val isAdvertising: Boolean
@@ -98,21 +95,29 @@ public class PomoServiceAdvertiser(
                     serviceName = SERVICE_NAME,
                     serviceType = SERVICE_TYPE,
                     port = port,
+                    onRegistered = { registered ->
+                        // Coming up while no longer live means this registration was
+                        // superseded or stopped while it was still pending, so the
+                        // teardown asked for back then could not take. Take it down now,
+                        // or it answers queries for a port nothing is listening on until
+                        // the process dies.
+                        if (live?.registration !== registered) {
+                            Log.d(TAG, "Tearing down a superseded registration on port $port")
+                            tearDown(registered)
+                        }
+                    },
                     onFailed = { failed ->
-                        outstanding.remove(failed)
                         // The failure is reported after register() returned, so a later
                         // advertise() may already have superseded this registration.
-                        // Only the live one clears the port; identity settles that
-                        // without a generation counter, and the same port being
-                        // re-registered by a newer attempt cannot be confused for it.
+                        // Identity settles that without a generation counter, and unlike
+                        // a port comparison it cannot confuse a newer registration that
+                        // happens to use the same port.
                         if (live?.registration === failed) {
                             live = null
                             Log.w(TAG, "mDNS registration failed asynchronously on port $port")
                         }
                     },
-                    onUnregistered = { gone -> outstanding.remove(gone) },
                 )
-            outstanding.add(registration)
             live = LiveRegistration(port, registration)
             Log.d(TAG, "Advertising $SERVICE_NAME ($SERVICE_TYPE) on port $port")
         } catch (e: Exception) {
@@ -123,17 +128,18 @@ public class PomoServiceAdvertiser(
     }
 
     public fun stop() {
+        val current = live ?: return
         live = null
-        // Tear down everything still outstanding, not just the live one: a registration
-        // that was superseded while still pending had its teardown rejected and is still
-        // held here, and this is the only handle that can ever take it down. Each attempt
-        // is wrapped on its own so one rejection cannot skip the rest.
-        for (registration in outstanding.toList()) {
-            try {
-                registration.unregister()
-            } catch (e: Exception) {
-                Log.w(TAG, "mDNS unregistration failed: ${e.message}")
-            }
+        tearDown(current.registration)
+    }
+
+    private fun tearDown(registration: NsdRegistrar.Registration) {
+        try {
+            registration.unregister()
+        } catch (e: Exception) {
+            // Refused because the registration had not come up yet. onRegistered takes
+            // it down when it does.
+            Log.w(TAG, "mDNS unregistration refused: ${e.message}")
         }
     }
 
@@ -149,8 +155,8 @@ public class PomoServiceAdvertiser(
             serviceName: String,
             serviceType: String,
             port: Int,
+            onRegistered: (NsdRegistrar.Registration) -> Unit,
             onFailed: (NsdRegistrar.Registration) -> Unit,
-            onUnregistered: (NsdRegistrar.Registration) -> Unit,
         ): NsdRegistrar.Registration {
             val serviceInfo =
                 NsdServiceInfo().apply {
@@ -168,6 +174,7 @@ public class PomoServiceAdvertiser(
 
                     override fun onServiceRegistered(info: NsdServiceInfo) {
                         Log.d(TAG, "mDNS registered as ${info.serviceName}")
+                        onRegistered(this)
                     }
 
                     override fun onRegistrationFailed(
@@ -180,20 +187,18 @@ public class PomoServiceAdvertiser(
 
                     override fun onServiceUnregistered(info: NsdServiceInfo) {
                         Log.d(TAG, "mDNS unregistered")
-                        onUnregistered(this)
                     }
 
                     override fun onUnregistrationFailed(
                         info: NsdServiceInfo,
                         errorCode: Int,
                     ) {
-                        // Not terminal: the advertiser keeps the handle, so the next
-                        // stop() or port change takes another run at it.
+                        // Terminal: NsdManager drops the listener before reporting this,
+                        // so the handle is dead and asking again cannot help. The record
+                        // may outlive us, which is why nothing here retries.
                         Log.w(TAG, "mDNS unregistration failed, code $errorCode")
                     }
                 }
-            // Added to the caller's outstanding set only once the framework has taken
-            // it, so a synchronous throw here retains nothing.
             nsdManager.registerService(serviceInfo, NsdManager.PROTOCOL_DNS_SD, registration)
             return registration
         }

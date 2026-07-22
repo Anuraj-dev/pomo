@@ -8,9 +8,9 @@ import org.junit.Test
 public class PomoServiceAdvertiserTest {
     /**
      * Models NsdManager's two-phase contract: `register` accepts and returns, and the
-     * registration only comes up, fails, or goes away when a test says so. Teardown of a
-     * registration that has not come up yet is rejected, exactly as NsdManager rejects
-     * `unregisterService` for a listener whose registration never completed.
+     * registration only comes up or fails when a test says so. Teardown of a registration
+     * that has not come up yet is refused, which is the case the advertiser has to survive
+     * without leaking a record.
      */
     private class FakeRegistrar : NsdRegistrar {
         val calls: MutableList<String> = mutableListOf()
@@ -25,52 +25,51 @@ public class PomoServiceAdvertiserTest {
             serviceName: String,
             serviceType: String,
             port: Int,
+            onRegistered: (NsdRegistrar.Registration) -> Unit,
             onFailed: (NsdRegistrar.Registration) -> Unit,
-            onUnregistered: (NsdRegistrar.Registration) -> Unit,
         ): NsdRegistrar.Registration {
             if (failNextRegister) {
                 failNextRegister = false
                 throw IllegalStateException("nsd unavailable")
             }
             calls.add("register:$serviceName:$serviceType:$port")
-            val registration = FakeRegistration(port, onFailed, onUnregistered)
+            val registration = FakeRegistration(port, onRegistered, onFailed)
             accepted.add(registration)
             return registration
         }
 
         inner class FakeRegistration(
             val port: Int,
+            private val onRegistered: (NsdRegistrar.Registration) -> Unit,
             private val onFailed: (NsdRegistrar.Registration) -> Unit,
-            private val onUnregistered: (NsdRegistrar.Registration) -> Unit,
         ) : NsdRegistrar.Registration {
             private var cameUp: Boolean = false
-            private var teardownAccepted: Boolean = false
+            private var tornDown: Boolean = false
 
             /** True while the framework would still be answering queries for this record. */
             val isPublished: Boolean
-                get() = cameUp && !teardownAccepted
+                get() = cameUp && !tornDown
 
             override fun unregister() {
                 calls.add("unregister:$port")
                 if (!cameUp) {
                     throw IllegalArgumentException("listener not registered")
                 }
-                teardownAccepted = true
+                tornDown = true
             }
 
-            /** The framework reports the service came up. */
+            /**
+             * The framework reports the service came up. The record is live before the
+             * callback runs, so a teardown driven from inside it succeeds.
+             */
             fun comeUp() {
                 cameUp = true
+                onRegistered(this)
             }
 
             /** The framework reports the registration failed, after `register` returned. */
             fun failAsync() {
                 onFailed(this)
-            }
-
-            /** The framework confirms the teardown. */
-            fun confirmUnregistered() {
-                onUnregistered(this)
             }
         }
     }
@@ -104,6 +103,7 @@ public class PomoServiceAdvertiserTest {
         registrar.accepted[0].comeUp()
         advertiser.advertise(9999)
 
+        // Coming up as the live registration must not tear itself down.
         assertEquals(
             listOf(
                 "register:Pomo:_pomo._tcp:9876",
@@ -115,7 +115,7 @@ public class PomoServiceAdvertiserTest {
     }
 
     @Test
-    public fun stop_unregistersOnlyWhatIsOutstanding() {
+    public fun stop_unregistersTheLiveRegistrationOnce() {
         val registrar = FakeRegistrar()
         val advertiser = PomoServiceAdvertiser(registrar)
 
@@ -127,9 +127,7 @@ public class PomoServiceAdvertiserTest {
         advertiser.stop()
         assertFalse(advertiser.isAdvertising)
 
-        // Once the framework confirms the teardown the handle is gone, so a second
-        // stop() has nothing left to take down.
-        registrar.accepted[0].confirmUnregistered()
+        // Nothing is live any more, so a second stop() must not poke a dead handle.
         advertiser.stop()
 
         assertEquals(
@@ -168,17 +166,12 @@ public class PomoServiceAdvertiserTest {
         advertiser.advertise(9876)
         assertTrue(advertiser.isAdvertising)
 
-        registrar.accepted[1].comeUp()
-        advertiser.stop()
-
         // Re-registered with no unregister in between: the failed registration was never
-        // live, so there was nothing to tear down. It is also dropped, so the later stop()
-        // does not try to unregister it.
+        // live by the time it was retried, so there was nothing to tear down.
         assertEquals(
             listOf(
                 "register:Pomo:_pomo._tcp:9876",
                 "register:Pomo:_pomo._tcp:9876",
-                "unregister:9876",
             ),
             registrar.calls,
         )
@@ -232,9 +225,6 @@ public class PomoServiceAdvertiserTest {
                 "register:Pomo:_pomo._tcp:9876",
                 "unregister:9876",
                 "register:Pomo:_pomo._tcp:9999",
-                // Neither earlier registration had come up, so both teardowns are
-                // rejected and both handles are kept.
-                "unregister:9876",
                 "unregister:9999",
                 "register:Pomo:_pomo._tcp:9876",
             ),
@@ -243,35 +233,52 @@ public class PomoServiceAdvertiserTest {
     }
 
     @Test
-    public fun advertise_supersededPendingRegistrationThatComesUpIsStillTornDown() {
+    public fun advertise_supersededPendingRegistrationIsTornDownWhenItComesUp() {
         val registrar = FakeRegistrar()
         val advertiser = PomoServiceAdvertiser(registrar)
 
         // 9876 is accepted but has not come up when the port changes, so the framework
-        // rejects its teardown.
+        // refuses its teardown.
         advertiser.advertise(9876)
         advertiser.advertise(9999)
 
-        val first = registrar.accepted[0]
-        val second = registrar.accepted[1]
+        // It comes up anyway, after it was already superseded.
+        registrar.accepted[0].comeUp()
 
-        // Both come up afterwards, including the one that was already cancelled.
-        first.comeUp()
-        second.comeUp()
-        assertEquals(listOf(first, second), registrar.published)
-
-        advertiser.stop()
-
-        // The superseded registration was still reachable, so nothing is left published.
         assertTrue(registrar.published.isEmpty())
-        assertFalse(advertiser.isAdvertising)
+        assertTrue(advertiser.isAdvertising)
         assertEquals(
             listOf(
                 "register:Pomo:_pomo._tcp:9876",
                 "unregister:9876",
                 "register:Pomo:_pomo._tcp:9999",
                 "unregister:9876",
-                "unregister:9999",
+            ),
+            registrar.calls,
+        )
+    }
+
+    @Test
+    public fun stop_pendingRegistrationThatComesUpAfterwardsIsTornDown() {
+        val registrar = FakeRegistrar()
+        val advertiser = PomoServiceAdvertiser(registrar)
+
+        // The service is destroyed while the registration is still coming up, so the
+        // teardown is refused and nothing will call stop() again.
+        advertiser.advertise(9876)
+        advertiser.stop()
+        assertFalse(advertiser.isAdvertising)
+
+        registrar.accepted[0].comeUp()
+
+        // Without the come-up teardown this record would answer queries for a dead port
+        // until the process died.
+        assertTrue(registrar.published.isEmpty())
+        assertEquals(
+            listOf(
+                "register:Pomo:_pomo._tcp:9876",
+                "unregister:9876",
+                "unregister:9876",
             ),
             registrar.calls,
         )
