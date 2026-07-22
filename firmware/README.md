@@ -30,10 +30,18 @@ Install through the Arduino IDE Library Manager unless noted.
 | esp8266 boards | 3.1.x or newer | Boards Manager URL: `https://arduino.esp8266.com/stable/package_esp8266com_index.json` |
 | ArduinoJson (bblanchon) | 7.x | v6 will not compile — this code uses `JsonDocument` |
 | arduinoWebSockets (Links2004) | 2.4.0 or newer | |
-| LiquidCrystal_I2C | the fork with a no-argument `lcd.begin()` | |
+| LiquidCrystal_I2C (johnrickman) | 1.1.4 or newer | See the warning below — the wrong library of this name will not compile |
 
 `ESP8266WiFi`, `ESP8266mDNS`, `ESP8266HTTPClient` and `Wire` ship with the board
 package.
+
+**Two different libraries are called "LiquidCrystal I2C".** Searching the Library
+Manager finds Frank de Brabander's 1.1.2 first, and `Display.cpp` will not compile
+against it: it exposes `init()` and `begin(cols, rows, charsize)`, with no
+no-argument `begin()`. Install John Rickman's `johnrickman/LiquidCrystal_I2C`
+instead — from https://github.com/johnrickman/LiquidCrystal_I2C via Sketch →
+Include Library → Add .ZIP Library. If you see `no matching function for call to
+'LiquidCrystal_I2C::begin()'`, you have the wrong one installed.
 
 ## Board settings
 
