@@ -163,13 +163,7 @@ public class PhoneServer(
         }
     }
 
-    private suspend fun stateMessage(): String =
-        gson.toJson(
-            mapOf(
-                "type" to "state",
-                "data" to service.stateSnapshot(),
-            ),
-        )
+    private suspend fun stateMessage(): String = PhoneMessages.state(gson, service.stateSnapshot())
 
     private fun success(state: Any): Map<String, Any> = mapOf("success" to true, "state" to state)
 
