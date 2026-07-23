@@ -49,6 +49,7 @@ public fun CrewBoardRow.toStatsSnapshot(
             Lifetime(
                 focusMinutes = allTimeFocusMinutes,
                 sessions = stats?.allTimeWorkBlocks ?: days.sumOf { it.completed },
+                activeDays = stats?.allTimeActiveDays ?: days.count { it.completed > 0 },
                 daysWithApp = daysWithPomo(today),
                 firstDate = stats?.firstFocusLocalDate,
             ),

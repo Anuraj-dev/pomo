@@ -43,8 +43,8 @@ internal fun CrewMemberStatsScreen(
 ) {
     val snapshot = remember(row) { row.toStatsSnapshot() }
     val full = remember(row) { row.hasFullStats() }
-    // Earned-only: their snapshot can prove what they reached, never that they didn't (ADR 0005).
-    val earnedAchievements = remember(row) { AchievementEvaluator.earnedOnly(snapshot) }
+    // One highest record per track. Their snapshot can prove what they reached, never what they did not.
+    val achievementRecords = remember(row) { AchievementEvaluator.highlights(snapshot) }
 
     StatsContent(
         snapshot = snapshot,
@@ -57,8 +57,8 @@ internal fun CrewMemberStatsScreen(
         // Members share daily totals, never session times, so there is no hour-by-hour today.
         showTodayRange = false,
         footer = {
-            if (earnedAchievements.isNotEmpty()) {
-                PeerAchievementsSection(displayName = row.displayName, earned = earnedAchievements)
+            if (achievementRecords.isNotEmpty()) {
+                PeerAchievementsSection(displayName = row.displayName, earned = achievementRecords)
                 Spacer(Modifier.height(16.dp))
             }
             MemberStatsFooter(full = full)
@@ -118,7 +118,7 @@ private fun OwnerChip(row: CrewBoardRow) {
 private fun MemberStatsFooter(full: Boolean) {
     val text =
         if (full) {
-            "Shared by them through the crew relay. Lifetime totals and records are theirs in full; " +
+            "Shared by them through the crew relay. Records use the all-time fields their build shared; " +
                 "the charts cover the last ${CrewValidation.MAX_HISTORY_DAYS} days."
         } else {
             "They're on an older build that shares only the last ${CrewValidation.MAX_DAILY_AGGREGATES} " +

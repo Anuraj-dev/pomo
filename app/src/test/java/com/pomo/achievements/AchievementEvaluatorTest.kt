@@ -12,11 +12,17 @@ public class AchievementEvaluatorTest {
     private fun snapshot(
         focusMinutes: Int = 0,
         sessions: Int = 0,
+        activeDays: Int = 0,
         bestStreak: Int = 0,
         bestDayMinutes: Int = 0,
     ): StatsSnapshot =
         StatsSnapshot.Empty.copy(
-            lifetime = StatsSnapshot.Empty.lifetime.copy(focusMinutes = focusMinutes, sessions = sessions),
+            lifetime =
+                StatsSnapshot.Empty.lifetime.copy(
+                    focusMinutes = focusMinutes,
+                    sessions = sessions,
+                    activeDays = activeDays,
+                ),
             records =
                 Records(
                     bestDay = if (bestDayMinutes > 0) BestDay("2026-01-01", 0, bestDayMinutes) else null,
@@ -34,8 +40,8 @@ public class AchievementEvaluatorTest {
     }
 
     @Test
-    public fun `the catalog is the agreed sixteen`() {
-        assertEquals(16, AchievementCatalog.size)
+    public fun `the catalog is the agreed twenty nine`() {
+        assertEquals(29, AchievementCatalog.size)
     }
 
     @Test
@@ -53,6 +59,13 @@ public class AchievementEvaluatorTest {
     }
 
     @Test
+    public fun `active days are an independent all-time ladder`() {
+        assertFalse("active_10d" in earnedIds(snapshot(activeDays = 9)))
+        assertTrue("active_10d" in earnedIds(snapshot(activeDays = 10)))
+        assertFalse("streak_3d" in earnedIds(snapshot(activeDays = 100)))
+    }
+
+    @Test
     public fun `achievements are monotonic — they read all-time maxima, not today`() {
         // A best streak of 30 stays earned even though the snapshot's *current* streak is broken:
         // the evaluator only ever looks at records.longestStreak.
@@ -65,14 +78,15 @@ public class AchievementEvaluatorTest {
 
     @Test
     public fun `best day ladder is capped at eight hours`() {
-        // A 16-hour day earns the two rungs and no more — there is deliberately nothing above 8h.
+        // A 16-hour day earns all four rungs and no more; there is deliberately nothing above 8h.
         val axisIds =
             AchievementCatalog.all
                 .filter { it.axis == AchievementAxis.BestDay }
                 .map { it.id }
                 .toSet()
-        assertEquals(setOf("day_4h", "day_8h"), axisIds)
-        assertEquals(setOf("day_4h", "day_8h"), earnedIds(snapshot(bestDayMinutes = 16 * 60)))
+        val expected = setOf("day_2h", "day_4h", "day_6h", "day_8h")
+        assertEquals(expected, axisIds)
+        assertEquals(expected, earnedIds(snapshot(bestDayMinutes = 16 * 60)))
     }
 
     @Test
@@ -87,9 +101,16 @@ public class AchievementEvaluatorTest {
 
     @Test
     public fun `highlights shows the furthest rung on each ladder`() {
-        val snap = snapshot(focusMinutes = 500 * 60, sessions = 100, bestStreak = 30, bestDayMinutes = 8 * 60)
+        val snap =
+            snapshot(
+                focusMinutes = 500 * 60,
+                sessions = 100,
+                activeDays = 100,
+                bestStreak = 30,
+                bestDayMinutes = 8 * 60,
+            )
         assertEquals(
-            listOf("focus_500h", "streak_30d", "day_8h"),
+            listOf("focus_500h", "active_100d", "streak_30d", "day_8h"),
             AchievementEvaluator.highlights(snap).map { it.id },
         )
     }

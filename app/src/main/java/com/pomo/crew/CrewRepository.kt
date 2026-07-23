@@ -350,6 +350,7 @@ public class CrewRepository(context: Context) {
             hourBuckets = hourBuckets.toList(),
             weekdayBuckets = weekdayBuckets.toList(),
             allTimeWorkBlocks = history.values.sumOf { it.completed },
+            allTimeActiveDays = activeDates.size,
             bestStreak = DateLogic.bestStreak(activeDates),
             firstFocusLocalDate = firstFocusDate,
             historyStartDate = historyStart.toString(),

@@ -10,7 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.achievements.Achievement
-import com.pomo.achievements.AchievementCatalog
+import com.pomo.achievements.AchievementAxis
 
 /**
  * The app's two quiet, non-timer notifications: an earned achievement and an available update.
@@ -52,18 +52,27 @@ public class AlertsNotifier(private val context: Context) {
         notificationManager.createNotificationChannel(updates)
     }
 
-    /** A quiet note that [achievement] was just earned. Tapping it opens the Achievements page. */
-    public fun notifyAchievement(achievement: Achievement) {
+    /** One quiet note for every record crossed by the same history commit. */
+    public fun notifyAchievements(achievements: List<Achievement>) {
+        if (achievements.isEmpty()) return
+        val title = if (achievements.size == 1) "Achievement earned" else "${achievements.size} records updated"
+        val content =
+            if (achievements.size == 1) {
+                achievements.single().let { "${it.title} · ${it.fact}" }
+            } else {
+                achievements.joinToString(" · ") { "${it.badge} ${it.axis.notificationLabel()}" }
+            }
         val notification =
             NotificationCompat.Builder(context, ACHIEVEMENT_CHANNEL_ID)
                 .setSmallIcon(R.mipmap.ic_launcher)
-                .setContentTitle("Achievement earned")
-                .setContentText("${achievement.title} — ${achievement.fact}")
-                .setContentIntent(openApp(NAV_TARGET_ACHIEVEMENTS, requestCode = achievementRequestCode(achievement)))
+                .setContentTitle(title)
+                .setContentText(content)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(content))
+                .setContentIntent(openApp(NAV_TARGET_ACHIEVEMENTS, requestCode = ACHIEVEMENT_REQUEST_CODE))
                 .setAutoCancel(true)
                 .setOnlyAlertOnce(true)
                 .build()
-        notificationManager.notify(achievementNotificationId(achievement), notification)
+        notificationManager.notify(ACHIEVEMENT_NOTIFICATION_ID, notification)
     }
 
     /** A quiet note that [versionName] is available. Tapping it opens the Settings update section. */
@@ -97,13 +106,6 @@ public class AlertsNotifier(private val context: Context) {
         )
     }
 
-    // A stable notification id per tile so several earned at once stack rather than replace each other.
-    private fun achievementNotificationId(achievement: Achievement): Int =
-        ACHIEVEMENT_NOTIFICATION_ID_BASE + AchievementCatalog.all.indexOfFirst { it.id == achievement.id }
-
-    private fun achievementRequestCode(achievement: Achievement): Int =
-        ACHIEVEMENT_REQUEST_CODE_BASE + AchievementCatalog.all.indexOfFirst { it.id == achievement.id }
-
     public companion object {
         public const val ACHIEVEMENT_CHANNEL_ID: String = "pomo_achievement_channel"
         public const val UPDATE_CHANNEL_ID: String = "pomo_update_channel"
@@ -114,9 +116,18 @@ public class AlertsNotifier(private val context: Context) {
         public const val NAV_TARGET_UPDATE: String = "update"
 
         // Kept clear of NotificationHelper's ids (1 = foreground, 2 = ring).
-        private const val ACHIEVEMENT_NOTIFICATION_ID_BASE: Int = 1000
+        private const val ACHIEVEMENT_NOTIFICATION_ID: Int = 1000
         private const val UPDATE_NOTIFICATION_ID: Int = 1100
-        private const val ACHIEVEMENT_REQUEST_CODE_BASE: Int = 2000
+        private const val ACHIEVEMENT_REQUEST_CODE: Int = 2000
         private const val UPDATE_REQUEST_CODE: Int = 2100
     }
 }
+
+private fun AchievementAxis.notificationLabel(): String =
+    when (this) {
+        AchievementAxis.Focus -> "Focus"
+        AchievementAxis.ActiveDays -> "active"
+        AchievementAxis.Streak -> "streak"
+        AchievementAxis.BestDay -> "Best day"
+        AchievementAxis.Milestone -> "Entry"
+    }
