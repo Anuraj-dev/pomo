@@ -11,6 +11,9 @@ public enum class AchievementAxis {
     /** Lifetime focus minutes — the headline metric (see CONTEXT.md). */
     Focus,
 
+    /** All-time local calendar days containing at least one completed Work block. */
+    ActiveDays,
+
     /** Best streak ever reached, in whole days. */
     Streak,
 
@@ -32,7 +35,7 @@ public data class Achievement(
     val badge: String,
     val title: String,
     val fact: String,
-    /** In the axis's native unit: minutes for Focus/BestDay, days for Streak, 1 for a Milestone. */
+    /** In the axis's native unit: minutes for Focus/BestDay, days for ActiveDays/Streak, 1 for a Milestone. */
     val threshold: Int,
 ) {
     /**
@@ -45,6 +48,7 @@ public data class Achievement(
     private fun currentValue(snapshot: StatsSnapshot): Int =
         when (axis) {
             AchievementAxis.Focus -> snapshot.lifetime.focusMinutes
+            AchievementAxis.ActiveDays -> snapshot.lifetime.activeDays
             AchievementAxis.Streak -> snapshot.records.longestStreak
             AchievementAxis.BestDay -> snapshot.records.bestDay?.minutes ?: 0
             AchievementAxis.Milestone ->

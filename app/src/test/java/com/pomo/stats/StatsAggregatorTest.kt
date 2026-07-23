@@ -49,6 +49,7 @@ public class StatsAggregatorTest {
         assertTrue(snap.isEmpty)
         assertEquals(0, snap.lifetime.sessions)
         assertEquals(0, snap.lifetime.focusMinutes)
+        assertEquals(0, snap.lifetime.activeDays)
         assertNull(snap.lifetime.firstDate)
         assertEquals(8, snap.goal.dailyGoal)
         assertEquals(0, snap.goal.daysHit)
@@ -63,6 +64,8 @@ public class StatsAggregatorTest {
                 day("2026-05-15", completed = 3, work = 75),
                 // not active
                 day("2026-05-10", completed = 0, work = 0),
+                // Partial Focus time counts toward volume, but not Active days.
+                day("2026-05-11", completed = 0, work = 20),
                 day("2026-05-12", completed = 5, work = 125),
                 day("2026-05-17", completed = 2, work = 50),
             )
@@ -76,7 +79,8 @@ public class StatsAggregatorTest {
                 tz = utc,
             )
         assertEquals(10, snap.lifetime.sessions)
-        assertEquals(250, snap.lifetime.focusMinutes)
+        assertEquals(270, snap.lifetime.focusMinutes)
+        assertEquals(3, snap.lifetime.activeDays)
         assertEquals("2026-05-12", snap.lifetime.firstDate)
         // 2026-05-12 .. 2026-05-18 inclusive = 7 days
         assertEquals(7, snap.lifetime.daysWithApp)
@@ -179,6 +183,7 @@ public class StatsAggregatorTest {
             )
         assertEquals(3, snap.habit.currentStreak)
         assertEquals(3, snap.habit.bestStreak)
+        assertEquals(4, snap.lifetime.activeDays)
         // Window now starts at first activity (2026-05-14 → Sunday 2026-05-10) and grows to
         // a 12-week cap, so 2026-05-10..18 spans 2 week-columns rather than a fixed 12.
         assertEquals(2, snap.habit.weeks)

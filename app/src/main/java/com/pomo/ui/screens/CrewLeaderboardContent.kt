@@ -821,7 +821,7 @@ private fun MemberDetailSheet(
     onHide: () -> Unit,
 ) {
     var showAvatarPreview by remember { mutableStateOf(false) }
-    val activeDays = row.dailyAggregates.count { it.focusMinutes > 0 }
+    val activeDays = row.dailyAggregates.count { it.completedWorkBlocks > 0 }
     val blocks = row.dailyAggregates.sumOf { it.completedWorkBlocks }
     PomoSheet(title = row.displayName, onDismissRequest = onDismiss, skipPartiallyExpanded = true) {
         Column(

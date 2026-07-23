@@ -71,13 +71,15 @@ public object StatsAggregator {
         today: String,
         tz: TimeZone,
     ): Lifetime {
-        if (days.isEmpty()) return Lifetime(0, 0, 0, null)
+        if (days.isEmpty()) return Lifetime(0, 0, 0, 0, null)
         var minutes = 0
         var sessions = 0
+        var activeDays = 0
         var earliest: String? = null
         for (d in days) {
             minutes += d.workMinutes
             sessions += d.completed
+            if (d.completed > 0) activeDays++
             if (d.completed > 0 && (earliest == null || d.date < earliest)) {
                 earliest = d.date
             }
@@ -86,6 +88,7 @@ public object StatsAggregator {
         return Lifetime(
             focusMinutes = minutes,
             sessions = sessions,
+            activeDays = activeDays,
             daysWithApp = daysSpan,
             firstDate = earliest,
         )
