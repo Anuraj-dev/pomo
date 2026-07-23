@@ -314,10 +314,10 @@ private fun SectionLabel(text: String) {
 
 private fun trackReading(axis: AchievementAxis, snapshot: StatsSnapshot): String =
     when (axis) {
-        AchievementAxis.Focus -> formatMinutes(snapshot.lifetime.focusMinutes)
+        AchievementAxis.Focus -> formatAchievementMinutes(snapshot.lifetime.focusMinutes)
         AchievementAxis.ActiveDays -> "${snapshot.lifetime.activeDays}d"
         AchievementAxis.Streak -> "BEST ${snapshot.records.longestStreak}d"
-        AchievementAxis.BestDay -> "BEST ${formatMinutes(snapshot.records.bestDay?.minutes ?: 0)}"
+        AchievementAxis.BestDay -> "BEST ${formatAchievementMinutes(snapshot.records.bestDay?.minutes ?: 0)}"
         AchievementAxis.Milestone -> ""
     }
 
@@ -328,7 +328,7 @@ private fun trackEdge(
 ): String {
     if (next == null) return "MAX RECORDED"
     return when (axis) {
-        AchievementAxis.Focus -> "${formatMinutes(snapshot.lifetime.focusMinutes)} / ${next.badge}"
+        AchievementAxis.Focus -> "${formatAchievementMinutes(snapshot.lifetime.focusMinutes)} / ${next.badge}"
         AchievementAxis.ActiveDays -> "${snapshot.lifetime.activeDays} / ${next.badge}"
         AchievementAxis.Streak -> "CURRENT ${snapshot.habit.currentStreak}d · NEXT RECORD ${next.badge}"
         AchievementAxis.BestDay -> "NEXT RECORD ${next.badge}"
@@ -336,7 +336,7 @@ private fun trackEdge(
     }
 }
 
-private fun formatMinutes(minutes: Int): String {
+private fun formatAchievementMinutes(minutes: Int): String {
     val hours = minutes / 60
     val remainder = minutes % 60
     return when {
