@@ -12,6 +12,7 @@ through service methods:
 - Notification actions
 - Home-screen widget actions
 - Authenticated HTTP commands from `PhoneServer`
+- The NodeMCU desk device, through the same authenticated HTTP commands
 
 Room is the canonical history store. Desktop clients may display or cache data,
 but they should not merge, overwrite, or author timer/history state.
@@ -152,5 +153,14 @@ Remote clients are thin:
 - Local desktop cache is only for stale/offline display.
 - Desktop background services refresh cache only; they do not own timer
   lifecycle, history, or sync.
+
+The NodeMCU desk device (`firmware/PomoLink/`) is one of these thin clients. It
+renders broadcast state on an LCD, sends button gestures to the REST endpoints,
+and sounds a buzzer on the `phase_complete` event. It runs no timer of its own:
+when the phone is unreachable it displays a disconnected marker and refuses
+commands rather than authoring state it would later have to reconcile.
+
+While serving, the service advertises `_pomo._tcp` over mDNS so LAN clients
+resolve the phone by name.
 
 See [protocol.md](protocol.md) for endpoint details.

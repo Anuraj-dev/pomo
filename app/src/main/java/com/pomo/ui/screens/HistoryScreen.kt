@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material.icons.outlined.AccessTime
 import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Edit
@@ -29,7 +30,6 @@ import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.LocalCafe
 import androidx.compose.material.icons.outlined.RadioButtonChecked
-import androidx.compose.material.icons.automirrored.outlined.ShowChart
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -87,13 +87,14 @@ public fun HistoryScreen(
         remember(items, selectedMonthKey) {
             if (selectedMonthKey == ALL_MONTHS_KEY) items else items.filter { it.date.startsWith(selectedMonthKey) }
         }
-    val grouped = remember(visibleItems, selectedMonthKey) {
-        if (selectedMonthKey == ALL_MONTHS_KEY) {
-            groupByMonth(visibleItems)
-        } else {
-            listOf(selectedLabel to visibleItems)
+    val grouped =
+        remember(visibleItems, selectedMonthKey) {
+            if (selectedMonthKey == ALL_MONTHS_KEY) {
+                groupByMonth(visibleItems)
+            } else {
+                listOf(selectedLabel to visibleItems)
+            }
         }
-    }
     val totalMinutes = visibleItems.sumOf { it.entry.work_minutes }
     val totalBlocks = visibleItems.sumOf { it.entry.completed }
 
@@ -487,8 +488,7 @@ private fun formatMonthLabel(key: String): String =
         output.format(input.parse(key) ?: return@runCatching key)
     }.getOrDefault(key)
 
-private fun parseDate(iso: String): Date? =
-    runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }.getOrNull()
+private fun parseDate(iso: String): Date? = runCatching { SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(iso) }.getOrNull()
 
 /*
  * The selected day's detail still owns the full rhythm chart and sessions list. The compact

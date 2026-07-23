@@ -23,13 +23,18 @@ public class OfflineTimerTest {
     private class RecordingObserver : TimerObserver {
         public val updates: MutableList<TimerState> = mutableListOf()
         public val completions: MutableList<TimerState> = mutableListOf()
+        public val completedPhases: MutableList<String> = mutableListOf()
 
         override fun onTimerUpdate(state: TimerState) {
             updates += state.copy()
         }
 
-        override fun onTimerComplete(state: TimerState) {
+        override fun onTimerComplete(
+            state: TimerState,
+            completedPhase: String,
+        ) {
             completions += state.copy()
+            completedPhases += completedPhase
         }
     }
 
@@ -298,5 +303,27 @@ public class OfflineTimerTest {
             assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
             assertEquals(300.0, timer.state.remaining, 0.001)
             assertEquals(1, observer.completions.size)
+            assertEquals(TimerState.PHASE_WORK, observer.completedPhases.single())
+        }
+
+    @Test
+    public fun completeExpiredTimer_fromShortBreak_reportsBreakAsCompletedPhase(): Unit =
+        runBlocking {
+            val startTime = System.currentTimeMillis() / 1000 - 300
+            val initial =
+                TimerState().apply {
+                    phase = TimerState.PHASE_SHORT
+                    duration = 300.0
+                    remaining = 0.0
+                    status = TimerState.STATUS_RUNNING
+                    start_time = startTime.toDouble()
+                }
+            timer.updateState(initial)
+
+            timer.completeExpiredTimer().join()
+
+            assertEquals(TimerState.PHASE_SHORT, observer.completedPhases.single())
+            assertEquals(TimerState.PHASE_WORK, timer.state.phase)
+            assertEquals(TimerState.STATUS_STOPPED, timer.state.status)
         }
 }

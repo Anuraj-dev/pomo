@@ -112,7 +112,7 @@ public class OfflineTimer(
                 recalculateNextPhase()
 
                 state.remaining = state.duration
-                observer.onTimerComplete(state)
+                observer.onTimerComplete(state, completionState.phase)
             }
         completionJob = job
         job.invokeOnCompletion {
