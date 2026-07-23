@@ -43,11 +43,6 @@ android {
     productFlavors {
         create("dev") {
             dimension = "environment"
-            // Distinct id + label so dev builds install alongside the real app
-            // without touching its data. MainActivity's canonical-id check
-            // already disables the self-updater for non-"com.pomo" ids.
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
         }
         create("prod") {
             dimension = "environment"

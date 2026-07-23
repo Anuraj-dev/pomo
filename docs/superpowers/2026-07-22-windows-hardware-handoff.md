@@ -18,12 +18,9 @@ anything — implementation is finished; only hardware verification remains.
   disabled on the fork. Unblock: Snehit approves on PR #75, OR Raja gets write
   access upstream, OR Raja enables Actions on `Anuraj-dev/pomo` and dispatches
   `ci.yml` on this branch there.
-- The Android side test build: the `dev` flavor now has
-  `applicationIdSuffix = ".dev"` and label **"Pomo Dev"**, so the test APK
-  installs alongside the real Pomo app without touching its data. The
-  self-updater is automatically disabled for non-`com.pomo` ids
-  (`MainActivity.CANONICAL_APPLICATION_ID` check). Launch component is
-  `com.pomo.dev/com.pomo.MainActivity`.
+- The released `devDebug` APK keeps the canonical `com.pomo` application ID
+  and **Pomo** label so it updates the existing installation in place. Do not
+  add an application-ID suffix to the artifact shipped by `release.yml`.
 - Nothing in `firmware/` has ever been compiled — `arduino-cli` was not
   available on the Linux machine. First compile happens here, on Windows.
 
