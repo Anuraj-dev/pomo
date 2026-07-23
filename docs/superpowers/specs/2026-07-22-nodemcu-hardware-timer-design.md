@@ -101,12 +101,13 @@ Frame shape:
 
 Called from `PomodoroService.onTimerComplete()` (`PomodoroService.kt:334`), which
 already captures `completedPhase`, directly alongside the existing
-`cueEngine.playCompletion(it)` call. Emit the event **before** the state
-broadcast, so the device rings while its display still shows the phase that just
-ended.
+`cueEngine.playCompletion(it)` call. Dispatch the event **before** the state
+broadcast. Dispatch order is not a delivery guarantee, though — the two frames
+travel independently, so the device must treat the event (ring) and the state
+snapshot (display) as independent inputs and tolerate either arrival order.
 
-This is additive and backward-compatible: `desktop-client/` switches on
-`type == "state"` and ignores unknown frames.
+This is additive and backward-compatible: `desktop-client/` polls REST and
+opens no WebSocket, so it never sees the new frame.
 
 ### 1.3 Documentation
 

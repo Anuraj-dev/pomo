@@ -279,8 +279,10 @@ phase: work | short | long
 `phase_complete` fires only when a phase runs down to zero on its own. Skip,
 reset and pause produce a state message and no event, which is what lets a
 hardware client sound an alarm on a real completion and stay silent on a manual
-action. The event is sent immediately before the state message for the same
-transition.
+action. The event is dispatched before the state message for the same
+transition, but this is not a delivery-order guarantee: the two frames are sent
+independently, so clients must process each on its own and tolerate either
+arrival order.
 
 Clients MUST ignore frames whose `type` they do not recognise. New event types
 may be added without a protocol version bump.

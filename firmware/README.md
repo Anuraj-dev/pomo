@@ -18,6 +18,13 @@ See `docs/protocol.md` for the API it speaks and
 | Passive buzzer, - | GND |
 | Button | GPIO0 (the onboard FLASH button — nothing to wire) |
 
+**5V I2C warning:** the ESP8266's GPIOs are 3.3V-only, and a PCF8574 backpack
+powered from VIN pulls SDA/SCL up to 5V through its onboard pull-up resistors.
+Most boards tolerate this in practice, but the safe wiring is to power the
+backpack from 3V3 if the display is readable there, or to keep 5V power and put
+a 3.3V/5V I2C level shifter between the backpack and D1/D2 (or re-pull the bus
+to 3.3V).
+
 The LCD is addressed at `0x27`. If yours is at `0x3F`, change `kLcdAddress` in
 `Display.cpp`.
 

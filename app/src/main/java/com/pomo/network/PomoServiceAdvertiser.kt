@@ -3,6 +3,8 @@ package com.pomo.network
 import android.content.Context
 import android.net.nsd.NsdManager
 import android.net.nsd.NsdServiceInfo
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 
 /**
@@ -65,11 +67,12 @@ public interface NsdRegistrar {
  * which is not something this code can observe.
  *
  * Not thread-safe by itself. There are three paths that mutate its state and all
- * of them are the main thread: [PomodoroService] drives it from the service
- * lifecycle and from its config-change path, and NsdManager delivers registration
- * callbacks on the main looper for the three-argument `registerService` overload.
- * Handing the registrar an NsdManager driven off a different looper (or the API 31+
- * executor overload) would break that and require real synchronisation here.
+ * of them must be the main thread: [PomodoroService] drives it from the service
+ * lifecycle and from its config-change path, and [NsdManagerRegistrar] re-posts
+ * NsdManager's registration callbacks — which the framework delivers on its own
+ * internal thread — onto the main looper before they reach this class. Handing
+ * this class a registrar that invokes callbacks off the main thread would break
+ * that and require real synchronisation here.
  */
 public class PomoServiceAdvertiser(
     private val registrar: NsdRegistrar,
@@ -164,6 +167,10 @@ public class PomoServiceAdvertiser(
                     this.serviceType = serviceType
                     this.port = port
                 }
+            // NsdManager invokes listener callbacks on its own internal thread, while
+            // PomoServiceAdvertiser's state is main-thread-only — so every callback
+            // that reaches the advertiser is re-posted onto the main looper first.
+            val mainHandler = Handler(Looper.getMainLooper())
             // The listener is the handle: unregisterService must be called with the
             // same instance that was passed to registerService.
             val registration =
@@ -174,7 +181,7 @@ public class PomoServiceAdvertiser(
 
                     override fun onServiceRegistered(info: NsdServiceInfo) {
                         Log.d(TAG, "mDNS registered as ${info.serviceName}")
-                        onRegistered(this)
+                        mainHandler.post { onRegistered(this) }
                     }
 
                     override fun onRegistrationFailed(
@@ -182,7 +189,7 @@ public class PomoServiceAdvertiser(
                         errorCode: Int,
                     ) {
                         Log.w(TAG, "mDNS registration failed, code $errorCode")
-                        onFailed(this)
+                        mainHandler.post { onFailed(this) }
                     }
 
                     override fun onServiceUnregistered(info: NsdServiceInfo) {

@@ -854,7 +854,7 @@ git commit -m "feat(service): advertise the phone API over mDNS while serving"
 
 Insert a new section immediately after the pairing payload block (which ends at line 24, just before `## Authentication`):
 
-```markdown
+````markdown
 ## Discovery
 
 While the phone API is serving, the phone advertises itself over mDNS:
@@ -873,13 +873,13 @@ API is disabled and when wifi-only mode has no active LAN network.
 
 Clients on networks that block multicast should fall back to a manually
 configured host and port.
-```
+````
 
 - [ ] **Step 2: Document the event frame in `docs/protocol.md`**
 
 In the `## WebSocket` section, after the state message block (which ends at line 237), insert:
 
-```markdown
+````markdown
 ### Event Frames
 
 Events describe something that happened, as opposed to current state. They are
@@ -906,7 +906,7 @@ transition.
 
 Clients MUST ignore frames whose `type` they do not recognise. New event types
 may be added without a protocol version bump.
-```
+````
 
 - [ ] **Step 3: Update the client contract in `docs/protocol.md`**
 
