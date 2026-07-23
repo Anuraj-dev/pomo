@@ -12,8 +12,12 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,7 +32,7 @@ import com.pomo.BuildConfig
 import com.pomo.R
 
 @Composable
-public fun AboutScreen() {
+public fun AboutScreen(onBack: () -> Unit) {
     val scroll = rememberScrollState()
     Column(
         modifier =
@@ -39,7 +43,17 @@ public fun AboutScreen() {
                 .padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(32.dp))
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.align(Alignment.Start),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back to settings",
+                tint = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+        Spacer(Modifier.height(8.dp))
         Image(
             painter = painterResource(R.drawable.ic_launcher_foreground),
             contentDescription = null,

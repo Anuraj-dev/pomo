@@ -79,6 +79,10 @@
     <string name="ring_notification_start">Start %1$s</string>
     <string name="state_cues_completion_section">Completion cues</string>
     <string name="state_cues_manual_section">Manual haptics</string>
+    <string name="state_cues_previews_title">Cue previews</string>
+    <string name="state_cues_previews_summary">Preview completion cues and manual haptics</string>
+    <string name="back_to_settings">Back to settings</string>
+    <string name="back_to_profile">Back to profile</string>
     <string name="state_cues_focus_complete_title">Focus complete</string>
     <string name="state_cues_focus_complete_summary">Release into break</string>
     <string name="state_cues_short_break_complete_title">Short break complete</string>
