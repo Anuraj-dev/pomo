@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pomo</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="newtab.css" />
+  </head>
+  <body data-empty="true">
+    <main class="stage">
+      <header class="band">
+        <span class="phase" id="phase">Focus</span>
+        <span class="status" id="status">Ready</span>
+      </header>
+
+      <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
+        <span class="time num" id="time">--:--</span>
+        <span class="fraction num" id="fraction">.0</span>
+      </button>
+
+      <nav class="controls">
+        <button class="control" id="skip">Skip</button>
+        <button class="control" id="reset">Reset</button>
+        <button class="control" id="crewLink">Crew</button>
+      </nav>
+
+      <section class="stats">
+        <div class="stat">
+          <span class="num" id="todayCount">—</span>
+          <span class="caption">blocks today</span>
+        </div>
+        <div class="stat">
+          <span class="num" id="totalMinutes">—</span>
+          <span class="caption">total focus min</span>
+        </div>
+        <div class="stat">
+          <span class="num" id="streak">—</span>
+          <span class="caption">day streak</span>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="newtab.js"></script>
+  </body>
+</html>

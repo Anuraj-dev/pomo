@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pomo</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body data-empty="true">
+    <main class="card">
+      <header class="band">
+        <span class="phase" id="phase">Focus</span>
+        <span class="status" id="status">Ready</span>
+      </header>
+
+      <div class="readout">
+        <span class="time num" id="time">--:--</span>
+      </div>
+
+      <nav class="controls">
+        <button class="control primary" id="toggle">Start</button>
+        <button class="control" id="skip">Skip</button>
+        <button class="control" id="reset">Reset</button>
+      </nav>
+
+      <button class="crew-link" id="crewLink">Crew</button>
+    </main>
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

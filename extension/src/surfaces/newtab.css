@@ -1,0 +1,93 @@
+.stage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3.5rem;
+  padding: 2rem;
+}
+
+.band {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+}
+
+.phase {
+  font-size: 1.1rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+}
+
+.tap-zone {
+  background: none;
+  border: none;
+  padding: 0.5rem 1.5rem;
+  display: flex;
+  align-items: baseline;
+  border-radius: 16px;
+}
+
+.tap-zone:hover {
+  background: var(--accent-dim);
+}
+
+.time {
+  font-size: clamp(4.5rem, 18vw, 12rem);
+  line-height: 1;
+  letter-spacing: 0.02em;
+}
+
+.fraction {
+  font-size: clamp(1.5rem, 5vw, 3.5rem);
+  color: var(--text-muted);
+}
+
+body[data-phase="work"][data-status="running"] .time {
+  color: var(--accent);
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.control {
+  padding: 0.6rem 1.4rem;
+  font-size: 1rem;
+}
+
+.stats {
+  display: flex;
+  gap: 3rem;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.stat .num {
+  font-size: 2rem;
+}
+
+.caption {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+body[data-empty="true"] .time,
+body[data-empty="true"] .fraction {
+  color: var(--text-muted);
+}

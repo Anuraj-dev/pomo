@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pomo</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body data-empty="true">
+    <main class="panel">
+      <header class="band">
+        <span class="phase" id="phase">Focus</span>
+        <span class="status" id="status">Ready</span>
+      </header>
+
+      <button class="readout" id="toggle" aria-label="Start or pause the timer">
+        <span class="time num" id="time">--:--</span>
+      </button>
+
+      <nav class="controls">
+        <button class="control" id="skip">Skip</button>
+        <button class="control" id="reset">Reset</button>
+      </nav>
+
+      <section class="stats">
+        <div class="stat">
+          <span class="num" id="todayCount">—</span>
+          <span class="caption">today</span>
+        </div>
+        <div class="stat">
+          <span class="num" id="totalMinutes">—</span>
+          <span class="caption">total min</span>
+        </div>
+        <div class="stat">
+          <span class="num" id="streak">—</span>
+          <span class="caption">streak</span>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

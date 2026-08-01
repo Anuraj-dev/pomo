@@ -1,0 +1,65 @@
+body {
+  width: 240px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.band {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.phase {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.readout {
+  text-align: center;
+}
+
+.time {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+body[data-phase="work"][data-status="running"] .time {
+  color: var(--accent);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.control {
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+.crew-link {
+  margin-top: 0.4rem;
+  width: 100%;
+  padding: 0.45rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  background: none;
+}
+
+body[data-empty="true"] .time {
+  color: var(--text-muted);
+}
