@@ -1,5 +1,5 @@
 import type { TimerSnapshot } from "../../engine/timer";
-import { formatFraction, phaseLabel, statusLabel } from "../../shared/format";
+import { formatTenths, phaseLabel, statusLabel } from "../../shared/format";
 import { applyTheme, sendCommand, subscribeState } from "../../shared/surface";
 import { readSurfaceStats } from "../../shared/statsReader";
 
@@ -7,6 +7,7 @@ const phaseEl = document.getElementById("phase")!;
 const statusEl = document.getElementById("status")!;
 const timeEl = document.getElementById("time")!;
 const fractionEl = document.getElementById("fraction")!;
+const progressEl = document.getElementById("progress")!;
 const toggleEl = document.getElementById("toggle")!;
 const skipEl = document.getElementById("skip")!;
 const resetEl = document.getElementById("reset")!;
@@ -24,6 +25,12 @@ function remainingOf(state: TimerSnapshot): number {
   return state.remaining;
 }
 
+function elapsedFraction(state: TimerSnapshot): number {
+  const remaining = remainingOf(state);
+  if (state.duration <= 0) return 0;
+  return Math.min(1, Math.max(0, 1 - remaining / state.duration));
+}
+
 function apply(state: TimerSnapshot): void {
   document.body.dataset["empty"] = "false";
   document.body.dataset["phase"] = state.phase;
@@ -34,9 +41,13 @@ function apply(state: TimerSnapshot): void {
 }
 
 function renderTime(remaining: number): void {
-  const [whole, tenths] = formatFraction(remaining).split(".");
-  timeEl.textContent = whole ?? "";
-  fractionEl.textContent = `.${tenths ?? "0"}`;
+  const { whole, tenths } = formatTenths(remaining);
+  timeEl.textContent = whole;
+  fractionEl.textContent = `.${tenths}`;
+}
+
+function renderProgress(state: TimerSnapshot): void {
+  progressEl.style.transform = `scaleX(${elapsedFraction(state)})`;
 }
 
 async function refreshStats(): Promise<void> {
@@ -60,7 +71,10 @@ subscribeState((state) => {
 });
 
 setInterval(() => {
-  if (latest !== null) renderTime(remainingOf(latest));
+  if (latest !== null) {
+    renderTime(remainingOf(latest));
+    renderProgress(latest);
+  }
 }, 100);
 
 toggleEl.addEventListener("click", () => sendCommand("toggle"));

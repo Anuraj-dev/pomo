@@ -28,12 +28,20 @@ body {
 }
 
 .readout {
-  text-align: center;
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.15rem;
 }
 
 .time {
   font-size: 2.6rem;
   line-height: 1;
+}
+
+.fraction {
+  font-size: 1.1rem;
+  color: var(--text-muted);
 }
 
 body[data-phase="work"][data-status="running"] .time {
@@ -54,10 +62,49 @@ body[data-phase="work"][data-status="running"] .time {
 .crew-link {
   margin-top: 0.4rem;
   width: 100%;
-  padding: 0.45rem;
+  padding: 0.55rem 0.6rem;
   font-size: 0.85rem;
   color: var(--text-muted);
-  background: none;
+  background: var(--bg-panel);
+  border-color: var(--border);
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "name rank"
+    "name stats";
+  row-gap: 0.15rem;
+  column-gap: 0.75rem;
+  align-items: baseline;
+}
+
+.crew-link[hidden] {
+  display: none;
+}
+
+.crew-name {
+  grid-area: name;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.crew-rank {
+  grid-area: rank;
+  text-align: right;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.crew-stats {
+  grid-area: stats;
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  font-size: 0.75rem;
 }
 
 body[data-empty="true"] .time {

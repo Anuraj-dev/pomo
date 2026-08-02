@@ -376,6 +376,16 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
         await crewDao.unhide(request.crewId, request.identityPublicKey);
       }
       return { ok: true };
+    case "pomo:crew:rename": {
+      const membership = crewMemberships.find((m) => m.crewId === request.crewId);
+      if (membership === undefined) return { ok: false, error: "crew not found" };
+      const displayName = request.displayName.trim();
+      if (displayName.length === 0) return { ok: false, error: "display name cannot be empty" };
+      membership.displayName = displayName;
+      await saveMemberships();
+      void crewSync(true);
+      return { ok: true, crews: await crewSummaries() };
+    }
     case "pomo:crew:refresh": {
       await crewSync(true);
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);

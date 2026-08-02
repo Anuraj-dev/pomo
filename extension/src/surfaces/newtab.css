@@ -32,6 +32,9 @@
   padding: 0.5rem 1.5rem;
   display: flex;
   align-items: baseline;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0;
   border-radius: 16px;
 }
 
@@ -48,6 +51,42 @@
 .fraction {
   font-size: clamp(1.5rem, 5vw, 3.5rem);
   color: var(--text-muted);
+}
+
+.progress {
+  flex-basis: 100%;
+  height: 2px;
+  background: var(--bg-raised);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+
+.progress .fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+.progress {
+  flex-basis: 100%;
+  height: 2px;
+  background: var(--bg-raised);
+  border-radius: 1px;
+  overflow: hidden;
+  margin-top: 0.75rem;
+}
+
+.progress .fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
 }
 
 body[data-phase="work"][data-status="running"] .time {

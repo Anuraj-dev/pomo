@@ -81,6 +81,12 @@ export interface PomoCrewHideMessage {
   hidden: boolean;
 }
 
+export interface PomoCrewRenameMessage {
+  type: "pomo:crew:rename";
+  crewId: string;
+  displayName: string;
+}
+
 export interface PomoCrewRefreshMessage {
   type: "pomo:crew:refresh";
   crewId: string;
@@ -104,7 +110,8 @@ export type PomoRequest =
   | PomoCrewLeaveMessage
   | PomoCrewHideMessage
   | PomoCrewRefreshMessage
-  | PomoCrewJoinCodeMessage;
+  | PomoCrewJoinCodeMessage
+  | PomoCrewRenameMessage;
 
 export interface PomoResponse {
   ok: boolean;
@@ -131,6 +138,7 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
     candidate.type === "pomo:crew:leave" ||
     candidate.type === "pomo:crew:hide" ||
     candidate.type === "pomo:crew:refresh" ||
-    candidate.type === "pomo:crew:joinCode"
+    candidate.type === "pomo:crew:joinCode" ||
+    candidate.type === "pomo:crew:rename"
   );
 }

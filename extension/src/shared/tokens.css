@@ -6,6 +6,7 @@
   --text: #ece5d8;
   --text-muted: #8b95a3;
   --accent: #ff4d3d;
+  --on-accent: #0d1117;
   --accent-dim: rgba(255, 77, 61, 0.14);
   --border: #232c3a;
   --ring: #4b5870;
@@ -17,8 +18,9 @@
   --bg-raised: #faf8f3;
   --text: #1c2128;
   --text-muted: #5c6670;
-  --accent: #d93a2c;
-  --accent-dim: rgba(217, 58, 44, 0.12);
+  --accent: #b3261e;
+  --on-accent: #ffffff;
+  --accent-dim: rgba(179, 38, 30, 0.12);
   --border: #d0cbc1;
   --ring: #9aa3af;
 }
@@ -30,8 +32,9 @@
     --bg-raised: #faf8f3;
     --text: #1c2128;
     --text-muted: #5c6670;
-    --accent: #d93a2c;
-    --accent-dim: rgba(217, 58, 44, 0.12);
+    --accent: #b3261e;
+    --on-accent: #ffffff;
+    --accent-dim: rgba(179, 38, 30, 0.12);
     --border: #d0cbc1;
     --ring: #9aa3af;
   }
@@ -85,7 +88,7 @@ button:focus-visible {
 button.primary {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
 }
 
 button.primary:active {

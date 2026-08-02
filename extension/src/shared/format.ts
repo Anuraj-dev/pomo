@@ -1,17 +1,19 @@
 import type { Phase, Status as TimerStatus } from "../engine/timer";
 
-export function formatRemaining(totalSeconds: number): string {
-  const clamped = Math.max(0, Math.ceil(totalSeconds));
-  const minutes = Math.floor(clamped / 60);
-  const seconds = clamped % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+export interface TenthsFormat {
+  whole: string;
+  tenths: string;
 }
 
-export function formatFraction(totalSeconds: number): string {
-  const clamped = Math.max(0, totalSeconds);
-  const whole = Math.floor(clamped);
-  const tenths = Math.floor((clamped - whole) * 10);
-  return `${formatRemaining(whole)}.${tenths}`;
+export function formatTenths(totalSeconds: number): TenthsFormat {
+  const tenthsTotal = Math.max(0, Math.floor(totalSeconds * 10));
+  const whole = Math.floor(tenthsTotal / 10);
+  const minutes = Math.floor(whole / 60);
+  const seconds = whole % 60;
+  return {
+    whole: `${minutes}:${seconds.toString().padStart(2, "0")}`,
+    tenths: String(tenthsTotal % 10),
+  };
 }
 
 export function phaseLabel(phase: Phase): string {

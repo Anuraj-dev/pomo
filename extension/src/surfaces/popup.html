@@ -15,7 +15,7 @@
       </header>
 
       <div class="readout">
-        <span class="time num" id="time">--:--</span>
+        <span class="time num" id="time">--:--</span><span class="fraction num" id="fraction">.0</span>
       </div>
 
       <nav class="controls">
@@ -24,7 +24,14 @@
         <button class="control" id="reset">Reset</button>
       </nav>
 
-      <button class="crew-link" id="crewLink">Crew</button>
+      <button class="crew-link" id="crewLink" hidden>
+        <span class="crew-name" id="crewName">Crew</span>
+        <span class="crew-rank num" id="crewRank">—</span>
+        <span class="crew-stats">
+          <span class="num" id="crewMinutes">—</span>
+          <span class="num" id="crewStreak">—</span>
+        </span>
+      </button>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

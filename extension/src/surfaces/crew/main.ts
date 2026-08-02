@@ -12,9 +12,7 @@ const boardEl = document.getElementById("board")!;
 const manageEl = document.getElementById("manage")!;
 const manageBodyEl = document.getElementById("manageBody")!;
 const manageCloseEl = document.getElementById("manageClose")!;
-const createBtn = document.getElementById("createBtn")!;
-const joinBtn = document.getElementById("joinBtn")!;
-const shareBtn = document.getElementById("shareBtn")!;
+const manageBtn = document.getElementById("manageBtn")!;
 const refreshBtn = document.getElementById("refreshBtn")!;
 const windowTabsEl = document.getElementById("windowTabs")!;
 
@@ -23,9 +21,18 @@ let activeCrewId: string | null = null;
 let windowKey: WindowKey = "today";
 let boardResult: CrewBoardResult | null = null;
 let syncing = false;
+let lastFocus: HTMLElement | null = null;
+let chipIndex = 0;
 
 function nowSeconds(): number {
   return Date.now() / 1000;
+}
+
+function formatAge(seconds: number): string {
+  if (seconds < 60) return "just now";
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 function freshnessOf(relayStates: CrewRelayStateRow[]): { label: string; kind: string } {
@@ -41,16 +48,9 @@ function freshnessOf(relayStates: CrewRelayStateRow[]): { label: string; kind: s
   if (lastSuccess === 0) return { label: "never synced", kind: "offline" };
   const ageSeconds = now - lastSuccess;
   if (successCount < relayStates.length) {
-    return { label: `partial · ${formatAge(ageSeconds)}`, kind: "partial" };
+    return { label: `partial ${successCount}/${relayStates.length} · ${formatAge(ageSeconds)}`, kind: "partial" };
   }
   return { label: `updated ${formatAge(ageSeconds)}`, kind: ageSeconds > 24 * 3600 ? "stale" : "synced" };
-}
-
-function formatAge(seconds: number): string {
-  if (seconds < 60) return "just now";
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-  return `${Math.floor(seconds / 86400)}d ago`;
 }
 
 function renderChips(): void {
@@ -58,10 +58,16 @@ function renderChips(): void {
   for (const crew of crews) {
     const chip = document.createElement("button");
     chip.className = "chip";
-    chip.dataset["active"] = String(crew.crewId === activeCrewId);
+    chip.type = "button";
+    chip.setAttribute("role", "radio");
+    const active = crew.crewId === activeCrewId;
+    chip.dataset["active"] = String(active);
+    chip.setAttribute("aria-checked", String(active));
+    chip.tabIndex = active ? 0 : -1;
     chip.textContent = crew.crewName;
     chip.addEventListener("click", () => {
       activeCrewId = crew.crewId;
+      chipIndex = crews.findIndex((c) => c.crewId === crew.crewId);
       void loadBoard();
     });
     chipsEl.appendChild(chip);
@@ -75,37 +81,34 @@ function renderFreshness(relayStates: CrewRelayStateRow[]): void {
 }
 
 function renderSummary(): void {
-  if (boardResult === null) {
-    summaryEl.textContent = "";
-    return;
-  }
+  summaryEl.textContent = "";
+  if (boardResult === null) return;
   const summary = boardResult.board.summary;
-  summaryEl.innerHTML = "";
-  const stats: Array<[string, string]> = [
-    [String(summary.totalFocusMinutes), "crew focus min"],
-    [String(summary.rankedMembers), "ranked members"],
-    [String(summary.medianFocusMinutes), "median min"],
+  const items: Array<[string, string]> = [
+    [String(summary.totalFocusMinutes), "crew min"],
+    [String(summary.rankedMembers), "ranked"],
+    [String(summary.medianFocusMinutes), "median"],
   ];
-  for (const [value, caption] of stats) {
-    const stat = document.createElement("div");
-    stat.className = "stat";
+  for (const [value, caption] of items) {
+    const item = document.createElement("span");
+    item.className = "item";
     const num = document.createElement("span");
     num.className = "num";
     num.textContent = value;
     const cap = document.createElement("span");
-    cap.className = "caption";
     cap.textContent = caption;
-    stat.append(num, cap);
-    summaryEl.appendChild(stat);
+    item.append(num, cap);
+    summaryEl.appendChild(item);
   }
 }
 
 function renderStanding(): void {
   standingEl.textContent = "";
-  if (boardResult === null || boardResult.standing === null) {
+  if (boardResult === null) return;
+  if (boardResult.standing === null) {
     const note = document.createElement("span");
     note.className = "meta";
-    note.textContent = "You are not on this leaderboard yet.";
+    note.textContent = "You are not on this leaderboard yet. Publish a block to join.";
     standingEl.appendChild(note);
     return;
   }
@@ -138,7 +141,9 @@ function barsFor(member: BoardMember, container: HTMLElement): void {
   }
 }
 
-function renderMember(member: BoardMember): HTMLElement {
+function renderMember(member: BoardMember, selfKey: string): DocumentFragment {
+  const frag = document.createDocumentFragment();
+
   const row = document.createElement("div");
   row.className = "member";
   row.dataset["ranked"] = String(member.rank !== null);
@@ -146,7 +151,7 @@ function renderMember(member: BoardMember): HTMLElement {
 
   const rankCell = document.createElement("span");
   rankCell.className = "rank-cell num";
-  rankCell.textContent = member.rank !== null ? String(member.rank) : "·";
+  rankCell.textContent = member.rank !== null ? String(member.rank) : "—";
 
   const name = document.createElement("div");
   name.className = "name";
@@ -170,8 +175,9 @@ function renderMember(member: BoardMember): HTMLElement {
 
   const actions = document.createElement("div");
   actions.className = "actions";
-  if (member.identityPublicKey !== boardResult!.selfPublicKey) {
+  if (member.identityPublicKey !== selfKey) {
     const hide = document.createElement("button");
+    hide.type = "button";
     hide.textContent = "Hide";
     hide.addEventListener("click", () => {
       void request({
@@ -183,17 +189,51 @@ function renderMember(member: BoardMember): HTMLElement {
     });
     actions.appendChild(hide);
   }
+  const details = document.createElement("button");
+  details.type = "button";
+  details.textContent = "Details";
+  details.setAttribute("aria-expanded", "false");
+  details.addEventListener("click", () => {
+    const existing = row.nextElementSibling;
+    const expanded = details.getAttribute("aria-expanded") === "true";
+    if (expanded) {
+      existing?.remove();
+      details.setAttribute("aria-expanded", "false");
+      return;
+    }
+    const detail = document.createElement("div");
+    detail.className = "member-detail";
+    const lastFocused = member.lastFocusedAtEpochSeconds > 0
+      ? new Date(member.lastFocusedAtEpochSeconds * 1000).toLocaleString()
+      : "never";
+    detail.append(
+      detailSpan(`key ${member.fingerprint}`),
+      detailSpan(`last focused ${lastFocused}`),
+      detailSpan(`${member.dailyTrend.filter((v): v is number => v !== null).length}/7 days active`),
+    );
+    row.after(detail);
+    details.setAttribute("aria-expanded", "true");
+  });
+  actions.appendChild(details);
 
   row.append(rankCell, name, score, actions);
-  return row;
+  frag.appendChild(row);
+  return frag;
+}
+
+function detailSpan(text: string): HTMLSpanElement {
+  const span = document.createElement("span");
+  span.textContent = text;
+  return span;
 }
 
 function renderBoard(): void {
+  boardEl.dataset["error"] = "false";
   if (boardResult === null) {
     boardEl.dataset["empty"] = "true";
     boardEl.textContent =
       crews.length === 0
-        ? "No crews yet. Create one or paste a join link to get started."
+        ? "No crews yet. Open Manage to create one or paste a join link."
         : "Loading leaderboard…";
     return;
   }
@@ -204,9 +244,54 @@ function renderBoard(): void {
     boardEl.textContent = "No members on this leaderboard yet. Share your join code to invite them.";
     return;
   }
-  for (const member of boardResult.board.members) {
-    boardEl.appendChild(renderMember(member));
+
+  const selfKey = boardResult.selfPublicKey;
+  const active = boardResult.board.members.filter((m) => !m.inactive);
+  const inactive = boardResult.board.members.filter((m) => m.inactive);
+
+  for (const member of active) {
+    boardEl.appendChild(renderMember(member, selfKey));
   }
+
+  if (inactive.length > 0) {
+    const group = document.createElement("div");
+    group.className = "inactive-group";
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "inactive-toggle";
+    toggle.textContent = `Inactive members (${inactive.length})`;
+    toggle.setAttribute("aria-expanded", "false");
+    toggle.addEventListener("click", () => {
+      const expanded = toggle.getAttribute("aria-expanded") === "true";
+      toggle.setAttribute("aria-expanded", String(!expanded));
+    });
+    const list = document.createElement("div");
+    list.className = "inactive-list";
+    for (const member of inactive) {
+      list.appendChild(renderMember(member, selfKey));
+    }
+    group.append(toggle, list);
+    boardEl.appendChild(group);
+  }
+}
+
+function renderBoardError(message: string): void {
+  boardEl.dataset["error"] = "true";
+  boardEl.dataset["empty"] = "false";
+  boardEl.textContent = "";
+  const wrap = document.createElement("div");
+  wrap.className = "board-error";
+  const msg = document.createElement("span");
+  msg.className = "msg";
+  msg.textContent = message;
+  const retry = document.createElement("button");
+  retry.type = "button";
+  retry.textContent = "Retry";
+  retry.addEventListener("click", () => {
+    void loadBoard(true);
+  });
+  wrap.append(msg, retry);
+  boardEl.appendChild(wrap);
 }
 
 async function loadBoard(forceRefresh = false): Promise<void> {
@@ -221,14 +306,18 @@ async function loadBoard(forceRefresh = false): Promise<void> {
     );
     if (response.ok && response.board !== undefined) {
       boardResult = response.board;
+      renderSummary();
+      renderStanding();
+      renderBoard();
+    } else {
+      renderBoardError(response.error ?? "could not load leaderboard");
     }
+  } catch {
+    renderBoardError("Could not reach the crew service.");
   } finally {
     syncing = false;
   }
   renderFreshness(boardResult?.relayStates ?? []);
-  renderSummary();
-  renderStanding();
-  renderBoard();
 }
 
 async function loadCrews(): Promise<void> {
@@ -241,6 +330,7 @@ async function loadCrews(): Promise<void> {
   if (activeCrewId === null || !crews.some((crew) => crew.crewId === activeCrewId)) {
     activeCrewId = crews[0]?.crewId ?? null;
   }
+  chipIndex = Math.max(0, crews.findIndex((c) => c.crewId === activeCrewId));
   renderChips();
   renderSummary();
   renderStanding();
@@ -253,6 +343,43 @@ function openManage(title: string, body: HTMLElement): void {
   heading.textContent = title;
   manageBodyEl.append(heading, body);
   manageEl.hidden = false;
+  lastFocus = document.activeElement as HTMLElement | null;
+  focusFirst(manageBodyEl);
+}
+
+function closeManage(): void {
+  manageEl.hidden = true;
+  lastFocus?.focus();
+}
+
+function focusFirst(container: HTMLElement): void {
+  const target = container.querySelector<HTMLElement>("input, button, textarea, select");
+  target?.focus();
+}
+
+function trapFocus(event: KeyboardEvent): void {
+  if (manageEl.hidden) return;
+  if (event.key === "Escape") {
+    event.preventDefault();
+    closeManage();
+    return;
+  }
+  if (event.key !== "Tab") return;
+  const focusable = Array.from(
+    manageEl.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
+      "input, button, textarea, select",
+    ),
+  ).filter((el) => !el.disabled);
+  if (focusable.length === 0) return;
+  const first = focusable[0]!;
+  const last = focusable[focusable.length - 1]!;
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
 }
 
 function field(label: string, placeholder: string): { wrap: HTMLElement; input: HTMLInputElement } {
@@ -267,18 +394,76 @@ function field(label: string, placeholder: string): { wrap: HTMLElement; input: 
   return { wrap, input };
 }
 
-function button(text: string, onClick: () => void): HTMLButtonElement {
+function button(text: string, onClick: () => void, className?: string): HTMLButtonElement {
   const btn = document.createElement("button");
+  btn.type = "button";
   btn.textContent = text;
+  if (className !== undefined) btn.className = className;
   btn.addEventListener("click", onClick);
   return btn;
 }
 
 function showError(message: string): void {
+  manageBodyEl.querySelector(".error")?.remove();
   const error = document.createElement("span");
   error.className = "error";
   error.textContent = message;
   manageBodyEl.appendChild(error);
+}
+
+function openManageHome(): void {
+  const body = document.createElement("div");
+  body.className = "manage-menu";
+
+  const activeCrew = crews.find((crew) => crew.crewId === activeCrewId);
+  if (activeCrew !== undefined) {
+    const section = document.createElement("h4");
+    section.className = "section-title";
+    section.textContent = activeCrew.crewName;
+    body.append(section);
+
+    const nameField = field("Your display name in this crew", activeCrew.displayName);
+    nameField.input.value = activeCrew.displayName;
+    const save = button("Save name", () => {
+      void request({ type: "pomo:crew:rename", crewId: activeCrew.crewId, displayName: nameField.input.value })
+        .then((response) => {
+          if (!response.ok) {
+            showError(response.error ?? "rename failed");
+            return;
+          }
+          crews = response.crews ?? crews;
+          closeManage();
+          renderChips();
+        });
+    }, "primary");
+    body.append(nameField.wrap, save);
+
+    body.append(button("Share invite / QR", () => openShare()));
+    body.append(button("Leave crew", () => {
+      void request({ type: "pomo:crew:leave", crewId: activeCrew.crewId }).then((response) => {
+        if (!response.ok) {
+          showError(response.error ?? "leave failed");
+          return;
+        }
+        crews = response.crews ?? crews;
+        closeManage();
+        if (activeCrewId === activeCrew.crewId) {
+          activeCrewId = crews[0]?.crewId ?? null;
+        }
+        renderChips();
+        void loadBoard();
+      });
+    }, "danger"));
+  }
+
+  const addSection = document.createElement("h4");
+  addSection.className = "section-title";
+  addSection.textContent = "Add a crew";
+  body.append(addSection);
+  body.append(button("Create crew", () => openCreate()));
+  body.append(button("Join with link", () => openJoin()));
+
+  openManage("Manage crew", body);
 }
 
 function openJoin(): void {
@@ -298,14 +483,13 @@ function openJoin(): void {
           showError(response.error ?? "join failed");
           return;
         }
-        manageEl.hidden = true;
         crews = response.crews ?? crews;
-        const joined = crews.find((crew) => crew.displayName === displayName) ?? crews[crews.length - 1];
-        activeCrewId = joined?.crewId ?? crews[0]?.crewId ?? null;
+        activeCrewId = crews[crews.length - 1]?.crewId ?? null;
+        closeManage();
         renderChips();
         void loadBoard();
       });
-  });
+  }, "primary");
   body.append(joinField.wrap, nameField.wrap, submit);
   openManage("Join a crew", body);
 }
@@ -327,13 +511,13 @@ function openCreate(): void {
           showError(response.error ?? "create failed");
           return;
         }
-        manageEl.hidden = true;
         crews = response.crews ?? crews;
         activeCrewId = crews[crews.length - 1]?.crewId ?? null;
+        closeManage();
         renderChips();
         void loadBoard();
       });
-  });
+  }, "primary");
   body.append(nameField.wrap, displayField.wrap, submit);
   openManage("Create a crew", body);
 }
@@ -373,24 +557,71 @@ function openShare(): void {
   openManage("Share invite", body);
 }
 
-createBtn.addEventListener("click", openCreate);
-joinBtn.addEventListener("click", openJoin);
-shareBtn.addEventListener("click", openShare);
-manageCloseEl.addEventListener("click", () => {
-  manageEl.hidden = true;
-});
+manageBtn.addEventListener("click", () => openManageHome());
+manageCloseEl.addEventListener("click", closeManage);
+manageEl.addEventListener("keydown", trapFocus);
 refreshBtn.addEventListener("click", () => {
   void loadBoard(true);
 });
+
+chipsEl.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  event.preventDefault();
+  const chips = chipsEl.querySelectorAll<HTMLElement>(".chip");
+  if (chips.length === 0) return;
+  const current = Array.from(chips).indexOf(document.activeElement as HTMLElement);
+  const delta = event.key === "ArrowRight" ? 1 : -1;
+  const next = (current === -1 ? chipIndex : current) + delta;
+  const index = (next + chips.length) % chips.length;
+  for (const chip of chips) {
+    chip.tabIndex = -1;
+  }
+  chips[index]!.tabIndex = 0;
+  chips[index]!.focus();
+  chips[index]!.click();
+});
+
 windowTabsEl.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
   if (target.dataset["window"] === undefined) return;
-  windowKey = target.dataset["window"] as WindowKey;
-  for (const tab of windowTabsEl.querySelectorAll<HTMLElement>(".tab")) {
-    tab.dataset["active"] = String(tab.dataset["window"] === windowKey);
-  }
-  void loadBoard();
+  selectWindow(target.dataset["window"] as WindowKey);
 });
 
+windowTabsEl.addEventListener("keydown", (event) => {
+  if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+  event.preventDefault();
+  const tabs = Array.from(windowTabsEl.querySelectorAll<HTMLElement>(".tab"));
+  const current = tabs.indexOf(document.activeElement as HTMLElement);
+  const next = (current + (event.key === "ArrowRight" ? 1 : -1) + tabs.length) % tabs.length;
+  tabs[next]?.focus();
+  const windowKeyOf = tabs[next]?.dataset["window"];
+  if (windowKeyOf !== undefined) selectWindow(windowKeyOf as WindowKey);
+});
+
+function selectWindow(key: WindowKey): void {
+  windowKey = key;
+  const panelEl = document.getElementById("windowPanel")!;
+  for (const tab of windowTabsEl.querySelectorAll<HTMLElement>(".tab")) {
+    const active = tab.dataset["window"] === windowKey;
+    tab.dataset["active"] = String(active);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+    if (active) {
+      panelEl.setAttribute("aria-labelledby", tab.id);
+    }
+  }
+  void loadBoard();
+}
+
+function initTabs(): void {
+  for (const tab of windowTabsEl.querySelectorAll<HTMLElement>(".tab")) {
+    const active = tab.dataset["window"] === windowKey;
+    tab.dataset["active"] = String(active);
+    tab.setAttribute("aria-selected", String(active));
+    tab.tabIndex = active ? 0 : -1;
+  }
+}
+
+initTabs();
 applyTheme();
 void loadCrews();

@@ -57,22 +57,80 @@ export function encodePng(size: number, rgba: Uint8Array): Uint8Array {
   return out;
 }
 
-const BG = [13, 17, 23, 255];
-const RED = [255, 77, 61, 255];
+const BG: [number, number, number, number] = [13, 17, 23, 255];
+const TRACK: [number, number, number, number] = [35, 44, 58, 255];
+const RED: [number, number, number, number] = [255, 77, 61, 255];
+const DOT: [number, number, number, number] = [236, 229, 216, 255];
+
+function coverage(edge0: number, edge1: number, value: number): number {
+  const t = (value - edge0) / (edge1 - edge0);
+  return Math.min(1, Math.max(0, t));
+}
+
+function band(distance: number, radius: number, width: number): number {
+  const half = width / 2;
+  return coverage(radius - half - 0.5, radius - half + 0.5, distance) *
+    (1 - coverage(radius + half - 0.5, radius + half + 0.5, distance));
+}
+
+function blend(px: Uint8Array, color: [number, number, number, number], alpha: number): void {
+  if (alpha <= 0) return;
+  const a = alpha;
+  const dst = px[3]! / 255;
+  const out = a + dst * (1 - a);
+  if (out <= 0) return;
+  for (let k = 0; k < 3; k++) {
+    const cs = color[k]! / 255;
+    const cd = px[k]! / 255;
+    px[k] = Math.round(((cs * a + cd * dst * (1 - a)) / out) * 255);
+  }
+  px[3] = Math.round(out * 255);
+}
 
 function drawIcon(size: number): Uint8Array {
   const rgba = new Uint8Array(size * size * 4);
-  const inset = Math.round(size * 0.18);
-  const bar = Math.max(1, Math.round(size * 0.06));
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const px = (y * size + x) * 4;
-      const inBar = x >= inset && x < size - inset && y >= inset && y < size - inset;
-      const pips = inBar && ((y - inset) % Math.round(size * 0.3) < bar);
-      const c = pips ? BG : RED;
-      rgba.set(c, px);
+      rgba[px] = BG[0];
+      rgba[px + 1] = BG[1];
+      rgba[px + 2] = BG[2];
+      rgba[px + 3] = BG[3];
     }
   }
+
+  const c = size / 2;
+  const ringR = size * 0.3;
+  const trackW = size * 0.09;
+  const arcW = size * 0.115;
+  const dotR = size * 0.1;
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const px = (y * size + x) * 4;
+      const dx = x - c;
+      const dy = y - c;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      const angleDeg = (Math.atan2(dy, dx) * 180) / Math.PI;
+      const inArc = angleDeg >= -90 && angleDeg <= 180;
+
+      if (!inArc) {
+        blend(rgba.subarray(px, px + 4), TRACK, band(d, ringR, trackW));
+      } else {
+        blend(rgba.subarray(px, px + 4), RED, band(d, ringR, arcW));
+      }
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const px = (y * size + x) * 4;
+      const d = Math.sqrt((x - c) ** 2 + (y - c) ** 2);
+      const dotAlpha = 1 - coverage(dotR - 0.5, dotR + 0.5, d);
+      blend(rgba.subarray(px, px + 4), DOT, dotAlpha);
+    }
+  }
+
   return rgba;
 }
 

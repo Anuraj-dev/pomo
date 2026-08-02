@@ -11,12 +11,25 @@
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: 1rem;
+}
+
+.head-left {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
 .title {
   font-size: 1.4rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+.manage-btn {
+  padding: 0.35rem 0.9rem;
+  font-size: 0.85rem;
 }
 
 .fresh {
@@ -26,6 +39,14 @@
 
 .fresh[data-kind="syncing"] {
   color: var(--accent);
+}
+
+.fresh[data-kind="error"] {
+  color: var(--accent);
+}
+
+.fresh[data-kind="partial"] {
+  color: var(--text-muted);
 }
 
 .fresh[data-kind="stale"],
@@ -76,30 +97,32 @@
 }
 
 .summary {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.75rem;
-}
-
-.summary .stat {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.2rem;
+  align-items: baseline;
+  padding: 0.65rem 0.9rem;
   background: var(--bg-panel);
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 0.8rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.summary .stat .num {
-  font-size: 1.5rem;
-}
-
-.summary .stat .caption {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
+  font-size: 0.85rem;
   color: var(--text-muted);
+}
+
+.summary .item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.summary .item .num {
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.summary .item + .item {
+  border-left: 1px solid var(--border);
+  padding-left: 1.2rem;
 }
 
 .standing {
@@ -130,17 +153,9 @@
   color: var(--text-muted);
 }
 
-.board[data-empty="true"] {
-  padding: 2rem;
-  text-align: center;
-  color: var(--text-muted);
-  border: 1px dashed var(--border);
-  border-radius: 12px;
-}
-
 .member {
   display: grid;
-  grid-template-columns: 2.2rem 1fr auto;
+  grid-template-columns: 2.2rem 1fr auto auto;
   gap: 0.75rem;
   align-items: center;
   padding: 0.7rem 0;
@@ -178,7 +193,8 @@
 .member .name .bars {
   display: flex;
   gap: 2px;
-  height: 10px;
+  height: 0.625rem;
+  min-height: 10px;
 }
 
 .member .name .bars span {
@@ -208,12 +224,12 @@
   color: var(--text-muted);
 }
 
-.member[data-state="stale"] .who {
-  color: var(--text-muted);
-}
-
 .member[data-state="inactive"] {
   opacity: 0.55;
+}
+
+.member[data-state="stale"] .who {
+  color: var(--text-muted);
 }
 
 .member .actions {
@@ -224,6 +240,78 @@
 .member .actions button {
   font-size: 0.75rem;
   padding: 0.2rem 0.5rem;
+}
+
+.inactive-group {
+  margin-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.inactive-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 0.6rem 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+}
+
+.inactive-toggle:hover {
+  color: var(--text);
+}
+
+.inactive-toggle[aria-expanded="true"] + .inactive-list {
+  display: block;
+}
+
+.inactive-list {
+  display: none;
+}
+
+.inactive-list .member {
+  border-bottom-color: var(--border);
+}
+
+.inactive-list .member:last-child {
+  border-bottom: none;
+}
+
+.member-detail {
+  grid-column: 2 / 5;
+  padding-bottom: 0.6rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.board-error {
+  padding: 1.5rem 2rem;
+  text-align: center;
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.board-error .msg {
+  color: var(--accent);
+  font-size: 0.9rem;
+}
+
+.board[data-empty="true"] {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+  border: 1px dashed var(--border);
+  border-radius: 12px;
 }
 
 .panel {
@@ -279,6 +367,8 @@
 .qr canvas {
   border-radius: 10px;
   border: 1px solid var(--border);
+  width: min(220px, 100%);
+  height: auto;
 }
 
 .row {
@@ -291,4 +381,29 @@
 .error {
   color: var(--accent);
   font-size: 0.85rem;
+}
+
+.danger {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: none;
+}
+
+.manage-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.manage-menu .muted {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.section-title {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0.25rem 0 0;
 }
