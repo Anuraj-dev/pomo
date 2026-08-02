@@ -59,7 +59,7 @@ describe("buildOwnSnapshot", () => {
     expect(snapshot.dailyAggregates[0]!.localDate).toBe("2026-08-01");
   });
 
-  test("builds stats extras from work sessions and day stats", () => {
+  test("emits no stats extras", () => {
     const dayStats = [
       day("2026-08-01", 2, 50, 10),
       day("2026-07-31", 3, 75, 15),
@@ -67,39 +67,15 @@ describe("buildOwnSnapshot", () => {
     ];
     const sessions = [session(NOW - 3600, "2026-08-01", "work", 1500)];
     const snapshot = buildOwnSnapshot({ ...CREW, dayStats, sessions, now: NOW, offsetMinutes: OFFSET });
-    const stats = snapshot.stats!;
-
-    expect(stats.hourBuckets).toHaveLength(24);
-    expect(stats.hourBuckets.reduce((a, b) => a + b, 0)).toBe(25);
-    expect(stats.weekdayBuckets).toHaveLength(7);
-    expect(stats.weekdayBuckets.reduce((a, b) => a + b, 0)).toBe(25);
-    expect(stats.allTimeWorkBlocks).toBe(6);
-    expect(stats.allTimeActiveDays).toBe(3);
-    expect(stats.bestStreak).toBe(3);
-    expect(stats.firstFocusLocalDate).toBe("2026-07-30");
-    expect(stats.historyStartDate).toBe("2026-07-30");
-    expect(stats.historyFocusMinutes).toEqual([25, 75, 50]);
-    expect(stats.historyWorkBlocks).toEqual([1, 3, 2]);
-    expect(stats.bestDayLocalDate).toBe("2026-07-31");
-    expect(stats.bestDayFocusMinutes).toBe(75);
-    expect(stats.bestDayWorkBlocks).toBe(3);
-    expect(stats.bestWeekStartDate).toBe("2026-07-26");
-    expect(stats.bestWeekFocusMinutes).toBe(150);
-    expect(stats.bestWeekWorkBlocks).toBe(6);
+    expect(snapshot.stats).toBeNull();
   });
 
-  test("handles an empty history with zeroed stats", () => {
+  test("handles an empty history with zeroed counters", () => {
     const snapshot = buildOwnSnapshot({ ...CREW, dayStats: [], sessions: [], now: NOW, offsetMinutes: OFFSET });
     expect(snapshot.allTimeFocusMinutes).toBe(0);
     expect(snapshot.currentStreak).toBe(0);
     expect(snapshot.lastFocusedAtEpochSeconds).toBe(0);
     expect(snapshot.dailyAggregates).toEqual([]);
-    const stats = snapshot.stats!;
-    expect(stats.firstFocusLocalDate).toBeNull();
-    expect(stats.historyStartDate).toBe("2026-04-04");
-    expect(stats.historyFocusMinutes).toHaveLength(120);
-    expect(stats.historyFocusMinutes.every((v) => v === 0)).toBe(true);
-    expect(stats.bestDayLocalDate).toBeNull();
-    expect(stats.bestWeekStartDate).toBeNull();
+    expect(snapshot.stats).toBeNull();
   });
 });

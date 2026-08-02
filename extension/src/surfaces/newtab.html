@@ -9,34 +9,79 @@
   </head>
   <body data-empty="true">
     <main class="stage">
-      <header class="band">
-        <span class="phase" id="phase">Focus</span>
-        <span class="status" id="status">Ready</span>
-      </header>
+      <div class="tabs" id="tabs" role="tablist" aria-label="Pomo views">
+        <button type="button" role="tab" id="tab-instrument" class="tab" data-tab="instrument" aria-selected="true" aria-controls="page-instrument" tabindex="0">Instrument</button>
+        <button type="button" role="tab" id="tab-history" class="tab" data-tab="history" aria-selected="false" aria-controls="page-history" tabindex="-1">History</button>
+        <button type="button" role="tab" id="tab-stats" class="tab" data-tab="stats" aria-selected="false" aria-controls="page-stats" tabindex="-1">Stats</button>
+      </div>
 
-      <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
-        <span class="time num" id="time">--:--</span><span class="fraction num" id="fraction">.0</span>
-        <span class="progress"><span class="fill" id="progress"></span></span>
-      </button>
+      <section class="view" id="page-instrument" role="tabpanel" aria-labelledby="tab-instrument">
+        <header class="band">
+          <span class="phase" id="phase">Focus</span>
+          <span class="status" id="status">Ready</span>
+        </header>
 
-      <nav class="controls">
-        <button class="control" id="skip">Skip</button>
-        <button class="control" id="reset">Reset</button>
-        <button class="control" id="crewLink">Crew</button>
-      </nav>
+        <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
+          <span class="time num" id="time">--:--</span><span class="fraction num" id="fraction">.0</span>
+          <span class="progress"><span class="fill" id="progress"></span></span>
+        </button>
 
-      <section class="stats">
-        <div class="stat">
-          <span class="num" id="todayCount">—</span>
-          <span class="caption">blocks today</span>
+        <nav class="controls">
+          <button class="control" id="skip">Skip</button>
+          <button class="control" id="reset">Reset</button>
+          <button class="control" id="crewLink">Crew</button>
+        </nav>
+
+        <section class="stats">
+          <div class="stat">
+            <span class="num" id="todayCount">—</span>
+            <span class="caption">blocks today</span>
+          </div>
+          <div class="stat">
+            <span class="num" id="totalMinutes">—</span>
+            <span class="caption">total focus min</span>
+          </div>
+          <div class="stat">
+            <span class="num" id="streak">—</span>
+            <span class="caption">day streak</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="page-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+        <div class="column">
+          <div class="day-groups" id="dayGroups"></div>
         </div>
-        <div class="stat">
-          <span class="num" id="totalMinutes">—</span>
-          <span class="caption">total focus min</span>
-        </div>
-        <div class="stat">
-          <span class="num" id="streak">—</span>
-          <span class="caption">day streak</span>
+      </section>
+
+      <section class="view" id="page-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+        <div class="column">
+          <section class="stat-cards">
+            <div class="stat">
+              <span class="num" id="statsToday">—</span>
+              <span class="caption">blocks today</span>
+            </div>
+            <div class="stat">
+              <span class="num" id="statsTotal">—</span>
+              <span class="caption">total focus min</span>
+            </div>
+            <div class="stat">
+              <span class="num" id="statsStreak">—</span>
+              <span class="caption">day streak</span>
+            </div>
+          </section>
+          <div class="bars" id="statsBars"></div>
+          <table class="day-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th class="num-head">Blocks</th>
+                <th class="num-head">Focus</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody"></tbody>
+          </table>
+          <div class="note" id="statsNote" hidden></div>
         </div>
       </section>
     </main>

@@ -11,6 +11,8 @@ describe("Settings — defaults", () => {
       dailyGoal: 8,
       theme: "system",
       newtabInstrument: true,
+      soundEnabled: true,
+      tag: "Work",
     });
   });
 });
@@ -54,6 +56,22 @@ describe("Settings — sanitization", () => {
     expect(s.shortMinutes).toBe(5);
     expect(s.theme).toBe("system");
     expect(s.newtabInstrument).toBe(true);
+  });
+
+  test("sound toggle falls back to on", () => {
+    expect(sanitizeSettings({ soundEnabled: "yes" as never }).soundEnabled).toBe(true);
+    expect(sanitizeSettings({}).soundEnabled).toBe(true);
+  });
+
+  test("sound toggle passes through", () => {
+    expect(sanitizeSettings({ soundEnabled: false }).soundEnabled).toBe(false);
+  });
+
+  test("tag is trimmed and non-empty, falling back to Work", () => {
+    expect(sanitizeSettings({ tag: "  Deep Work  " }).tag).toBe("Deep Work");
+    expect(sanitizeSettings({ tag: "   " }).tag).toBe("Work");
+    expect(sanitizeSettings({ tag: 7 as never }).tag).toBe("Work");
+    expect(sanitizeSettings({}).tag).toBe("Work");
   });
 
   test("fractional minutes are floored", () => {

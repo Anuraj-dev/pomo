@@ -1,7 +1,14 @@
 import type { TimerSnapshot } from "../../engine/timer";
-import { formatTenths, phaseLabel, statusLabel } from "../../shared/format";
-import { applyTheme, sendCommand, subscribeState } from "../../shared/surface";
-import { readSurfaceStats } from "../../shared/statsReader";
+import { applyTheme, subscribeState } from "../../shared/surface";
+import {
+  applyInstrument,
+  attachTicker,
+  attachTimerControls,
+  refreshStats,
+  remainingOf,
+  renderProgress,
+  renderTime,
+} from "../../shared/instrument";
 
 const phaseEl = document.getElementById("phase")!;
 const statusEl = document.getElementById("status")!;
@@ -17,66 +24,19 @@ const streakEl = document.getElementById("streak")!;
 
 let latest: TimerSnapshot | null = null;
 
-function remainingOf(state: TimerSnapshot): number {
-  if (state.status === "running") {
-    return Math.max(0, state.startTime + state.duration - Date.now() / 1000);
-  }
-  return state.remaining;
-}
-
-function elapsedFraction(state: TimerSnapshot): number {
-  const remaining = remainingOf(state);
-  if (state.duration <= 0) return 0;
-  return Math.min(1, Math.max(0, 1 - remaining / state.duration));
-}
-
-function apply(state: TimerSnapshot): void {
-  document.body.dataset["empty"] = "false";
-  document.body.dataset["phase"] = state.phase;
-  document.body.dataset["status"] = state.status;
-  phaseEl.textContent = phaseLabel(state.phase);
-  statusEl.textContent = statusLabel(state.status);
-  renderTime(remainingOf(state));
-  renderProgress(state);
-}
-
-function renderTime(remaining: number): void {
-  const { whole, tenths } = formatTenths(remaining);
-  timeEl.textContent = whole;
-  fractionEl.textContent = `.${tenths}`;
-}
-
-function renderProgress(state: TimerSnapshot): void {
-  progressEl.style.transform = `scaleX(${elapsedFraction(state)})`;
-}
-
-async function refreshStats(): Promise<void> {
-  try {
-    const stats = await readSurfaceStats();
-    todayCountEl.textContent = String(stats.todayEarned);
-    totalMinutesEl.textContent = String(Math.round(stats.totalFocusMinutes));
-    streakEl.textContent = String(stats.streak);
-  } catch {
-    todayCountEl.textContent = "—";
-    totalMinutesEl.textContent = "—";
-    streakEl.textContent = "—";
-  }
-}
-
 applyTheme();
 subscribeState((state) => {
   latest = state;
-  apply(state);
-  void refreshStats();
+  applyInstrument(document.body, phaseEl, statusEl, state, { timeEl, fractionEl, progressEl });
+  void refreshStats(todayCountEl, totalMinutesEl, streakEl);
 });
 
-setInterval(() => {
-  if (latest !== null) {
-    renderTime(remainingOf(latest));
-    renderProgress(latest);
-  }
-}, 100);
+attachTicker(
+  () => latest,
+  (state) => {
+    renderTime(timeEl, fractionEl, remainingOf(state));
+    renderProgress(progressEl, state);
+  },
+);
 
-toggleEl.addEventListener("click", () => sendCommand("toggle"));
-skipEl.addEventListener("click", () => sendCommand("skip"));
-resetEl.addEventListener("click", () => sendCommand("reset"));
+attachTimerControls(toggleEl, skipEl, resetEl);

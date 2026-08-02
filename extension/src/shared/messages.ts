@@ -1,7 +1,9 @@
 import type { CrewRelayStateRow } from "../db/dao";
+import type { DayStatRow, SessionRow } from "../db/types";
 import type { Board, Standing, WindowKey } from "../crew/leaderboard";
 import type { PomoSettings } from "../engine/settings";
 import type { TimerSnapshot } from "../engine/timer";
+import type { SurfaceStats } from "./statsReader";
 
 export const STATE_KEY = "pomo:state";
 export const ENGINE_KEY = "pomo:engine";
@@ -19,6 +21,19 @@ export interface PomoCommandMessage {
 
 export interface PomoQueryMessage {
   type: "pomo:query";
+}
+
+export interface PomoStatsMessage {
+  type: "pomo:stats";
+}
+
+export interface PomoHistoryMessage {
+  type: "pomo:history";
+}
+
+export interface HistoryPayload {
+  sessions: SessionRow[];
+  dayStats: DayStatRow[];
 }
 
 export interface PomoSettingsGetMessage {
@@ -98,9 +113,22 @@ export interface PomoCrewJoinCodeMessage {
   crewId: string;
 }
 
+export interface PomoRecoveryExportMessage {
+  type: "pomo:recovery:export";
+  passphrase: string;
+}
+
+export interface PomoRecoveryImportMessage {
+  type: "pomo:recovery:import";
+  payload: string;
+  passphrase: string;
+}
+
 export type PomoRequest =
   | PomoCommandMessage
   | PomoQueryMessage
+  | PomoStatsMessage
+  | PomoHistoryMessage
   | PomoSettingsGetMessage
   | PomoSettingsSetMessage
   | PomoCrewListMessage
@@ -111,7 +139,9 @@ export type PomoRequest =
   | PomoCrewHideMessage
   | PomoCrewRefreshMessage
   | PomoCrewJoinCodeMessage
-  | PomoCrewRenameMessage;
+  | PomoCrewRenameMessage
+  | PomoRecoveryExportMessage
+  | PomoRecoveryImportMessage;
 
 export interface PomoResponse {
   ok: boolean;
@@ -121,6 +151,9 @@ export interface PomoResponse {
   crews?: CrewSummary[];
   board?: CrewBoardResult;
   joinCode?: string;
+  recovery?: string;
+  stats?: SurfaceStats;
+  history?: HistoryPayload;
 }
 
 export function isPomoRequest(value: unknown): value is PomoRequest {
@@ -129,6 +162,8 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
   return (
     candidate.type === "pomo:command" ||
     candidate.type === "pomo:query" ||
+    candidate.type === "pomo:stats" ||
+    candidate.type === "pomo:history" ||
     candidate.type === "pomo:settings:get" ||
     candidate.type === "pomo:settings:set" ||
     candidate.type === "pomo:crew:list" ||
@@ -139,6 +174,8 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
     candidate.type === "pomo:crew:hide" ||
     candidate.type === "pomo:crew:refresh" ||
     candidate.type === "pomo:crew:joinCode" ||
-    candidate.type === "pomo:crew:rename"
+    candidate.type === "pomo:crew:rename" ||
+    candidate.type === "pomo:recovery:export" ||
+    candidate.type === "pomo:recovery:import"
   );
 }

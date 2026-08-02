@@ -1,22 +1,25 @@
 import { CrewDao, HistoryDao } from "../db/dao";
 import { openDb } from "../db/schema";
 import type { SessionRow } from "../db/types";
-import { splitBlockByCalendarDay } from "../engine/blocks";
-import { utcOffsetMinutesAt } from "../engine/dateLogic";
+import { deltasForBlock, splitBlockByCalendarDay } from "../engine/blocks";
+import { dateStringOf, utcOffsetMinutesAt } from "../engine/dateLogic";
 import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine/settings";
+import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
 import { loadCrewBoard, publishOwnSnapshot, refreshMembership } from "../crew/crewService";
 import { publicKeyOf } from "../crew/identity";
 import { decodePayload, encodePayload, newPayload } from "../crew/joinCode";
 import {
   KEYRING_STORAGE_KEY,
+  decodeRecovery,
+  encodeRecovery,
   exportWrappingKey,
   generateWrappingKey,
   importWrappingKey,
   unwrapIdentityKey,
   wrapIdentityKey,
 } from "../crew/keyring";
-import { standingFor } from "../crew/leaderboard";
+import { standingFor, type WindowKey } from "../crew/leaderboard";
 import { generateIdentity } from "../crew/identity";
 import type { StoredMembership } from "../crew/types";
 import { badgeColorOf, badgeTextOf } from "../shared/badge";
@@ -27,6 +30,7 @@ import {
   SETTINGS_KEY,
   STATE_KEY,
   isPomoRequest,
+  type CrewBoardResult,
   type CrewSummary,
   type PomoRequest,
   type PomoResponse,
@@ -35,7 +39,7 @@ import {
 const ALARM_NAME = "pomo-tick";
 const ALARM_PERIOD_MINUTES = 0.5;
 const PHASE_COMPLETE_NOTIFICATION = "pomo-phase-complete";
-const CREW_SYNC_MIN_INTERVAL = 5 * 60;
+const CREW_SYNC_MIN_INTERVAL = 60;
 
 let db: IDBDatabase;
 let dao: HistoryDao;
@@ -73,6 +77,7 @@ function earnedBlocksForDate(date: string): number {
 
 function commit(block: CompletedBlock): void {
   const offset = timezoneOffsetMinutes();
+  const deltasByDate = new Map(deltasForBlock(block, offset).map((delta) => [delta.date, delta]));
   const segments = splitBlockByCalendarDay({
     start: block.start,
     duration: block.duration,
@@ -90,11 +95,7 @@ function commit(block: CompletedBlock): void {
       completed: segment.completed,
       tag: segment.tag,
     };
-    const delta = {
-      earnedBlocks: segment.completed && segment.type === "work" ? 1 : 0,
-      focusMinutes: segment.type === "work" ? segment.duration / 60 : 0,
-      breakMinutes: segment.completed && segment.type !== "work" ? segment.duration / 60 : 0,
-    };
+    const delta = deltasByDate.get(segment.date)!;
     earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + delta.earnedBlocks);
     pendingWrite = pendingWrite
       .then(() => dao.insertSessionWithDayStats(row, delta))
@@ -109,6 +110,7 @@ function commit(block: CompletedBlock): void {
 }
 
 function notifyPhaseComplete(phase: Phase): void {
+  if (!settings.soundEnabled) return;
   const isWork = phase === "work";
   chrome.notifications.create(PHASE_COMPLETE_NOTIFICATION, {
     type: "basic",
@@ -128,7 +130,7 @@ function enginePorts(): ConstructorParameters<typeof TimerEngine>[0] {
     phaseSeconds: (phase) =>
       phase === "work" ? settings.workMinutes * 60 : phase === "short" ? settings.shortMinutes * 60 : settings.longMinutes * 60,
     goal: () => settings.dailyGoal,
-    tag: () => "Work",
+    tag: () => settings.tag,
     longBreakAfter: () => settings.longBreakAfter,
   };
 }
@@ -162,9 +164,8 @@ async function loadSettings(): Promise<void> {
 }
 
 async function loadEarnedCount(): Promise<void> {
-  const today = utcOffsetMinutesAt(nowSeconds());
-  const date = new Date(nowSeconds() * 1000 + today * 60000).toISOString().slice(0, 10);
-  earnedByDate.set(date, await dao.earnedBlocksForDate(date));
+  const today = dateStringOf(nowSeconds(), timezoneOffsetMinutes());
+  earnedByDate.set(today, await dao.earnedBlocksForDate(today));
 }
 
 async function initIdentity(): Promise<void> {
@@ -263,6 +264,21 @@ async function crewSummaries(): Promise<CrewSummary[]> {
   return summaries;
 }
 
+async function buildBoardResponse(crewId: string, window: WindowKey, now: number): Promise<CrewBoardResult> {
+  const membership = crewMemberships.find((m) => m.crewId === crewId)!;
+  const { board, relayStates } = await loadCrewBoard(crewDao, crewId, window, now);
+  const selfKey = identityPrivateKey === null ? "" : publicKeyOf(identityPrivateKey);
+  const crew = (await crewSummaries()).find((c) => c.crewId === crewId) ?? {
+    crewId: membership.crewId,
+    crewName: membership.crewName,
+    displayName: membership.displayName,
+    relays: membership.relays,
+    lastAttemptEpochSeconds: null,
+    lastSuccessEpochSeconds: null,
+  };
+  return { crew, board, relayStates, standing: standingFor(board, selfKey), selfPublicKey: selfKey };
+}
+
 async function init(): Promise<void> {
   db = await openDb();
   dao = new HistoryDao(db);
@@ -307,6 +323,30 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return { ok: true, state: engine.snapshot() };
     case "pomo:query":
       return { ok: true, state: engine.snapshot() };
+    case "pomo:stats": {
+      const days = await dao.dayStats();
+      const now = nowSeconds();
+      const offset = timezoneOffsetMinutes();
+      const today = dateStringOf(now, offset);
+      const sum = totals(days);
+      return {
+        ok: true,
+        stats: {
+          todayEarned: days.find((day) => day.date === today)?.earnedBlocks ?? 0,
+          totalFocusMinutes: sum.focusMinutes,
+          streak: currentStreak(days.map((day) => day.date), today, offset),
+        },
+      };
+    }
+    case "pomo:history": {
+      const [sessions, dayStats] = await Promise.all([dao.allSessions(), dao.dayStats()]);
+      sessions.sort((a, b) => b.start - a.start);
+      dayStats.sort((a, b) => (a.date < b.date ? 1 : -1));
+      return {
+        ok: true,
+        history: { sessions: sessions.slice(0, 200), dayStats: dayStats.slice(0, 120) },
+      };
+    }
     case "pomo:settings:get":
       return { ok: true, settings };
     case "pomo:settings:set":
@@ -319,19 +359,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
     case "pomo:crew:board": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
-      const now = nowSeconds();
-      const { board, relayStates } = await loadCrewBoard(crewDao, request.crewId, request.window, now);
-      const selfKey = identityPrivateKey === null ? "" : publicKeyOf(identityPrivateKey);
-      const standing = standingFor(board, selfKey);
-      const crew = (await crewSummaries()).find((c) => c.crewId === request.crewId) ?? {
-        crewId: membership.crewId,
-        crewName: membership.crewName,
-        displayName: membership.displayName,
-        relays: membership.relays,
-        lastAttemptEpochSeconds: null,
-        lastSuccessEpochSeconds: null,
-      };
-      return { ok: true, board: { crew, board, relayStates, standing, selfPublicKey: selfKey } };
+      return { ok: true, board: await buildBoardResponse(request.crewId, request.window, nowSeconds()) };
     }
     case "pomo:crew:join": {
       const decoded = decodePayload(request.payload);
@@ -390,14 +418,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       await crewSync(true);
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
-      const now = nowSeconds();
-      const { board, relayStates } = await loadCrewBoard(crewDao, request.crewId, request.window ?? "today", now);
-      const selfKey = identityPrivateKey === null ? "" : publicKeyOf(identityPrivateKey);
-      const crew = (await crewSummaries()).find((c) => c.crewId === request.crewId)!;
-      return {
-        ok: true,
-        board: { crew, board, relayStates, standing: standingFor(board, selfKey), selfPublicKey: selfKey },
-      };
+      return { ok: true, board: await buildBoardResponse(request.crewId, request.window ?? "today", nowSeconds()) };
     }
     case "pomo:crew:joinCode": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
@@ -412,6 +433,61 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           key: membership.key,
         }),
       };
+    }
+    case "pomo:recovery:export": {
+      if (identityPrivateKey === null) return { ok: false, error: "identity not ready" };
+      try {
+        const recovery = await encodeRecovery(identityPrivateKey, crewMemberships, request.passphrase);
+        return { ok: true, recovery };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    }
+    case "pomo:recovery:import": {
+      const payload = await decodeRecovery(request.payload, request.passphrase);
+      if (payload === null) return { ok: false, error: "invalid recovery file or passphrase" };
+      try {
+        const memberships: StoredMembership[] = [];
+        for (const membership of payload.memberships) {
+          const extras = membership as { displayName?: unknown; joinedAtEpochSeconds?: unknown };
+          if (
+            typeof membership.crewId !== "string" ||
+            typeof membership.crewName !== "string" ||
+            !Array.isArray(membership.relays) ||
+            !membership.relays.every((relay) => typeof relay === "string") ||
+            typeof membership.key !== "string"
+          ) {
+            return { ok: false, error: "invalid recovery file or passphrase" };
+          }
+          memberships.push({
+            crewId: membership.crewId,
+            crewName: membership.crewName,
+            relays: membership.relays,
+            key: membership.key,
+            displayName:
+              typeof extras.displayName === "string" && extras.displayName.length > 0
+                ? extras.displayName
+                : membership.crewName,
+            joinedAtEpochSeconds:
+              typeof extras.joinedAtEpochSeconds === "number" ? extras.joinedAtEpochSeconds : nowSeconds(),
+          });
+        }
+        identityPrivateKey = payload.identityPrivateKey;
+        const wrapping = await generateWrappingKey();
+        const identityEnvelope = await wrapIdentityKey(identityPrivateKey, wrapping);
+        await chrome.storage.local.set({
+          [KEYRING_STORAGE_KEY]: {
+            wrappingKey: await exportWrappingKey(wrapping),
+            identity: identityEnvelope,
+          },
+        });
+        crewMemberships = memberships;
+        await saveMemberships();
+        void crewSync(true);
+        return { ok: true, crews: await crewSummaries() };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
     }
   }
 }

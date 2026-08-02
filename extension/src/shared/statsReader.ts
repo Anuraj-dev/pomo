@@ -1,25 +1,32 @@
-import { HistoryDao } from "../db/dao";
-import { openDb } from "../db/schema";
-import { dateStringOf, utcOffsetMinutesAt } from "../engine/dateLogic";
-import { currentStreak, totals } from "../engine/stats";
-
 export interface SurfaceStats {
   todayEarned: number;
   totalFocusMinutes: number;
   streak: number;
 }
 
+interface StatsResponse {
+  ok: boolean;
+  stats?: SurfaceStats;
+  error?: string;
+}
+
+function sendMessage(message: unknown): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    chrome.runtime.sendMessage(message, (response) => {
+      const lastError = chrome.runtime.lastError;
+      if (lastError !== undefined) {
+        reject(new Error(lastError.message));
+      } else {
+        resolve(response);
+      }
+    });
+  });
+}
+
 export async function readSurfaceStats(): Promise<SurfaceStats> {
-  const db = await openDb();
-  const dao = new HistoryDao(db);
-  const days = await dao.dayStats();
-  const now = Math.floor(Date.now() / 1000);
-  const offset = utcOffsetMinutesAt(now);
-  const today = dateStringOf(now, offset);
-  const sum = totals(days);
-  return {
-    todayEarned: days.find((day) => day.date === today)?.earnedBlocks ?? 0,
-    totalFocusMinutes: sum.focusMinutes,
-    streak: currentStreak(days.map((day) => day.date), today, offset),
-  };
+  const response = (await sendMessage({ type: "pomo:stats" })) as StatsResponse | undefined;
+  if (response === undefined || response.ok !== true || response.stats === undefined) {
+    throw new Error(response?.error ?? "stats request failed");
+  }
+  return response.stats;
 }

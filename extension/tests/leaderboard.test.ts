@@ -1,10 +1,49 @@
 import { describe, expect, test } from "bun:test";
-import { aggregateBoard, makeSnapshots, standingFor } from "../src/crew/leaderboard";
+import { aggregateBoard, standingFor } from "../src/crew/leaderboard";
 import type { DailyAggregate, SnapshotPlain } from "../src/crew/types";
 import { dateStringOf } from "../src/engine/dateLogic";
 
 const NOW = 1_700_000_000;
 const DAY = 86400;
+
+function makeSnapshots(n: number, seed: number, now: number): SnapshotPlain[] {
+  const snapshots: SnapshotPlain[] = [];
+  let state = seed;
+  const nextRand = (): number => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+  for (let i = 0; i < n; i++) {
+    const lastFocusedAtEpochSeconds = now - Math.floor(nextRand() * 90 * DAY);
+    const dailyAggregates = [];
+    let allTimeFocusMinutes = 0;
+    for (let d = 0; d < 30; d++) {
+      const focusMinutes = Math.floor(nextRand() * 180);
+      allTimeFocusMinutes += focusMinutes;
+      dailyAggregates.push({
+        localDate: dateStringOf(now - d * DAY, 0),
+        focusMinutes,
+        completedWorkBlocks: Math.floor(nextRand() * 10),
+      });
+    }
+    snapshots.push({
+      crewId: "crew",
+      identityPublicKey: i.toString(16).padStart(64, "0"),
+      displayName: `M${i}`,
+      avatarBase64: null,
+      allTimeFocusMinutes,
+      publishedAtEpochSeconds: now,
+      localDate: dateStringOf(now, 0),
+      utcOffsetMinutes: 0,
+      dailyAggregates,
+      currentStreak: Math.floor(nextRand() * 12),
+      lastFocusedAtEpochSeconds,
+      version: 2,
+      stats: null,
+    });
+  }
+  return snapshots;
+}
 
 function key(i: number): string {
   return i.toString(16).padStart(64, "0");

@@ -6,6 +6,8 @@ export interface PomoSettings {
   dailyGoal: number;
   theme: "system" | "light" | "dark";
   newtabInstrument: boolean;
+  soundEnabled: boolean;
+  tag: string;
 }
 
 export const DEFAULT_SETTINGS: PomoSettings = {
@@ -16,6 +18,8 @@ export const DEFAULT_SETTINGS: PomoSettings = {
   dailyGoal: 8,
   theme: "system",
   newtabInstrument: true,
+  soundEnabled: true,
+  tag: "Work",
 };
 
 const THEMES: readonly PomoSettings["theme"][] = ["system", "light", "dark"];
@@ -38,6 +42,12 @@ function validBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+function validTag(value: unknown): string {
+  if (typeof value !== "string") return DEFAULT_SETTINGS.tag;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : DEFAULT_SETTINGS.tag;
+}
+
 export function sanitizeSettings(input: unknown): PomoSettings {
   if (input == null || typeof input !== "object") return { ...DEFAULT_SETTINGS };
   const source = input as Record<string, unknown>;
@@ -49,5 +59,7 @@ export function sanitizeSettings(input: unknown): PomoSettings {
     dailyGoal: nonNegativeCount(source.dailyGoal as number | undefined, DEFAULT_SETTINGS.dailyGoal),
     theme: validTheme(source.theme),
     newtabInstrument: validBoolean(source.newtabInstrument, DEFAULT_SETTINGS.newtabInstrument),
+    soundEnabled: validBoolean(source.soundEnabled, DEFAULT_SETTINGS.soundEnabled),
+    tag: validTag(source.tag),
   };
 }

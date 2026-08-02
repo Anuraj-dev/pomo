@@ -1,10 +1,10 @@
-import { base64UrlToBytes, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
+import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { hexToBytes, isLowerHex } from "../shared/hex";
+import { NONCE_BYTES } from "./keyring";
 import type { CrewStatsExtras, SnapshotPlain } from "./types";
 
-const NONCE_BYTES = 12;
 const GCM_TAG_BITS = 128;
-const MAX_DAILY_AGGREGATES = 30;
+export const MAX_DAILY_AGGREGATES = 30;
 const MAX_HISTORY_DAYS = 120;
 const MAX_ENVELOPE_BYTES = 64 * 1024;
 const MAX_CIPHERTEXT_BYTES = 32 * 1024;
@@ -16,10 +16,6 @@ interface Envelope {
   identityPublicKey: string;
   nonce: string;
   ciphertext: string;
-}
-
-function bufferOf(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 async function keyFromCrewKey(crewKeyHex64: string): Promise<CryptoKey> {

@@ -1,4 +1,4 @@
-import type { CrewRelayStateRow } from "../db/dao";
+import type { CrewDailyRow, CrewRelayStateRow, CrewSnapshotRow } from "../db/dao";
 import type { DayStatRow, SessionRow } from "../db/types";
 import { aggregateBoard, type Board, type WindowKey } from "./leaderboard";
 import { buildEnvelope, decryptEnvelope } from "./snapshot";
@@ -6,8 +6,8 @@ import { MAX_CREATED_AT_SKEW_SECONDS, signEvent, verifyEvent } from "./nostrEven
 import { buildOwnSnapshot } from "./ownSnapshot";
 import { publicKeyOf } from "./identity";
 import { fetchEventsBurst, publishEventBurst, type RelayCompletion } from "./transport";
-import type { CrewMembership, SnapshotPlain } from "./types";
 import { SNAPSHOT_EVENT_KIND } from "./types";
+import type { CrewMembership, DailyAggregate, SnapshotPlain } from "./types";
 
 export interface CrewStore {
   upsertLatest(snapshot: CrewSnapshotRowLike, daily: CrewDailyRowLike[]): Promise<boolean>;
@@ -24,28 +24,9 @@ export interface CrewStore {
   relayStates(crewId: string): Promise<CrewRelayStateRow[]>;
 }
 
-export interface CrewSnapshotRowLike {
-  crewId: string;
-  identityPublicKey: string;
-  displayName: string;
-  avatarBase64: string | null;
-  allTimeFocusMinutes: number;
-  publishedAtEpochSeconds: number;
-  localDate: string;
-  utcOffsetMinutes: number;
-  currentStreak: number;
-  lastFocusedAtEpochSeconds: number;
-  protocolVersion: number;
-  statsJson: string | null;
-}
+export type CrewSnapshotRowLike = CrewSnapshotRow;
 
-export interface CrewDailyRowLike {
-  crewId: string;
-  identityPublicKey: string;
-  localDate: string;
-  focusMinutes: number;
-  completedWorkBlocks: number;
-}
+export type CrewDailyRowLike = CrewDailyRow;
 
 export interface BurstSeam {
   timeoutMs?: number;
@@ -114,6 +95,20 @@ async function recordCompletions(
   }
 }
 
+function dailyRowsFor(
+  crewId: string,
+  identityPublicKey: string,
+  aggregates: DailyAggregate[],
+): CrewDailyRow[] {
+  return aggregates.map((aggregate) => ({
+    crewId,
+    identityPublicKey,
+    localDate: aggregate.localDate,
+    focusMinutes: aggregate.focusMinutes,
+    completedWorkBlocks: aggregate.completedWorkBlocks,
+  }));
+}
+
 export async function refreshMembership(
   membership: CrewMembership,
   dao: CrewStore,
@@ -137,13 +132,7 @@ export async function refreshMembership(
     }
     if (snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) continue;
     if (snapshot.publishedAtEpochSeconds > event.created_at + MAX_CREATED_AT_SKEW_SECONDS) continue;
-    const daily: CrewDailyRowLike[] = snapshot.dailyAggregates.map((aggregate) => ({
-      crewId: membership.crewId,
-      identityPublicKey: snapshot.identityPublicKey,
-      localDate: aggregate.localDate,
-      focusMinutes: aggregate.focusMinutes,
-      completedWorkBlocks: aggregate.completedWorkBlocks,
-    }));
+    const daily = dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates);
     if (await dao.upsertLatest(snapshotToRow(snapshot), daily)) {
       accepted++;
     }
@@ -184,13 +173,7 @@ export async function publishOwnSnapshot(
   const content = await buildEnvelope(snapshot, membership.key);
   await dao.upsertLatest(
     snapshotToRow(snapshot),
-    snapshot.dailyAggregates.map((aggregate) => ({
-      crewId: membership.crewId,
-      identityPublicKey: snapshot.identityPublicKey,
-      localDate: aggregate.localDate,
-      focusMinutes: aggregate.focusMinutes,
-      completedWorkBlocks: aggregate.completedWorkBlocks,
-    })),
+    dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates),
   );
   const event = await signEvent(
     {

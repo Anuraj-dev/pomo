@@ -1,16 +1,16 @@
 export const DB_NAME = "pomo";
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, SCHEMA_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
+      if (db.objectStoreNames.contains("settings")) db.deleteObjectStore("settings");
       const sessions = db.createObjectStore("sessions", { keyPath: "start" });
       sessions.createIndex("date", "date");
       db.createObjectStore("dayStats", { keyPath: "date" });
-      db.createObjectStore("settings", { keyPath: "key" });
       const crewSnapshots = db.createObjectStore("crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] });
       crewSnapshots.createIndex("crewId", "crewId");
       const crewDailyAggregates = db.createObjectStore("crewDailyAggregates", {

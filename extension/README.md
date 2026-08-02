@@ -13,6 +13,9 @@ bun install
 bun run build   # bundles sw.js, surface scripts, html/css, icons into dist/
 ```
 
+Plain Bun build is used intentionally — no Vite/CRXJS, deviating from the
+original "Bun + Vite + CRXJS" plan.
+
 ## Load unpacked
 
 1. `bun run build`
@@ -48,3 +51,11 @@ Per repo convention, linting and formatting run only in CI.
   iterations, AES-256-GCM), so a passphrase export on the extension restores on
   the phone and vice versa.
 - Zero host permissions: Nostr relay traffic is plain WebSockets.
+- Known platform constraint: Chrome toolbar badges fit roughly 4 characters,
+  so the badge shows `M:SS` under 10 minutes and `Nm` above — the plan's
+  `M:SS`-always badge is not physically possible.
+
+## CI
+
+Extension checks (typecheck, tests, build) run in GitHub Actions alongside the
+Android CI on every PR.

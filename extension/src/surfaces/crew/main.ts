@@ -3,6 +3,7 @@ import { applyTheme, request } from "../../shared/surface";
 import type { BoardMember, WindowKey } from "../../crew/leaderboard";
 import type { CrewRelayStateRow } from "../../db/dao";
 import type { CrewBoardResult, CrewSummary } from "../../shared/messages";
+import type { PomoSettings } from "../../engine/settings";
 
 const chipsEl = document.getElementById("chips")!;
 const freshnessEl = document.getElementById("freshness")!;
@@ -15,6 +16,8 @@ const manageCloseEl = document.getElementById("manageClose")!;
 const manageBtn = document.getElementById("manageBtn")!;
 const refreshBtn = document.getElementById("refreshBtn")!;
 const windowTabsEl = document.getElementById("windowTabs")!;
+const searchSectionEl = document.getElementById("searchSection")!;
+const searchInputEl = document.getElementById("searchInput") as HTMLInputElement;
 
 let crews: CrewSummary[] = [];
 let activeCrewId: string | null = null;
@@ -23,6 +26,8 @@ let boardResult: CrewBoardResult | null = null;
 let syncing = false;
 let lastFocus: HTMLElement | null = null;
 let chipIndex = 0;
+let searchQuery = "";
+const statusTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
 
 function nowSeconds(): number {
   return Date.now() / 1000;
@@ -68,6 +73,7 @@ function renderChips(): void {
     chip.addEventListener("click", () => {
       activeCrewId = crew.crewId;
       chipIndex = crews.findIndex((c) => c.crewId === crew.crewId);
+      resetSearch();
       void loadBoard();
     });
     chipsEl.appendChild(chip);
@@ -227,9 +233,21 @@ function detailSpan(text: string): HTMLSpanElement {
   return span;
 }
 
+function matchesSearch(member: BoardMember, query: string): boolean {
+  if (query.length === 0) return true;
+  if (member.displayName.toLowerCase().includes(query)) return true;
+  return member.fingerprint.toLowerCase().startsWith(query);
+}
+
+function resetSearch(): void {
+  searchQuery = "";
+  searchInputEl.value = "";
+}
+
 function renderBoard(): void {
   boardEl.dataset["error"] = "false";
   if (boardResult === null) {
+    searchSectionEl.hidden = true;
     boardEl.dataset["empty"] = "true";
     boardEl.textContent =
       crews.length === 0
@@ -240,14 +258,24 @@ function renderBoard(): void {
   boardEl.dataset["empty"] = "false";
   boardEl.textContent = "";
   if (boardResult.board.members.length === 0) {
+    searchSectionEl.hidden = true;
     boardEl.dataset["empty"] = "true";
     boardEl.textContent = "No members on this leaderboard yet. Share your join code to invite them.";
     return;
   }
 
+  const query = searchQuery.trim().toLowerCase();
   const selfKey = boardResult.selfPublicKey;
-  const active = boardResult.board.members.filter((m) => !m.inactive);
-  const inactive = boardResult.board.members.filter((m) => m.inactive);
+  const active = boardResult.board.members.filter((m) => !m.inactive && matchesSearch(m, query));
+  const inactive = boardResult.board.members.filter((m) => m.inactive && matchesSearch(m, query));
+
+  if (active.length + inactive.length === 0) {
+    searchSectionEl.hidden = false;
+    boardEl.dataset["empty"] = "true";
+    boardEl.textContent = "No members match your search.";
+    return;
+  }
+  searchSectionEl.hidden = false;
 
   for (const member of active) {
     boardEl.appendChild(renderMember(member, selfKey));
@@ -276,6 +304,7 @@ function renderBoard(): void {
 }
 
 function renderBoardError(message: string): void {
+  searchSectionEl.hidden = true;
   boardEl.dataset["error"] = "true";
   boardEl.dataset["empty"] = "false";
   boardEl.textContent = "";
@@ -353,7 +382,9 @@ function closeManage(): void {
 }
 
 function focusFirst(container: HTMLElement): void {
-  const target = container.querySelector<HTMLElement>("input, button, textarea, select");
+  const target = container.querySelector<HTMLElement>(
+    "input:not([type=\"hidden\"]), button, textarea, select",
+  );
   target?.focus();
 }
 
@@ -369,7 +400,12 @@ function trapFocus(event: KeyboardEvent): void {
     manageEl.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>(
       "input, button, textarea, select",
     ),
-  ).filter((el) => !el.disabled);
+  ).filter(
+    (el) =>
+      !el.disabled &&
+      !el.hidden &&
+      !(el instanceof HTMLInputElement && el.type === "hidden"),
+  );
   if (focusable.length === 0) return;
   const first = focusable[0]!;
   const last = focusable[focusable.length - 1]!;
@@ -450,6 +486,7 @@ function openManageHome(): void {
         if (activeCrewId === activeCrew.crewId) {
           activeCrewId = crews[0]?.crewId ?? null;
         }
+        resetSearch();
         renderChips();
         void loadBoard();
       });
@@ -463,7 +500,201 @@ function openManageHome(): void {
   body.append(button("Create crew", () => openCreate()));
   body.append(button("Join with link", () => openJoin()));
 
+  body.append(settingsSection());
+  body.append(backupSection());
+
   openManage("Manage crew", body);
+}
+
+function statusEl(): HTMLSpanElement {
+  const status = document.createElement("span");
+  status.className = "status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  return status;
+}
+
+function setStatus(status: HTMLElement, text: string, kind: "ok" | "error"): void {
+  const existing = statusTimers.get(status);
+  if (existing !== undefined) clearTimeout(existing);
+  status.textContent = text;
+  status.dataset["kind"] = kind;
+  statusTimers.set(
+    status,
+    setTimeout(() => {
+      status.textContent = "";
+      status.dataset["kind"] = "";
+      statusTimers.delete(status);
+    }, 2000),
+  );
+}
+
+function toggleRow(
+  label: string,
+  onToggle: (checked: boolean) => void,
+): { wrap: HTMLLabelElement; input: HTMLInputElement } {
+  const wrap = document.createElement("label");
+  wrap.className = "settings-row";
+  const caption = document.createElement("span");
+  caption.className = "toggle-caption";
+  caption.textContent = label;
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.addEventListener("change", () => onToggle(input.checked));
+  wrap.append(caption, input);
+  return { wrap, input };
+}
+
+function settingsSection(): HTMLElement {
+  const section = document.createElement("div");
+  const title = document.createElement("h4");
+  title.className = "section-title";
+  title.textContent = "Settings";
+  const status = statusEl();
+
+  const sound = toggleRow("Sound alerts", (checked) => {
+    void saveSetting({ soundEnabled: checked }, status);
+  });
+  const newtab = toggleRow("New Tab shows the timer", (checked) => {
+    void saveSetting({ newtabInstrument: checked }, status);
+  });
+  const tagField = field("Work tag", "Work");
+  tagField.input.maxLength = 24;
+  tagField.input.addEventListener("change", () => {
+    void saveSetting({ tag: tagField.input.value.trim() }, status);
+  });
+
+  const controls = [sound.input, newtab.input, tagField.input];
+  for (const control of controls) control.disabled = true;
+
+  section.append(title, sound.wrap, tagField.wrap, newtab.wrap, status);
+
+  void request({ type: "pomo:settings:get" }).then((response) => {
+    if (response.ok && response.settings !== undefined) {
+      sound.input.checked = response.settings.soundEnabled;
+      newtab.input.checked = response.settings.newtabInstrument;
+      tagField.input.value = response.settings.tag;
+    } else {
+      setStatus(status, response.error ?? "could not load settings", "error");
+    }
+    for (const control of controls) control.disabled = false;
+  });
+
+  return section;
+}
+
+function saveSetting(patch: Partial<PomoSettings>, status: HTMLElement): void {
+  void request({ type: "pomo:settings:set", settings: patch }).then((response) => {
+    if (response.ok) {
+      setStatus(status, "Saved", "ok");
+    } else {
+      setStatus(status, response.error ?? "save failed", "error");
+    }
+  });
+}
+
+function backupSection(): HTMLElement {
+  const section = document.createElement("div");
+  const title = document.createElement("h4");
+  title.className = "section-title";
+  title.textContent = "Backup & restore";
+  const note = document.createElement("p");
+  note.className = "muted";
+  note.textContent =
+    "Restoring replaces this device's identity. Crews in the backup will appear in your list.";
+  const exportStatus = statusEl();
+  const importStatus = statusEl();
+
+  const exportRow = document.createElement("div");
+  exportRow.className = "backup-row";
+  const passField = field("Passphrase (min 12 characters)", "at least 12 characters");
+  passField.input.type = "password";
+  passField.input.autocomplete = "off";
+  exportRow.append(
+    passField.wrap,
+    button("Export backup", () => {
+      const passphrase = passField.input.value;
+      if (passphrase.length < 12) {
+        setStatus(exportStatus, "Passphrase must be at least 12 characters.", "error");
+        return;
+      }
+      void request({ type: "pomo:recovery:export", passphrase }).then((response) => {
+        if (!response.ok || response.recovery === undefined) {
+          setStatus(exportStatus, response.error ?? "export failed", "error");
+          return;
+        }
+        downloadRecovery(response.recovery);
+        setStatus(exportStatus, "Backup downloaded", "ok");
+      });
+    }, "primary"),
+    exportStatus,
+  );
+
+  const importRow = document.createElement("div");
+  importRow.className = "backup-row";
+  const fileWrap = document.createElement("label");
+  fileWrap.className = "field";
+  const fileCaption = document.createElement("span");
+  fileCaption.textContent = "Backup file (.json)";
+  const fileInput = document.createElement("input");
+  fileInput.type = "file";
+  fileInput.accept = ".json,application/json";
+  const payloadField = document.createElement("input");
+  payloadField.type = "hidden";
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0];
+    if (file === undefined) {
+      payloadField.value = "";
+      return;
+    }
+    void file.text().then((text) => {
+      payloadField.value = text;
+    });
+  });
+  fileWrap.append(fileCaption, fileInput);
+  const importPassField = field("Passphrase", "passphrase used at export");
+  importPassField.input.type = "password";
+  importPassField.input.autocomplete = "off";
+  importRow.append(
+    fileWrap,
+    importPassField.wrap,
+    button("Restore backup", () => {
+      const payload = payloadField.value;
+      const passphrase = importPassField.input.value;
+      if (payload.length === 0) {
+        setStatus(importStatus, "Choose a backup file first.", "error");
+        return;
+      }
+      if (passphrase.length === 0) {
+        setStatus(importStatus, "Enter the passphrase.", "error");
+        return;
+      }
+      void request({ type: "pomo:recovery:import", payload, passphrase }).then((response) => {
+        if (!response.ok) {
+          setStatus(importStatus, response.error ?? "restore failed", "error");
+          return;
+        }
+        setStatus(importStatus, "Restored", "ok");
+        void loadCrews();
+      });
+    }, "primary"),
+    importStatus,
+  );
+
+  section.append(title, note, exportRow, importRow);
+  return section;
+}
+
+function downloadRecovery(recovery: string): void {
+  const blob = new Blob([recovery], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `pomo-recovery-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
 }
 
 function openJoin(): void {
@@ -486,6 +717,7 @@ function openJoin(): void {
         crews = response.crews ?? crews;
         activeCrewId = crews[crews.length - 1]?.crewId ?? null;
         closeManage();
+        resetSearch();
         renderChips();
         void loadBoard();
       });
@@ -514,6 +746,7 @@ function openCreate(): void {
         crews = response.crews ?? crews;
         activeCrewId = crews[crews.length - 1]?.crewId ?? null;
         closeManage();
+        resetSearch();
         renderChips();
         void loadBoard();
       });
@@ -562,6 +795,10 @@ manageCloseEl.addEventListener("click", closeManage);
 manageEl.addEventListener("keydown", trapFocus);
 refreshBtn.addEventListener("click", () => {
   void loadBoard(true);
+});
+searchInputEl.addEventListener("input", () => {
+  searchQuery = searchInputEl.value;
+  renderBoard();
 });
 
 chipsEl.addEventListener("keydown", (event) => {

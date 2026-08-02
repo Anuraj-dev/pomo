@@ -348,7 +348,8 @@
   gap: 0.35rem;
 }
 
-.field label {
+.field label,
+.field > span {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -406,4 +407,52 @@
   letter-spacing: 0.08em;
   color: var(--text-muted);
   margin: 0.25rem 0 0;
+}
+
+.search-field {
+  margin: 0.25rem 0 0.5rem;
+}
+
+.search-field[hidden] {
+  display: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.settings-row .toggle-caption {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  min-height: 1rem;
+}
+
+.status[data-kind="ok"] {
+  color: var(--text);
+}
+
+.status[data-kind="error"] {
+  color: var(--accent);
+}
+
+.backup-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.backup-row + .backup-row {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
 }

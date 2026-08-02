@@ -1,12 +1,13 @@
 import { schnorr } from "noble-secp256k1";
-import { utf8ToBytes } from "../shared/bytes";
+import { bufferOf, utf8ToBytes } from "../shared/bytes";
 import { bytesToHex, hexToBytes, isLowerHex } from "../shared/hex";
+import { SNAPSHOT_EVENT_KIND } from "./types";
 import type { NostrEvent } from "./types";
 import { signSchnorr, verifySchnorr } from "./identity";
 
 export const MAX_EVENT_CONTENT_BYTES = 64 * 1024;
 export const MAX_CREATED_AT_SKEW_SECONDS = 2 * 60 * 60;
-const ALLOWED_KINDS = new Set([39050]);
+const ALLOWED_KINDS = new Set([SNAPSHOT_EVENT_KIND]);
 
 export interface UnsignedEvent {
   pubkey: string;
@@ -18,10 +19,6 @@ export interface UnsignedEvent {
 
 export interface SignableEvent extends UnsignedEvent {
   id?: string;
-}
-
-function bufferOf(bytes: Uint8Array): ArrayBuffer {
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
 }
 
 export async function eventId(evt: UnsignedEvent): Promise<string> {

@@ -265,7 +265,6 @@ describe("row conversion", () => {
       offsetMinutes: OFFSET,
     });
     const row = snapshotToRow(snapshot);
-    expect(row.statsJson).not.toBeNull();
-    expect(JSON.parse(row.statsJson!)).toEqual(snapshot.stats);
+    expect(row.statsJson).toBeNull();
   });
 });
