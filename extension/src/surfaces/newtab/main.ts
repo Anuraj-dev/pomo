@@ -1,9 +1,11 @@
 import type { DayStatRow, SessionRow } from "../../db/types";
-import { currentStreak, lastNDays, totals } from "../../engine/stats";
+import { lastNDays } from "../../engine/stats";
 import { dateStringOf, utcOffsetMinutesAt } from "../../engine/dateLogic";
 import type { TimerSnapshot } from "../../engine/timer";
+import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
 import { applyTheme, request, sendCommand, subscribeState } from "../../shared/surface";
+import { readSurfaceStats } from "../../shared/statsReader";
 import {
   applyInstrument,
   attachTicker,
@@ -104,7 +106,7 @@ async function loadHistory(): Promise<void> {
 }
 
 async function loadStats(): Promise<void> {
-  renderStats(await fetchHistory());
+  void renderStats(await fetchHistory());
 }
 
 function note(message: string): HTMLElement {
@@ -126,12 +128,6 @@ function dayLabel(date: string): string {
 function timeOf(epochSeconds: number): string {
   const d = new Date(epochSeconds * 1000);
   return `${d.getHours()}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-function mss(totalSeconds: number): string {
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function renderHistory(payload: HistoryPayload | null): void {
@@ -184,7 +180,7 @@ function sessionRow(session: SessionRow): HTMLElement {
   phase.textContent = session.type === "work" ? "Work" : "Break";
   const duration = document.createElement("span");
   duration.className = "s-duration num";
-  duration.textContent = mss(session.duration);
+  duration.textContent = formatMss(session.duration);
   const mark = document.createElement("span");
   mark.className = "s-mark";
   mark.dataset["state"] = session.completed ? "done" : "aborted";
@@ -196,7 +192,7 @@ function sessionRow(session: SessionRow): HTMLElement {
   return row;
 }
 
-function renderStats(payload: HistoryPayload | null): void {
+async function renderStats(payload: HistoryPayload | null): Promise<void> {
   statsNoteEl.hidden = true;
   statsNoteEl.textContent = "";
   statsBarsEl.textContent = "";
@@ -206,15 +202,15 @@ function renderStats(payload: HistoryPayload | null): void {
     statsNoteEl.hidden = false;
     return;
   }
+  const stats = await readSurfaceStats();
+  statsTodayEl.textContent = String(stats.todayEarned);
+  statsTotalEl.textContent = String(Math.round(stats.totalFocusMinutes));
+  statsStreakEl.textContent = String(stats.streak);
+
   const days = payload.dayStats;
   const now = Date.now() / 1000;
   const offset = utcOffsetMinutesAt(now);
   const today = dateStringOf(now, offset);
-  const sum = totals(days);
-  statsTodayEl.textContent = String(days.find((day) => day.date === today)?.earnedBlocks ?? 0);
-  statsTotalEl.textContent = String(Math.round(sum.focusMinutes));
-  statsStreakEl.textContent = String(currentStreak(days.map((day) => day.date), today, offset));
-
   const last = lastNDays(days, today, 30, offset);
   const max = Math.max(1, ...last.map((day) => day.focusMinutes));
   for (const day of last) {

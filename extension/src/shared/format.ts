@@ -16,6 +16,12 @@ export function formatTenths(totalSeconds: number): TenthsFormat {
   };
 }
 
+export function formatMss(totalSeconds: number): string {
+  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 export function phaseLabel(phase: Phase): string {
   switch (phase) {
     case "work":

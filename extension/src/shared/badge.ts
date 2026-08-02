@@ -1,4 +1,5 @@
 import type { Phase } from "../engine/timer";
+import { formatMss } from "./format";
 
 export const FOCUS_BADGE_COLOR = "#ff4d3d";
 export const MUTED_BADGE_COLOR = "#8b95a3";
@@ -16,10 +17,7 @@ export function badgeTextOf(remainingMs: number): string {
   if (remainingMs >= M_SS_THRESHOLD_MS) {
     return `${Math.min(MAX_MINUTES, Math.floor(remainingMs / MINUTE_MS))}m`;
   }
-  const totalSeconds = Math.floor(remainingMs / 1000);
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+  return formatMss(remainingMs / 1000);
 }
 
 export function badgeColorOf(phase: Phase): string {

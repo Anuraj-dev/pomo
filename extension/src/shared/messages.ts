@@ -156,26 +156,27 @@ export interface PomoResponse {
   history?: HistoryPayload;
 }
 
+const POMO_REQUEST_TYPES = new Set<string>([
+  "pomo:command",
+  "pomo:query",
+  "pomo:stats",
+  "pomo:history",
+  "pomo:settings:get",
+  "pomo:settings:set",
+  "pomo:crew:list",
+  "pomo:crew:board",
+  "pomo:crew:join",
+  "pomo:crew:create",
+  "pomo:crew:leave",
+  "pomo:crew:hide",
+  "pomo:crew:refresh",
+  "pomo:crew:joinCode",
+  "pomo:crew:rename",
+  "pomo:recovery:export",
+  "pomo:recovery:import",
+]);
+
 export function isPomoRequest(value: unknown): value is PomoRequest {
   if (typeof value !== "object" || value === null) return false;
-  const candidate = value as { type?: unknown };
-  return (
-    candidate.type === "pomo:command" ||
-    candidate.type === "pomo:query" ||
-    candidate.type === "pomo:stats" ||
-    candidate.type === "pomo:history" ||
-    candidate.type === "pomo:settings:get" ||
-    candidate.type === "pomo:settings:set" ||
-    candidate.type === "pomo:crew:list" ||
-    candidate.type === "pomo:crew:board" ||
-    candidate.type === "pomo:crew:join" ||
-    candidate.type === "pomo:crew:create" ||
-    candidate.type === "pomo:crew:leave" ||
-    candidate.type === "pomo:crew:hide" ||
-    candidate.type === "pomo:crew:refresh" ||
-    candidate.type === "pomo:crew:joinCode" ||
-    candidate.type === "pomo:crew:rename" ||
-    candidate.type === "pomo:recovery:export" ||
-    candidate.type === "pomo:recovery:import"
-  );
+  return POMO_REQUEST_TYPES.has((value as { type?: unknown }).type as string);
 }

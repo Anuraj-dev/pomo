@@ -8,18 +8,30 @@ export function openDb(): Promise<IDBDatabase> {
     request.onupgradeneeded = () => {
       const db = request.result;
       if (db.objectStoreNames.contains("settings")) db.deleteObjectStore("settings");
-      const sessions = db.createObjectStore("sessions", { keyPath: "start" });
-      sessions.createIndex("date", "date");
-      db.createObjectStore("dayStats", { keyPath: "date" });
-      const crewSnapshots = db.createObjectStore("crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] });
-      crewSnapshots.createIndex("crewId", "crewId");
-      const crewDailyAggregates = db.createObjectStore("crewDailyAggregates", {
-        keyPath: ["crewId", "identityPublicKey", "localDate"],
-      });
-      crewDailyAggregates.createIndex("crewId_key", ["crewId", "identityPublicKey"]);
-      const crewHiddenMembers = db.createObjectStore("crewHiddenMembers", { keyPath: ["crewId", "identityPublicKey"] });
-      crewHiddenMembers.createIndex("crewId", "crewId");
-      db.createObjectStore("crewRelayState", { keyPath: ["crewId", "relayUrl"] });
+      if (!db.objectStoreNames.contains("sessions")) {
+        const sessions = db.createObjectStore("sessions", { keyPath: "start" });
+        sessions.createIndex("date", "date");
+      }
+      if (!db.objectStoreNames.contains("dayStats")) {
+        db.createObjectStore("dayStats", { keyPath: "date" });
+      }
+      if (!db.objectStoreNames.contains("crewSnapshots")) {
+        const crewSnapshots = db.createObjectStore("crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] });
+        crewSnapshots.createIndex("crewId", "crewId");
+      }
+      if (!db.objectStoreNames.contains("crewDailyAggregates")) {
+        const crewDailyAggregates = db.createObjectStore("crewDailyAggregates", {
+          keyPath: ["crewId", "identityPublicKey", "localDate"],
+        });
+        crewDailyAggregates.createIndex("crewId_key", ["crewId", "identityPublicKey"]);
+      }
+      if (!db.objectStoreNames.contains("crewHiddenMembers")) {
+        const crewHiddenMembers = db.createObjectStore("crewHiddenMembers", { keyPath: ["crewId", "identityPublicKey"] });
+        crewHiddenMembers.createIndex("crewId", "crewId");
+      }
+      if (!db.objectStoreNames.contains("crewRelayState")) {
+        db.createObjectStore("crewRelayState", { keyPath: ["crewId", "relayUrl"] });
+      }
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);

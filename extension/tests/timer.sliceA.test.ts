@@ -31,7 +31,7 @@ function makePorts(): FakePorts {
 }
 
 function at(engine: TimerEngine, now: number) {
-  (engine as unknown as { p: EnginePorts }).p.now = () => now;
+  (engine as unknown as { ports: EnginePorts }).ports.now = () => now;
 }
 
 describe("TimerEngine — initial state", () => {

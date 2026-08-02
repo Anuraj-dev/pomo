@@ -50,25 +50,25 @@ export class TimerEngine {
   private date = "";
   private tag = "";
 
-  constructor(private readonly p: EnginePorts) {
-    const now = p.now();
+  constructor(private readonly ports: EnginePorts) {
+    const now = ports.now();
     this.date = this.today();
     this.armFullDuration();
-    this.tag = p.tag();
-    this.completed = p.earnedBlocksForDate(this.date);
+    this.tag = ports.tag();
+    this.completed = ports.earnedBlocksForDate(this.date);
     this.lastAction = now;
   }
 
   private offset(): number {
-    return this.p.offsetMinutes?.() ?? 0;
+    return this.ports.offsetMinutes?.() ?? 0;
   }
 
   private today(): string {
-    return dateStringOf(this.p.now(), this.offset());
+    return dateStringOf(this.ports.now(), this.offset());
   }
 
   private armFullDuration(): void {
-    this.duration = this.p.phaseSeconds(this.phase);
+    this.duration = this.ports.phaseSeconds(this.phase);
     this.remaining = this.duration;
   }
 
@@ -77,19 +77,19 @@ export class TimerEngine {
   }
 
   private derivedRemaining(): number {
-    return Math.max(0, this.endAt() - this.p.now());
+    return Math.max(0, this.endAt() - this.ports.now());
   }
 
   private elapsedSeconds(): number {
     if (this.status === "running") {
-      return Math.min(this.duration, Math.max(0, this.p.now() - this.startTime));
+      return Math.min(this.duration, Math.max(0, this.ports.now() - this.startTime));
     }
     return this.duration - this.remaining;
   }
 
   private nextPhaseOf(phase: Phase, completed: number): Phase {
     if (phase === "work") {
-      return (completed + 1) % this.p.longBreakAfter() === 0 ? "long" : "short";
+      return (completed + 1) % this.ports.longBreakAfter() === 0 ? "long" : "short";
     }
     return "work";
   }
@@ -98,7 +98,7 @@ export class TimerEngine {
     const t = this.today();
     if (t === this.date) return;
     this.date = t;
-    this.completed = this.p.earnedBlocksForDate(t);
+    this.completed = this.ports.earnedBlocksForDate(t);
     if (this.status !== "running") {
       this.status = "stopped";
       this.phase = "work";
@@ -107,7 +107,7 @@ export class TimerEngine {
   }
 
   toggle(): void {
-    const now = this.p.now();
+    const now = this.ports.now();
     this.reconcileDate();
     if (this.status === "running") {
       this.status = "paused";
@@ -115,7 +115,7 @@ export class TimerEngine {
     } else {
       if (this.status === "stopped") {
         this.armFullDuration();
-        this.tag = this.p.tag();
+        this.tag = this.ports.tag();
       }
       this.startTime = now - (this.duration - this.remaining);
       this.status = "running";
@@ -124,12 +124,12 @@ export class TimerEngine {
   }
 
   skip(): void {
-    const now = this.p.now();
+    const now = this.ports.now();
     this.reconcileDate();
     if (this.phase === "work") {
       const elapsed = this.elapsedSeconds();
       if (elapsed >= 60) {
-        this.p.commit({ start: this.startTime, duration: elapsed, type: "work", completed: false, tag: this.tag });
+        this.ports.commit({ start: this.startTime, duration: elapsed, type: "work", completed: false, tag: this.tag });
       }
     }
     this.phase = this.phase === "work" ? "short" : "work";
@@ -139,7 +139,7 @@ export class TimerEngine {
   }
 
   reset(): void {
-    const now = this.p.now();
+    const now = this.ports.now();
     this.reconcileDate();
     this.status = "stopped";
     this.armFullDuration();
@@ -149,11 +149,11 @@ export class TimerEngine {
   extend(seconds: number): void {
     if (this.status !== "running") return;
     this.duration += seconds;
-    this.lastAction = this.p.now();
+    this.lastAction = this.ports.now();
   }
 
   tick(): void {
-    const now = this.p.now();
+    const now = this.ports.now();
     this.reconcileDate();
     if (this.status === "running" && this.derivedRemaining() <= 0) {
       this.complete(now);
@@ -165,7 +165,7 @@ export class TimerEngine {
   private complete(now: number): void {
     const endedPhase = this.phase;
     const tag = this.tag;
-    this.p.commit({ start: this.startTime, duration: this.duration, type: endedPhase, completed: true, tag });
+    this.ports.commit({ start: this.startTime, duration: this.duration, type: endedPhase, completed: true, tag });
     this.phase = this.nextPhaseOf(endedPhase, this.completed);
     if (endedPhase === "work") {
       this.completed += 1;
@@ -176,7 +176,7 @@ export class TimerEngine {
   }
 
   restore(saved: TimerSnapshot): void {
-    const now = this.p.now();
+    const now = this.ports.now();
     if (saved.version !== TIMER_STATE_VERSION) {
       throw new Error(`unsupported saved state version: ${saved.version}`);
     }
@@ -208,7 +208,7 @@ export class TimerEngine {
       duration: this.duration,
       remaining: Math.ceil(running ? this.derivedRemaining() : this.remaining),
       completed: this.completed,
-      goal: this.p.goal(),
+      goal: this.ports.goal(),
       date: this.date,
       lastActionTime: this.lastAction,
       tag: this.tag,

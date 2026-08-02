@@ -264,6 +264,26 @@ async function crewSummaries(): Promise<CrewSummary[]> {
   return summaries;
 }
 
+async function addMembership(
+  crewId: string,
+  crewName: string,
+  relays: string[],
+  key: string,
+  displayName: string,
+): Promise<PomoResponse> {
+  crewMemberships.push({
+    crewId,
+    crewName,
+    relays,
+    key,
+    displayName,
+    joinedAtEpochSeconds: nowSeconds(),
+  });
+  await saveMemberships();
+  void crewSync(true);
+  return { ok: true, crews: await crewSummaries() };
+}
+
 async function buildBoardResponse(crewId: string, window: WindowKey, now: number): Promise<CrewBoardResult> {
   const membership = crewMemberships.find((m) => m.crewId === crewId)!;
   const { board, relayStates } = await loadCrewBoard(crewDao, crewId, window, now);
@@ -366,31 +386,11 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       if (crewMemberships.some((m) => m.crewId === decoded.crewId)) {
         return { ok: false, error: "already a member of this crew" };
       }
-      crewMemberships.push({
-        crewId: decoded.crewId,
-        crewName: decoded.crewName,
-        relays: decoded.relays,
-        key: decoded.key,
-        displayName: request.displayName,
-        joinedAtEpochSeconds: nowSeconds(),
-      });
-      await saveMemberships();
-      void crewSync(true);
-      return { ok: true, crews: await crewSummaries() };
+      return addMembership(decoded.crewId, decoded.crewName, decoded.relays, decoded.key, request.displayName);
     }
     case "pomo:crew:create": {
       const payload = newPayload(request.crewName);
-      crewMemberships.push({
-        crewId: payload.crewId,
-        crewName: payload.crewName,
-        relays: payload.relays,
-        key: payload.key,
-        displayName: request.displayName,
-        joinedAtEpochSeconds: nowSeconds(),
-      });
-      await saveMemberships();
-      void crewSync(true);
-      return { ok: true, crews: await crewSummaries() };
+      return addMembership(payload.crewId, payload.crewName, payload.relays, payload.key, request.displayName);
     }
     case "pomo:crew:leave":
       crewMemberships = crewMemberships.filter((m) => m.crewId !== request.crewId);
