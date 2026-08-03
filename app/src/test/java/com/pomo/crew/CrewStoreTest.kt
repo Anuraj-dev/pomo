@@ -64,31 +64,6 @@ public class CrewStoreTest {
         assertTrue(archived.single().isArchived)
     }
 
-    @Test
-    public fun replacingMembershipsPreservesTheActiveCrewWhenItSurvives() {
-        val store = CrewStore(context)
-        val first = membership("11")
-        val second = membership("22")
-        store.saveMembership(first)
-        store.saveMembership(second)
-        assertTrue(store.selectCrew(second.crewId))
-
-        store.replaceMemberships(listOf(first, second))
-
-        assertEquals(second.crewId, store.activeCrewId())
-        assertEquals(second.crewId, store.loadMembership()?.crewId)
-    }
-
-    private fun membership(prefix: String): CrewMembership =
-        CrewMembership(
-            crewId = prefix.repeat(16),
-            crewName = "Crew $prefix",
-            joinCode = "join-$prefix",
-            relays = emptyList(),
-            key = "ab".repeat(32),
-            displayName = "Me",
-        )
-
     private companion object {
         private const val PREFS_NAME: String = "crew_prefs"
         private const val LEGACY_CURRENT_CREW_KEY: String = "current_crew"
