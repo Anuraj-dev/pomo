@@ -311,7 +311,7 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
   const today = dateStringOf(now, offset);
   const last = lastNDays(days, today, 30, offset);
   const max = Math.max(1, ...last.map((day) => day.focusMinutes));
-  const activeDays = last.filter((day) => day.focusMinutes > 0 || day.earnedBlocks > 0);
+  const activeDays = last.filter((day) => day.earnedBlocks > 0);
   statsActiveDaysEl.textContent = String(activeDays.length);
   statsTrendMetaEl.textContent = `${activeDays.length} active days · ${Math.round(last.reduce((sum, day) => sum + day.focusMinutes, 0))} min`;
   last.forEach((day, index) => {

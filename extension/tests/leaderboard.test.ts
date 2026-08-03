@@ -134,7 +134,18 @@ describe("aggregateBoard", () => {
   test("never-focused members are not classified as inactive", () => {
     const neverFocused = snapshot({ identityPublicKey: key(4), displayName: "N", lastFocusedAtEpochSeconds: 0 });
     const board = aggregateBoard([neverFocused], { window: "today", now: NOW, hiddenKeys: new Set() });
-    expect(board.members[0]!.active).toBe(false);
+    expect(board.members[0]!.active).toBe(true);
+    expect(board.members[0]!.inactive).toBe(false);
+  });
+
+  test("partial-focus members with no completed block remain rankable", () => {
+    const partial = snapshot({
+      identityPublicKey: key(4),
+      dailyAggregates: [agg("2023-11-14", 20, 0)],
+      lastFocusedAtEpochSeconds: 0,
+    });
+    const board = aggregateBoard([partial], { window: "today", now: NOW, hiddenKeys: new Set() });
+    expect(board.members[0]!.rank).toBe(1);
     expect(board.members[0]!.inactive).toBe(false);
   });
 

@@ -88,20 +88,21 @@ export function aggregateBoard(
       dailyTrend.push(byDate.get(date) ?? null);
     }
     const hasFocused = s.lastFocusedAtEpochSeconds > 0;
-    const active = hasFocused && s.lastFocusedAtEpochSeconds >= opts.now - 30 * DAY;
+    const inactive = hasFocused && s.lastFocusedAtEpochSeconds < opts.now - 30 * DAY;
+    const active = !inactive;
     return {
       snapshot: s,
       focusMinutes,
       dailyTrend,
       active,
-      inactive: hasFocused && !active,
-      stale: active && s.lastFocusedAtEpochSeconds < opts.now - 7 * DAY,
+      inactive,
+      stale: hasFocused && !inactive && s.lastFocusedAtEpochSeconds < opts.now - 7 * DAY,
       rank: null,
     };
   });
 
   const ranked = rows
-    .filter((r) => r.active && r.focusMinutes > 0)
+    .filter((r) => !r.inactive && r.focusMinutes > 0)
     .sort((a, b) => b.focusMinutes - a.focusMinutes);
   let groupStart = 0;
   while (groupStart < ranked.length) {
