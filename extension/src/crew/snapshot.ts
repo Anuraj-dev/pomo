@@ -109,7 +109,7 @@ function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-function validateStats(stats: unknown): void {
+export function validateStats(stats: unknown): void {
   if (stats === null) return;
   if (typeof stats !== "object" || Array.isArray(stats)) throw new Error("invalid snapshot: malformed stats");
   const record = stats as Record<string, unknown>;

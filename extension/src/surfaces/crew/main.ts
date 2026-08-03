@@ -47,7 +47,9 @@ function freshnessOf(relayStates: CrewRelayStateRow[]): { label: string; kind: s
   const now = nowSeconds();
   const lastSuccess = relayStates.reduce((max, state) => Math.max(max, state.lastSuccessEpochSeconds ?? 0), 0);
   const lastAttempt = relayStates.reduce((max, state) => Math.max(max, state.lastAttemptEpochSeconds), 0);
-  const successCount = relayStates.filter((state) => state.lastSuccessEpochSeconds !== null).length;
+  const successCount = relayStates.filter(
+    (state) => state.lastSuccessEpochSeconds !== null && state.lastSuccessEpochSeconds === state.lastAttemptEpochSeconds,
+  ).length;
   if (syncing) return { label: "syncing…", kind: "syncing" };
   if (lastAttempt > 0 && now - lastAttempt < 30 && successCount < relayStates.length) {
     return { label: "syncing…", kind: "syncing" };

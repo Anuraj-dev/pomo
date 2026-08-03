@@ -1,5 +1,7 @@
 import type { CrewDailyRow, CrewSnapshotRow } from "../db/dao";
 import type { DayStatRow, SessionRow } from "../db/types";
+import { publicKeyOf } from "../crew/identity";
+import { validateStats } from "../crew/snapshot";
 import { isLowerHex } from "./hex";
 import type { CrewMembership, StoredMembership } from "../crew/types";
 import { decodePayload, encodePrefixedPayload } from "../crew/joinCode";
@@ -97,6 +99,27 @@ function validDate(value: string): boolean {
   return DATE.test(value);
 }
 
+function validPrivateKey(value: string): boolean {
+  if (!isLowerHex(value, 64)) return false;
+  try {
+    publicKeyOf(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function validateStatsJson(value: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+    validateStats(parsed);
+  } catch {
+    throw new Error("backup contains invalid Crew snapshot stats");
+  }
+  return value;
+}
+
 function validateSession(value: unknown): PortableBackup["history"]["sessions"][number] {
   const row = record(value);
   const type = stringValue(row.type, "history.sessions.type");
@@ -134,7 +157,7 @@ function validateBackup(value: unknown): PortableBackup {
   });
   const sessions = arrayValue(history.sessions, "history.sessions").map(validateSession);
   const identityPrivateKey = stringValue(crew.identityPrivateKey ?? "", "crew.identityPrivateKey");
-  if (identityPrivateKey !== "" && !isLowerHex(identityPrivateKey, 64)) throw new Error("backup identity is invalid");
+  if (identityPrivateKey !== "" && !validPrivateKey(identityPrivateKey)) throw new Error("backup identity is invalid");
   const memberships = arrayValue(crew.memberships, "crew.memberships").map((raw) => {
     const row = record(raw);
     const relays = arrayValue(row.relays, "crew.memberships.relays").map((relay) => stringValue(relay, "crew.memberships.relay"));
@@ -184,7 +207,10 @@ function validateBackup(value: unknown): PortableBackup {
       currentStreak: numberValue(row.currentStreak, "crew.snapshots.currentStreak", true),
       lastFocusedAtEpochSeconds: numberValue(row.lastFocusedAtEpochSeconds, "crew.snapshots.lastFocusedAtEpochSeconds", true),
       protocolVersion: numberValue(row.protocolVersion, "crew.snapshots.protocolVersion"),
-      statsJson: row.statsJson === null || row.statsJson === undefined ? null : stringValue(row.statsJson, "crew.snapshots.statsJson"),
+      statsJson:
+        row.statsJson === null || row.statsJson === undefined
+          ? null
+          : validateStatsJson(stringValue(row.statsJson, "crew.snapshots.statsJson")),
     };
   });
   const dailyAggregates = arrayValue(crew.dailyAggregates, "crew.dailyAggregates").map((raw) => {

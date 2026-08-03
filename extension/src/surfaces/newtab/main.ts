@@ -122,6 +122,7 @@ function dayLabel(date: string): string {
     weekday: "short",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
