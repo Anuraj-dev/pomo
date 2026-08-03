@@ -150,6 +150,19 @@ describe("snapshot codec", () => {
     await expect(decryptEnvelope(badCount, CREW_KEY)).rejects.toThrow(/aggregate/i);
   });
 
+  test("rejects aggregates with impossible calendar dates", async () => {
+    const bad = await buildEnvelope(
+      snapshot({ dailyAggregates: aggregates([["2024-02-30", 30, 1]]) }),
+      CREW_KEY,
+    );
+    await expect(decryptEnvelope(bad, CREW_KEY)).rejects.toThrow(/aggregate/i);
+    const notLeap = await buildEnvelope(
+      snapshot({ dailyAggregates: aggregates([["2023-02-29", 30, 1]]) }),
+      CREW_KEY,
+    );
+    await expect(decryptEnvelope(notLeap, CREW_KEY)).rejects.toThrow(/aggregate/i);
+  });
+
   test("rejects snapshots with wrong stats bucket lengths", async () => {
     const badHours = await buildEnvelope(snapshot({ stats: stats({ hourBuckets: Array(23).fill(0) }) }), CREW_KEY);
     await expect(decryptEnvelope(badHours, CREW_KEY)).rejects.toThrow(/buckets/i);
