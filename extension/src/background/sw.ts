@@ -55,7 +55,7 @@ let identityPrivateKey: string | null = null;
 let identityRecoveryRequired = false;
 let crewMemberships: StoredMembership[] = [];
 let crewSyncPromise: Promise<void> | null = null;
-let crewRefreshPromise: Promise<void> | null = null;
+const crewRefreshPromises = new Map<string, Promise<void>>();
 let forcedCrewPublishPending = false;
 
 function initOnce(): Promise<void> {
@@ -385,26 +385,26 @@ async function publishCrews(force = false): Promise<void> {
   }
 }
 
-async function refreshCrewsAndPublishIfDue(): Promise<void> {
-  if (crewMemberships.length === 0) return;
-  if (crewRefreshPromise !== null) return crewRefreshPromise;
+async function refreshCrewsAndPublishIfDue(crewId: string): Promise<void> {
+  const membership = crewMemberships.find((candidate) => candidate.crewId === crewId);
+  if (membership === undefined) return;
+  const activeRefresh = crewRefreshPromises.get(crewId);
+  if (activeRefresh !== undefined) return activeRefresh;
   const operation = (async () => {
     if (crewSyncPromise !== null) await crewSyncPromise;
     const now = nowSeconds();
-    for (const membership of crewMemberships) {
-      try {
-        await refreshMembership(membership, crewDao, now);
-      } catch (error) {
-        console.error(`crew refresh failed for ${membership.crewId}`, error);
-      }
+    try {
+      await refreshMembership(membership, crewDao, now);
+    } catch (error) {
+      console.error(`crew refresh failed for ${membership.crewId}`, error);
     }
     await publishCrews(false);
   })();
-  crewRefreshPromise = operation;
+  crewRefreshPromises.set(crewId, operation);
   try {
     await operation;
   } finally {
-    if (crewRefreshPromise === operation) crewRefreshPromise = null;
+    if (crewRefreshPromises.get(crewId) === operation) crewRefreshPromises.delete(crewId);
   }
 }
 
@@ -548,7 +548,6 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
     case "pomo:crew:board": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
-      await refreshCrewsAndPublishIfDue();
       return { ok: true, board: await buildBoardResponse(request.crewId, request.window, nowSeconds()) };
     }
     case "pomo:crew:join": {
@@ -590,9 +589,9 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return { ok: true, crews: await crewSummaries() };
     }
     case "pomo:crew:refresh": {
-      await refreshCrewsAndPublishIfDue();
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
+      await refreshCrewsAndPublishIfDue(request.crewId);
       return { ok: true, board: await buildBoardResponse(request.crewId, request.window ?? "today", nowSeconds()) };
     }
     case "pomo:crew:joinCode": {

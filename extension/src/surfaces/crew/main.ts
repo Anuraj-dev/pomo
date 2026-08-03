@@ -81,7 +81,7 @@ function renderChips(): void {
       activeCrewId = crew.crewId;
       chipIndex = crews.findIndex((c) => c.crewId === crew.crewId);
       resetSearch();
-      void loadBoard();
+      void loadBoard(true);
     });
     chipsEl.appendChild(chip);
   }
@@ -400,7 +400,7 @@ async function loadCrews(): Promise<void> {
   renderChips();
   renderSummary();
   renderStanding();
-  await loadBoard();
+  await loadBoard(true);
 }
 
 function openManage(title: string, body: HTMLElement): void {
