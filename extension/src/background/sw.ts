@@ -8,6 +8,7 @@ import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
 import { loadCrewBoard, publishOwnSnapshot, refreshMembership } from "../crew/crewService";
 import { publicKeyOf } from "../crew/identity";
+import { normalizeCrewName, normalizeDisplayName } from "../crew/validation";
 import { decodePayload, encodePayload, newPayload } from "../crew/joinCode";
 import {
   KEYRING_STORAGE_KEY,
@@ -22,6 +23,7 @@ import {
 import { standingFor, type WindowKey } from "../crew/leaderboard";
 import { generateIdentity } from "../crew/identity";
 import type { StoredMembership } from "../crew/types";
+import { decodePortableBackup, encodePortableBackup, membershipFromBackup } from "../shared/backup";
 import { badgeColorOf, badgeTextOf } from "../shared/badge";
 import {
   CREW_MEMBERSHIPS_KEY,
@@ -39,7 +41,7 @@ import {
 const ALARM_NAME = "pomo-tick";
 const ALARM_PERIOD_MINUTES = 0.5;
 const PHASE_COMPLETE_NOTIFICATION = "pomo-phase-complete";
-const CREW_SYNC_MIN_INTERVAL = 60;
+const CREW_PUBLISH_MIN_INTERVAL = 24 * 60 * 60;
 
 let db: IDBDatabase;
 let dao: HistoryDao;
@@ -98,13 +100,17 @@ function commit(block: CompletedBlock): void {
     const delta = deltasByDate.get(segment.date)!;
     earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + delta.earnedBlocks);
     pendingWrite = pendingWrite
-      .then(() => dao.insertSessionWithDayStats(row, delta))
-      .catch((error: unknown) => console.error("session commit failed", error));
+      .catch((error: unknown) => {
+        console.error("session commit failed", error);
+      })
+      .then(() => dao.insertSessionWithDayStats(row, delta));
   }
   if (block.completed) {
     notifyPhaseComplete(block.type);
     if (block.type === "work") {
-      void crewSync();
+      void pendingWrite.then(() => publishCrews(true)).catch((error: unknown) => {
+        console.error("crew publication skipped because history was not durable", error);
+      });
     }
   }
 }
@@ -177,7 +183,8 @@ async function initIdentity(): Promise<void> {
       identityPrivateKey = await unwrapIdentityKey(keyring.identity, wrapping);
       return;
     } catch (error) {
-      console.error("keyring unwrap failed; regenerating identity", error);
+      console.error("keyring unwrap failed; recovery is required", error);
+      throw new Error("identity recovery required; restore a Pomo recovery file before using Crew");
     }
   }
   const identity = generateIdentity();
@@ -192,6 +199,101 @@ async function initIdentity(): Promise<void> {
   identityPrivateKey = identity.privateKey;
 }
 
+async function exportPortableBackup(): Promise<string> {
+  const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
+  const snapshots = [];
+  const dailyAggregates = [];
+  const hiddenMembers: Array<{ crewId: string; identityPublicKey: string; hiddenAtEpochSeconds: number }> = [];
+  for (const membership of crewMemberships) {
+    const rows = await crewDao.snapshotsForCrew(membership.crewId);
+    snapshots.push(...rows);
+    for (const row of rows) {
+      dailyAggregates.push(...(await crewDao.dailyFor(membership.crewId, row.identityPublicKey)));
+    }
+    for (const identityPublicKey of await crewDao.hiddenKeys(membership.crewId)) {
+      hiddenMembers.push({ crewId: membership.crewId, identityPublicKey, hiddenAtEpochSeconds: nowSeconds() });
+    }
+  }
+  return encodePortableBackup({
+    dayStats,
+    sessions,
+    memberships: crewMemberships,
+    identityPrivateKey: crewMemberships.length === 0 ? "" : identityPrivateKey ?? "",
+    activeCrewId: crewMemberships[0]?.crewId ?? null,
+    snapshots,
+    dailyAggregates,
+    hiddenMembers,
+  });
+}
+
+async function importPortableBackup(payloadJson: string, confirmIdentityReplacement: boolean): Promise<PomoResponse> {
+  const backup = decodePortableBackup(payloadJson);
+  if (backup.crew.memberships.some((membership) => membership.protocolVersion !== 2)) {
+    return { ok: false, error: "backup contains an unsupported Crew protocol version" };
+  }
+  for (const membership of backup.crew.memberships) {
+    if (normalizeCrewName(membership.crewName) !== membership.crewName || normalizeDisplayName(membership.displayName) !== membership.displayName) {
+      return { ok: false, error: "backup contains an invalid Crew name" };
+    }
+  }
+  const importedIdentity = backup.crew.identityPrivateKey;
+  const currentIdentity = identityPrivateKey;
+  const identityDiffers = importedIdentity !== "" && currentIdentity !== null && importedIdentity !== currentIdentity;
+  if (identityDiffers && crewMemberships.length > 0) {
+    return { ok: false, error: "backup identity differs from the active identity; export this device before importing" };
+  }
+  if (identityDiffers && !confirmIdentityReplacement) {
+    return { ok: false, error: "identity replacement requires explicit confirmation" };
+  }
+  const byCrew = new Map(crewMemberships.map((membership) => [membership.crewId, membership]));
+  const previousMembershipCount = byCrew.size;
+  for (const membership of backup.crew.memberships) {
+    const existing = byCrew.get(membership.crewId);
+    if (existing !== undefined && (existing.key !== membership.key || existing.crewName !== membership.crewName)) {
+      return { ok: false, error: `backup conflicts with existing Crew ${membership.crewName}` };
+    }
+    if (existing === undefined) byCrew.set(membership.crewId, membershipFromBackup(membership));
+  }
+  const mergedMemberships = [...byCrew.values()];
+  const historySummary = await dao.mergeBackup(
+    backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
+    backup.history.sessions.map((session) => ({ ...session })),
+  );
+  for (const snapshot of backup.crew.snapshots) {
+    const daily = backup.crew.dailyAggregates.filter(
+      (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
+    );
+    await crewDao.upsertLatest(snapshot, daily);
+  }
+  for (const hidden of backup.crew.hiddenMembers) {
+    await crewDao.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
+  }
+  let identityRestored = false;
+  if (identityDiffers && importedIdentity !== "") {
+    const wrapping = await generateWrappingKey();
+    await chrome.storage.local.set({
+      [KEYRING_STORAGE_KEY]: {
+        wrappingKey: await exportWrappingKey(wrapping),
+        identity: await wrapIdentityKey(importedIdentity, wrapping),
+      },
+    });
+    identityPrivateKey = importedIdentity;
+    identityRestored = true;
+  }
+  crewMemberships = mergedMemberships;
+  await saveMemberships();
+  await publishCrews(true);
+  return {
+    ok: true,
+    crews: await crewSummaries(),
+    restoreSummary: {
+      ...historySummary,
+      membershipsAdded: Math.max(0, mergedMemberships.length - previousMembershipCount),
+      identityRestored,
+    },
+  };
+}
+
 async function loadMemberships(): Promise<void> {
   const stored = await chrome.storage.local.get(CREW_MEMBERSHIPS_KEY);
   crewMemberships = Array.isArray(stored[CREW_MEMBERSHIPS_KEY])
@@ -203,11 +305,11 @@ async function saveMemberships(): Promise<void> {
   await chrome.storage.local.set({ [CREW_MEMBERSHIPS_KEY]: crewMemberships });
 }
 
-async function publishSelf(membership: StoredMembership, now: number): Promise<void> {
-  if (identityPrivateKey === null) return;
+async function publishSelf(membership: StoredMembership, now: number): Promise<boolean> {
+  if (identityPrivateKey === null) return false;
   try {
     const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
-    await publishOwnSnapshot(
+    const result = await publishOwnSnapshot(
       {
         membership,
         identityPrivateKey,
@@ -220,19 +322,36 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<v
       },
       crewDao,
     );
+    return result.ok;
   } catch (error) {
     console.error(`crew publish failed for ${membership.crewId}`, error);
+    return false;
   }
 }
 
-async function crewSync(force = false): Promise<void> {
+async function publishCrews(force = false): Promise<void> {
   if (crewSyncInFlight || crewMemberships.length === 0) return;
   const now = nowSeconds();
   const stored = await chrome.storage.local.get(CREW_SYNC_KEY);
-  const lastSync = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
-  if (!force && now - lastSync < CREW_SYNC_MIN_INTERVAL) return;
+  const lastPublish = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
+  if (!force && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
   crewSyncInFlight = true;
-  await chrome.storage.local.set({ [CREW_SYNC_KEY]: now });
+  let publishedAll = true;
+  try {
+    for (const membership of crewMemberships) {
+      const published = await publishSelf(membership, now);
+      if (!published) publishedAll = false;
+    }
+    if (publishedAll) await chrome.storage.local.set({ [CREW_SYNC_KEY]: now });
+  } finally {
+    crewSyncInFlight = false;
+  }
+}
+
+async function refreshCrewsAndPublishIfDue(): Promise<void> {
+  if (crewSyncInFlight || crewMemberships.length === 0) return;
+  const now = nowSeconds();
+  crewSyncInFlight = true;
   try {
     for (const membership of crewMemberships) {
       try {
@@ -240,11 +359,11 @@ async function crewSync(force = false): Promise<void> {
       } catch (error) {
         console.error(`crew refresh failed for ${membership.crewId}`, error);
       }
-      await publishSelf(membership, now);
     }
   } finally {
     crewSyncInFlight = false;
   }
+  await publishCrews(false);
 }
 
 async function crewSummaries(): Promise<CrewSummary[]> {
@@ -271,16 +390,18 @@ async function addMembership(
   key: string,
   displayName: string,
 ): Promise<PomoResponse> {
+  const normalizedName = normalizeDisplayName(displayName);
+  if (normalizedName === null) return { ok: false, error: "display name is invalid" };
   crewMemberships.push({
     crewId,
     crewName,
     relays,
     key,
-    displayName,
+    displayName: normalizedName,
     joinedAtEpochSeconds: nowSeconds(),
   });
   await saveMemberships();
-  void crewSync(true);
+  await publishCrews(true);
   return { ok: true, crews: await crewSummaries() };
 }
 
@@ -319,7 +440,6 @@ async function init(): Promise<void> {
   }
   await ensureAlarm();
   await sync();
-  void crewSync();
 }
 
 async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
@@ -407,15 +527,15 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
     case "pomo:crew:rename": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
-      const displayName = request.displayName.trim();
-      if (displayName.length === 0) return { ok: false, error: "display name cannot be empty" };
+      const displayName = normalizeDisplayName(request.displayName);
+      if (displayName === null) return { ok: false, error: "display name is invalid" };
       membership.displayName = displayName;
       await saveMemberships();
-      void crewSync(true);
+      await publishCrews(true);
       return { ok: true, crews: await crewSummaries() };
     }
     case "pomo:crew:refresh": {
-      await crewSync(true);
+      await refreshCrewsAndPublishIfDue();
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
       return { ok: true, board: await buildBoardResponse(request.crewId, request.window ?? "today", nowSeconds()) };
@@ -483,12 +603,24 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
         });
         crewMemberships = memberships;
         await saveMemberships();
-        void crewSync(true);
+        await publishCrews(true);
         return { ok: true, crews: await crewSummaries() };
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
     }
+    case "pomo:backup:export":
+      try {
+        return { ok: true, backup: await exportPortableBackup() };
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
+    case "pomo:backup:import":
+      try {
+        return await importPortableBackup(request.payload, request.confirmIdentityReplacement === true);
+      } catch (error) {
+        return { ok: false, error: error instanceof Error ? error.message : String(error) };
+      }
   }
 }
 
@@ -505,7 +637,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   void initOnce().then(() => {
     engine.tick();
     void sync();
-    void crewSync();
   });
 });
 

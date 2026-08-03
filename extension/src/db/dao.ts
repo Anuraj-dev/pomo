@@ -98,6 +98,68 @@ export class HistoryDao {
     });
   }
 
+  mergeBackup(
+    backupDayStats: DayStatRow[],
+    backupSessions: SessionRow[],
+  ): Promise<{ sessionsAdded: number; daysAffected: number }> {
+    return tx(this.db, ["sessions", "dayStats"], "readwrite", async (transaction) => {
+      const sessionsStore = transaction.objectStore("sessions");
+      const dayStatsStore = transaction.objectStore("dayStats");
+      const existingSessions = await req<SessionRow[]>(sessionsStore.getAll());
+      const existingDayStats = await req<DayStatRow[]>(dayStatsStore.getAll());
+      const byStart = new Map(existingSessions.map((row) => [row.start, row]));
+      let sessionsAdded = 0;
+      for (const row of backupSessions) {
+        if (byStart.has(row.start)) continue;
+        byStart.set(row.start, row);
+        sessionsAdded++;
+      }
+
+      const derived = new Map<string, DayStatRow>();
+      for (const session of byStart.values()) {
+        const current = derived.get(session.date) ?? {
+          date: session.date,
+          earnedBlocks: 0,
+          focusMinutes: 0,
+          breakMinutes: 0,
+          lastUpdated: Date.now(),
+        };
+        const minutes = Math.ceil(session.duration / 60);
+        if (session.type === "work") {
+          current.focusMinutes += minutes;
+          if (session.completed) current.earnedBlocks += 1;
+        } else if (session.completed) {
+          current.breakMinutes += minutes;
+        }
+        derived.set(session.date, current);
+      }
+
+      const oldByDate = new Map(existingDayStats.map((row) => [row.date, row]));
+      const backupByDate = new Map(backupDayStats.map((row) => [row.date, row]));
+      const dates = new Set([...derived.keys(), ...oldByDate.keys(), ...backupByDate.keys()]);
+      const mergedDays = [...dates].map((date) => {
+        const fromSessions = derived.get(date);
+        const fromDevice = oldByDate.get(date);
+        const fromBackup = backupByDate.get(date);
+        return {
+          date,
+          earnedBlocks: Math.max(fromSessions?.earnedBlocks ?? 0, fromDevice?.earnedBlocks ?? 0, fromBackup?.earnedBlocks ?? 0),
+          focusMinutes: Math.max(fromSessions?.focusMinutes ?? 0, fromDevice?.focusMinutes ?? 0, fromBackup?.focusMinutes ?? 0),
+          breakMinutes: Math.max(fromSessions?.breakMinutes ?? 0, fromDevice?.breakMinutes ?? 0, fromBackup?.breakMinutes ?? 0),
+          lastUpdated: Date.now(),
+        };
+      });
+
+      for (const row of byStart.values()) await req(sessionsStore.put(row));
+      for (const row of mergedDays) await req(dayStatsStore.put(row));
+      const daysAffected = mergedDays.filter((row) => {
+        const old = oldByDate.get(row.date);
+        return old === undefined || old.earnedBlocks !== row.earnedBlocks || old.focusMinutes !== row.focusMinutes || old.breakMinutes !== row.breakMinutes;
+      }).length;
+      return { sessionsAdded, daysAffected };
+    });
+  }
+
   sessionsForDate(date: string): Promise<SessionRow[]> {
     return tx(this.db, ["sessions"], "readonly", (transaction) =>
       req<SessionRow[]>(transaction.objectStore("sessions").index("date").getAll(date)),

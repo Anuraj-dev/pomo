@@ -192,4 +192,13 @@ describe("aggregateBoard", () => {
     expect(unranked.gapToNext).toBe(50);
     expect(standingFor(board, key(5))).toBeNull();
   });
+
+  test("unranked members are not reported as tied and a sole leader gets a lead", () => {
+    const leader = snapshot({ identityPublicKey: key(1), displayName: "Leader", dailyAggregates: [agg("2023-11-14", 100)] });
+    const second = snapshot({ identityPublicKey: key(2), displayName: "Second", dailyAggregates: [agg("2023-11-14", 40)] });
+    const zero = snapshot({ identityPublicKey: key(3), displayName: "Zero", dailyAggregates: [agg("2023-11-14", 0)] });
+    const board = aggregateBoard([leader, second, zero], { window: "today", now: NOW, hiddenKeys: new Set() });
+    expect(standingFor(board, key(1))?.gapToNext).toBe(60);
+    expect(standingFor(board, key(3))?.tieCount).toBe(0);
+  });
 });

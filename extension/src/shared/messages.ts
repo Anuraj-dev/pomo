@@ -9,7 +9,7 @@ export const STATE_KEY = "pomo:state";
 export const ENGINE_KEY = "pomo:engine";
 export const SETTINGS_KEY = "pomo:settings";
 export const CREW_MEMBERSHIPS_KEY = "pomo:crew:memberships";
-export const CREW_SYNC_KEY = "pomo:crew:lastSync";
+export const CREW_SYNC_KEY = "pomo:crew:lastPublish";
 
 export type PomoCommand = "toggle" | "skip" | "reset" | "extend";
 
@@ -124,6 +124,16 @@ export interface PomoRecoveryImportMessage {
   passphrase: string;
 }
 
+export interface PomoBackupExportMessage {
+  type: "pomo:backup:export";
+}
+
+export interface PomoBackupImportMessage {
+  type: "pomo:backup:import";
+  payload: string;
+  confirmIdentityReplacement?: boolean;
+}
+
 export type PomoRequest =
   | PomoCommandMessage
   | PomoQueryMessage
@@ -141,7 +151,9 @@ export type PomoRequest =
   | PomoCrewJoinCodeMessage
   | PomoCrewRenameMessage
   | PomoRecoveryExportMessage
-  | PomoRecoveryImportMessage;
+  | PomoRecoveryImportMessage
+  | PomoBackupExportMessage
+  | PomoBackupImportMessage;
 
 export interface PomoResponse {
   ok: boolean;
@@ -152,6 +164,8 @@ export interface PomoResponse {
   board?: CrewBoardResult;
   joinCode?: string;
   recovery?: string;
+  backup?: string;
+  restoreSummary?: { sessionsAdded: number; daysAffected: number; membershipsAdded: number; identityRestored: boolean };
   stats?: SurfaceStats;
   history?: HistoryPayload;
 }
@@ -174,6 +188,8 @@ const POMO_REQUEST_TYPES = new Set<string>([
   "pomo:crew:rename",
   "pomo:recovery:export",
   "pomo:recovery:import",
+  "pomo:backup:export",
+  "pomo:backup:import",
 ]);
 
 export function isPomoRequest(value: unknown): value is PomoRequest {

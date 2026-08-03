@@ -165,19 +165,25 @@ export function standingFor(board: Board, selfKey: string): Standing | null {
   if (!self) {
     return null;
   }
-  const tieCount = board.members.filter((m) => m.rank === self.rank).length;
+  const tieCount = self.rank === null ? 0 : board.members.filter((m) => m.rank === self.rank).length;
   let gapToNext: number | null = null;
   if (self.rank === null) {
     const rankedFocus = board.members.filter((m) => m.rank !== null).map((m) => m.focusMinutes);
     if (rankedFocus.length > 0) {
       gapToNext = Math.min(...rankedFocus);
     }
-  } else if (self.rank > 1) {
+  } else {
     const above = board.members
       .filter((m) => m.rank !== null && m.focusMinutes > self.focusMinutes)
       .map((m) => m.focusMinutes);
     if (above.length > 0) {
       gapToNext = Math.min(...above) - self.focusMinutes;
+    } else {
+      const tied = board.members.filter((m) => m.rank === self.rank).length > 1;
+      const below = board.members
+        .filter((m) => m.rank !== null && m.focusMinutes < self.focusMinutes)
+        .map((m) => m.focusMinutes);
+      if (!tied && below.length > 0) gapToNext = self.focusMinutes - Math.max(...below);
     }
   }
   return {

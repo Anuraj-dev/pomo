@@ -1,5 +1,6 @@
 import { base64UrlToBytes, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { bytesToHex, isLowerHex } from "../shared/hex";
+import { normalizeCrewName } from "./validation";
 
 export interface CrewJoinPayload {
   version: number;
@@ -15,30 +16,12 @@ const URI_PREFIX = "pomo://crew/join/v2/";
 const RAW_PREFIX = "pomo-crew.v2.";
 const LEGACY_PREFIX = "pomo-crew.";
 const MAX_ENCODED_LENGTH = 16 * 1024;
-const MAX_CREW_NAME_GRAPHEMES = 40;
 const MAX_RELAYS = 8;
-const BIDI_OVERRIDES = "\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069";
 
 function randomHex(byteCount: number): string {
   const bytes = new Uint8Array(byteCount);
   crypto.getRandomValues(bytes);
   return bytesToHex(bytes);
-}
-
-function normalizeCrewName(value: string): string | null {
-  const normalized = value.normalize("NFC").trim().replace(/\s+/g, " ");
-  if (normalized.length === 0) return null;
-  for (const ch of normalized) {
-    const code = ch.codePointAt(0) ?? 0;
-    if (code <= 0x1f || code === 0x7f || BIDI_OVERRIDES.includes(ch)) return null;
-  }
-  const graphemes = new Intl.Segmenter().segment(normalized);
-  let count = 0;
-  for (const _ of graphemes) {
-    count++;
-    if (count > MAX_CREW_NAME_GRAPHEMES) return null;
-  }
-  return normalized;
 }
 
 function isValidRelayUrl(value: string): boolean {
