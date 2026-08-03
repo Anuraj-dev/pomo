@@ -37,8 +37,8 @@ import com.google.zxing.MultiFormatWriter
 import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
-import com.pomo.backup.BackupRepository
 import com.pomo.backup.BackupIdentityConflictException
+import com.pomo.backup.BackupRepository
 import com.pomo.backup.PomoBackup
 import com.pomo.cues.CompletionCueFamily
 import com.pomo.cues.StateCueEvent
@@ -51,10 +51,10 @@ import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
 import com.pomo.util.UtilPreferenceManager
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import kotlinx.coroutines.launch
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val gson = Gson()
