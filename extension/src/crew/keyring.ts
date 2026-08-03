@@ -1,6 +1,8 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { isLowerHex } from "../shared/hex";
-import type { CrewMembership } from "./types";
+import { decodePayload, encodePayload, isValidRelayUrl } from "./joinCode";
+import { normalizeCrewName, normalizeDisplayName } from "./validation";
+import type { CrewMembership, StoredMembership } from "./types";
 
 export const KEYRING_STORAGE_KEY = "pomo:keyring";
 
@@ -21,8 +23,18 @@ const AES_GCM = { name: "AES-GCM", tagLength: GCM_TAG_BITS } as const;
 
 export interface RecoveryPayload {
   identityPrivateKey: string;
-  memberships: CrewMembership[];
-  version: number;
+  memberships: RecoveryMembership[];
+}
+
+export interface RecoveryMembership {
+  crewId: string;
+  crewName: string;
+  joinCode: string;
+  relays: string[];
+  key: string;
+  displayName: string;
+  protocolVersion: number;
+  isArchived: boolean;
 }
 
 interface RecoveryEnvelope {
@@ -108,14 +120,32 @@ function encodeEnvelope(envelope: RecoveryEnvelope): string {
 
 export async function encodeRecovery(
   identityPrivateKey: string,
-  memberships: CrewMembership[],
+  memberships: Array<CrewMembership | StoredMembership>,
   passphrase: string,
 ): Promise<string> {
   if (!isLowerHex(identityPrivateKey, 64)) throw new Error("encodeRecovery requires a valid identity private key");
   if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
     throw new Error(`passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`);
   }
-  const payload: RecoveryPayload = { identityPrivateKey, memberships, version: RECOVERY_VERSION };
+  const payload: RecoveryPayload = {
+    identityPrivateKey,
+    memberships: memberships.map((membership) => ({
+      crewId: membership.crewId,
+      crewName: membership.crewName,
+      joinCode: encodePayload({
+        version: 2,
+        crewId: membership.crewId,
+        crewName: membership.crewName,
+        relays: membership.relays,
+        key: membership.key,
+      }),
+      relays: [...membership.relays],
+      key: membership.key,
+      displayName: "displayName" in membership ? membership.displayName : membership.crewName,
+      protocolVersion: 2,
+      isArchived: false,
+    })),
+  };
   const salt = crypto.getRandomValues(new Uint8Array(SALT_BYTES));
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
   const key = await keyFromPassphrase(passphrase, salt, PBKDF2_ITERATIONS);
@@ -150,18 +180,58 @@ export async function decodeRecovery(value: string, passphrase: string): Promise
     const payload: unknown = JSON.parse(bytesToUtf8(new Uint8Array(plaintext)));
     if (typeof payload !== "object" || payload === null) return null;
     const record = payload as Record<string, unknown>;
-    if (
-      record.version !== RECOVERY_VERSION ||
-      typeof record.identityPrivateKey !== "string" ||
-      !isLowerHex(record.identityPrivateKey, 64) ||
-      !Array.isArray(record.memberships)
-    ) {
+    if (typeof record.identityPrivateKey !== "string" || !isLowerHex(record.identityPrivateKey, 64) || !Array.isArray(record.memberships)) {
       return null;
+    }
+    const memberships: RecoveryMembership[] = [];
+    for (const raw of record.memberships) {
+      if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+      const membership = raw as Record<string, unknown>;
+      if (
+        typeof membership.crewId !== "string" ||
+        typeof membership.crewName !== "string" ||
+        typeof membership.joinCode !== "string" ||
+        !Array.isArray(membership.relays) ||
+        !membership.relays.every((relay) => typeof relay === "string" && isValidRelayUrl(relay)) ||
+        typeof membership.key !== "string" ||
+        typeof membership.displayName !== "string" ||
+        membership.protocolVersion !== 2 ||
+        membership.isArchived !== false ||
+        normalizeCrewName(membership.crewName) !== membership.crewName ||
+        normalizeDisplayName(membership.displayName) !== membership.displayName ||
+        !isLowerHex(membership.crewId, 32) ||
+        !isLowerHex(membership.key, 64)
+      ) {
+        return null;
+      }
+      let decoded: ReturnType<typeof decodePayload>;
+      try {
+        decoded = decodePayload(membership.joinCode);
+      } catch {
+        return null;
+      }
+      if (
+        decoded.crewId !== membership.crewId ||
+        decoded.crewName !== membership.crewName ||
+        decoded.key !== membership.key ||
+        decoded.relays.join("\n") !== (membership.relays as string[]).join("\n")
+      ) {
+        return null;
+      }
+      memberships.push({
+        crewId: membership.crewId,
+        crewName: membership.crewName,
+        joinCode: membership.joinCode,
+        relays: [...(membership.relays as string[])],
+        key: membership.key,
+        displayName: membership.displayName,
+        protocolVersion: 2,
+        isArchived: false,
+      });
     }
     return {
       identityPrivateKey: record.identityPrivateKey,
-      memberships: record.memberships as CrewMembership[],
-      version: RECOVERY_VERSION,
+      memberships,
     };
   } catch {
     return null;

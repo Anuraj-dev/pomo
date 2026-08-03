@@ -2,6 +2,8 @@ import type { CrewDailyRow, CrewSnapshotRow } from "../db/dao";
 import type { DayStatRow, SessionRow } from "../db/types";
 import { isLowerHex } from "./hex";
 import type { CrewMembership, StoredMembership } from "../crew/types";
+import { decodePayload, encodePayload } from "../crew/joinCode";
+import { normalizeCrewName, normalizeDisplayName } from "../crew/validation";
 
 export const BACKUP_FORMAT = "pomo-backup" as const;
 export const BACKUP_VERSION = 1;
@@ -138,14 +140,30 @@ function validateBackup(value: unknown): PortableBackup {
     const relays = arrayValue(row.relays, "crew.memberships.relays").map((relay) => stringValue(relay, "crew.memberships.relay"));
     const crewId = stringValue(row.crewId, "crew.memberships.crewId");
     const key = stringValue(row.key, "crew.memberships.key");
+    const crewName = stringValue(row.crewName, "crew.memberships.crewName");
+    const joinCode = stringValue(row.joinCode, "crew.memberships.joinCode");
+    const displayName = stringValue(row.displayName, "crew.memberships.displayName");
     if (!isLowerHex(crewId, 32) || !isLowerHex(key, 64)) throw new Error("backup contains an invalid Crew membership key");
+    if (normalizeCrewName(crewName) !== crewName || normalizeDisplayName(displayName) !== displayName) {
+      throw new Error("backup contains an invalid Crew name");
+    }
+    let decoded: ReturnType<typeof decodePayload>;
+    try {
+      decoded = decodePayload(joinCode);
+    } catch {
+      throw new Error("backup contains an invalid Crew join code");
+    }
+    const relaysMatch = decoded.relays.length === relays.length && decoded.relays.every((relay, index) => relay === relays[index]);
+    if (decoded.crewId !== crewId || decoded.crewName !== crewName || decoded.key !== key || !relaysMatch) {
+      throw new Error("backup Crew join code does not match its membership");
+    }
     return {
       crewId,
-      crewName: stringValue(row.crewName, "crew.memberships.crewName"),
-      joinCode: stringValue(row.joinCode, "crew.memberships.joinCode"),
+      crewName,
+      joinCode,
       relays,
       key,
-      displayName: stringValue(row.displayName, "crew.memberships.displayName"),
+      displayName,
       protocolVersion: numberValue(row.protocolVersion, "crew.memberships.protocolVersion"),
     };
   });
@@ -248,7 +266,21 @@ export function encodePortableBackup(input: {
       identityPrivateKey: input.identityPrivateKey,
       profileAvatarBase64: null,
       activeCrewId: input.activeCrewId,
-      memberships: input.memberships.map((membership) => ({ ...membership, protocolVersion: 2 })),
+      memberships: input.memberships.map((membership) => ({
+        crewId: membership.crewId,
+        crewName: membership.crewName,
+        joinCode: encodePayload({
+          version: 2,
+          crewId: membership.crewId,
+          crewName: membership.crewName,
+          relays: membership.relays,
+          key: membership.key,
+        }),
+        relays: [...membership.relays],
+        key: membership.key,
+        displayName: membership.displayName,
+        protocolVersion: 2,
+      })),
       snapshots: input.snapshots.map((snapshot) => ({ ...snapshot })),
       dailyAggregates: input.dailyAggregates.map((aggregate) => ({ ...aggregate })),
       hiddenMembers: input.hiddenMembers.map((hidden) => ({ ...hidden })),

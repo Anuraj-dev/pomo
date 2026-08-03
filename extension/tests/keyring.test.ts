@@ -11,7 +11,7 @@ import {
   unwrapIdentityKey,
   wrapIdentityKey,
 } from "../src/crew/keyring";
-import { base64UrlToBytes, bytesToUtf8, utf8ToBytes } from "../src/shared/bytes";
+import { base64UrlToBytes, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../src/shared/bytes";
 
 const PRIVATE_KEY = "0".repeat(63) + "1";
 const PASSPHRASE = "correct horse battery staple";
@@ -33,14 +33,14 @@ describe("wrapping key round trip", () => {
 
   test("a different wrapping key cannot unwrap", async () => {
     const envelope = await wrapIdentityKey(PRIVATE_KEY, await generateWrappingKey());
-    expect(unwrapIdentityKey(envelope, await generateWrappingKey())).rejects.toThrow(/wrong wrapping key/);
+    await expect(unwrapIdentityKey(envelope, await generateWrappingKey())).rejects.toThrow(/wrong wrapping key/);
   });
 
   test("rejects malformed key material", async () => {
     const wrappingKey = await generateWrappingKey();
-    expect(wrapIdentityKey("not hex at all", wrappingKey)).rejects.toThrow(/64-char lowercase hex/);
-    expect(unwrapIdentityKey("not json", wrappingKey)).rejects.toThrow(/invalid keyring envelope/);
-    expect(unwrapIdentityKey('{"version":99,"nonce":"","ciphertext":""}', wrappingKey)).rejects.toThrow(
+    await expect(wrapIdentityKey("not hex at all", wrappingKey)).rejects.toThrow(/64-char lowercase hex/);
+    await expect(unwrapIdentityKey("not json", wrappingKey)).rejects.toThrow(/invalid keyring envelope/);
+    await expect(unwrapIdentityKey('{"version":99,"nonce":"","ciphertext":""}', wrappingKey)).rejects.toThrow(
       /unsupported keyring version/,
     );
   });
@@ -49,7 +49,7 @@ describe("wrapping key round trip", () => {
 describe("recovery codec", () => {
   test("encode and decode round trips the identity and memberships", async () => {
     const memberships = [
-      { crewId: "crew-1", crewName: "Late Night", relays: ["wss://relay.example"], key: "a".repeat(64) },
+      { crewId: "a".repeat(32), crewName: "Late Night", relays: ["wss://relay.example"], key: "b".repeat(64) },
     ];
     const encoded = await encodeRecovery(PRIVATE_KEY, memberships, PASSPHRASE);
     expect(encoded.startsWith(RECOVERY_PREFIX)).toBe(true);
@@ -57,7 +57,15 @@ describe("recovery codec", () => {
     const decoded = await decodeRecovery(encoded, PASSPHRASE);
     expect(decoded).not.toBeNull();
     expect(decoded!.identityPrivateKey).toBe(PRIVATE_KEY);
-    expect(decoded!.memberships).toEqual(memberships);
+    expect(decoded!.memberships[0]).toMatchObject({
+      crewId: memberships[0]!.crewId,
+      crewName: memberships[0]!.crewName,
+      relays: memberships[0]!.relays,
+      key: memberships[0]!.key,
+      displayName: memberships[0]!.crewName,
+      protocolVersion: 2,
+      isArchived: false,
+    });
   });
 
   test("the wrong passphrase decodes to null", async () => {
@@ -67,7 +75,7 @@ describe("recovery codec", () => {
 
   test("short passphrases are rejected at encode", async () => {
     const short = "a".repeat(MIN_PASSPHRASE_LENGTH - 1);
-    expect(encodeRecovery(PRIVATE_KEY, [], short)).rejects.toThrow(/at least 12 characters/);
+    await expect(encodeRecovery(PRIVATE_KEY, [], short)).rejects.toThrow(/at least 12 characters/);
   });
 
   test("a valid passphrase at the minimum length works", async () => {
@@ -87,7 +95,7 @@ describe("recovery codec", () => {
     const body = encoded.slice(RECOVERY_PREFIX.length);
     const envelope = JSON.parse(bytesToUtf8(base64UrlToBytes(body)));
     const rebuild = (patch: Record<string, unknown>) =>
-      RECOVERY_PREFIX + bytesToUtf8(utf8ToBytes(JSON.stringify({ ...envelope, ...patch })));
+      RECOVERY_PREFIX + bytesToBase64Url(utf8ToBytes(JSON.stringify({ ...envelope, ...patch })));
 
     expect(await decodeRecovery(rebuild({ version: 2 }), PASSPHRASE)).toBeNull();
     expect(await decodeRecovery(rebuild({ iterations: 50_000 }), PASSPHRASE)).toBeNull();
@@ -102,7 +110,7 @@ describe("recovery codec", () => {
     const body = encoded.slice(RECOVERY_PREFIX.length);
     const envelope = JSON.parse(bytesToUtf8(base64UrlToBytes(body)));
     envelope.ciphertext = "AAAAAAAAAAAAAAAAAAAAAA";
-    const tampered = RECOVERY_PREFIX + bytesToUtf8(utf8ToBytes(JSON.stringify(envelope)));
+    const tampered = RECOVERY_PREFIX + bytesToBase64Url(utf8ToBytes(JSON.stringify(envelope)));
     expect(await decodeRecovery(tampered, PASSPHRASE)).toBeNull();
   });
 });

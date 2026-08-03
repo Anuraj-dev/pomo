@@ -194,7 +194,7 @@ export async function publishEventBurst(
   );
 
   const okRelayUrl = completions.find((c) => c.status === "completed" && c.note === "ok")?.relayUrl ?? null;
-  const answered = completions.find((c) => c.status === "completed");
+  const answered = completions.find((c) => c.status === "completed" || c.status === "rejected");
   const ok = okRelayUrl !== null;
   const reason = !ok
     ? answered?.status === "rejected"

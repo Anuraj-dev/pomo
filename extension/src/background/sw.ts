@@ -348,13 +348,13 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<b
 
 async function publishCrews(force = false): Promise<void> {
   if (crewSyncInFlight || crewMemberships.length === 0) return;
-  const now = nowSeconds();
-  const stored = await chrome.storage.local.get(CREW_SYNC_KEY);
-  const lastPublish = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
-  if (!force && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
   crewSyncInFlight = true;
-  let publishedAll = true;
+  const now = nowSeconds();
   try {
+    const stored = await chrome.storage.local.get(CREW_SYNC_KEY);
+    const lastPublish = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
+    if (!force && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
+    let publishedAll = true;
     for (const membership of crewMemberships) {
       const published = await publishSelf(membership, now);
       if (!published) publishedAll = false;
@@ -494,7 +494,11 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
         stats: {
           todayEarned: days.find((day) => day.date === today)?.earnedBlocks ?? 0,
           totalFocusMinutes: sum.focusMinutes,
-          streak: currentStreak(days.map((day) => day.date), today, offset),
+          streak: currentStreak(
+            days.filter((day) => day.earnedBlocks > 0).map((day) => day.date),
+            today,
+            offset,
+          ),
         },
       };
     }
@@ -545,6 +549,11 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
         await crewDao.unhide(request.crewId, request.identityPublicKey);
       }
       return { ok: true };
+    case "pomo:crew:hidden":
+      if (!crewMemberships.some((membership) => membership.crewId === request.crewId)) {
+        return { ok: false, error: "crew not found" };
+      }
+      return { ok: true, hiddenMembers: await crewDao.hiddenKeys(request.crewId) };
     case "pomo:crew:rename": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
@@ -590,39 +599,31 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
       try {
         const memberships: StoredMembership[] = [];
         for (const membership of payload.memberships) {
-          const extras = membership as { displayName?: unknown; joinedAtEpochSeconds?: unknown };
-          if (
-            typeof membership.crewId !== "string" ||
-            typeof membership.crewName !== "string" ||
-            !Array.isArray(membership.relays) ||
-            !membership.relays.every((relay) => typeof relay === "string") ||
-            typeof membership.key !== "string"
-          ) {
-            return { ok: false, error: "invalid recovery file or passphrase" };
-          }
+          const decoded = decodePayload(membership.joinCode);
+          if (decoded.crewId !== membership.crewId || decoded.key !== membership.key) return { ok: false, error: "invalid recovery file or passphrase" };
           memberships.push({
             crewId: membership.crewId,
             crewName: membership.crewName,
             relays: membership.relays,
             key: membership.key,
-            displayName:
-              typeof extras.displayName === "string" && extras.displayName.length > 0
-                ? extras.displayName
-                : membership.crewName,
-            joinedAtEpochSeconds:
-              typeof extras.joinedAtEpochSeconds === "number" ? extras.joinedAtEpochSeconds : nowSeconds(),
+            displayName: membership.displayName,
+            joinedAtEpochSeconds: nowSeconds(),
           });
         }
-        identityPrivateKey = payload.identityPrivateKey;
-        identityRecoveryRequired = false;
         const wrapping = await generateWrappingKey();
-        const identityEnvelope = await wrapIdentityKey(identityPrivateKey, wrapping);
+        const identityEnvelope = await wrapIdentityKey(payload.identityPrivateKey, wrapping);
         await chrome.storage.local.set({
           [KEYRING_STORAGE_KEY]: {
             wrappingKey: await exportWrappingKey(wrapping),
             identity: identityEnvelope,
           },
         });
+        identityPrivateKey = payload.identityPrivateKey;
+        identityRecoveryRequired = false;
+        const importedCrewIds = new Set(memberships.map((membership) => membership.crewId));
+        for (const membership of crewMemberships) {
+          if (!importedCrewIds.has(membership.crewId)) await crewDao.deleteCrew(membership.crewId);
+        }
         crewMemberships = memberships;
         await saveMemberships();
         await publishCrews(true);
