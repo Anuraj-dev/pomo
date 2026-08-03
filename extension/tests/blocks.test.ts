@@ -43,9 +43,18 @@ describe("splitBlockByCalendarDay", () => {
     expect(segs[2]!.completed).toBe(false);
   });
 
-  test("durations round up to whole minutes", () => {
+  test("rounds the whole block once to whole minutes", () => {
     const segs = splitBlockByCalendarDay({ start: 1_800_000_000, duration: 61, completed: true, type: "work", tag: null, offsetMinutes: OFFSET });
-    expect(segs[0]!.duration).toBe(120);
+    expect(segs[0]!.duration).toBe(60);
+  });
+
+  test("segment durations never exceed the original block duration", () => {
+    const start = MIDNIGHT - 30;
+    const segs = splitBlockByCalendarDay({ start, duration: 1500, completed: true, type: "work", tag: "Work", offsetMinutes: OFFSET });
+    expect(segs).toHaveLength(2);
+    expect(segs[0]!.duration + segs[1]!.duration).toBe(1500);
+    expect(segs[0]!.duration).toBe(60);
+    expect(segs[1]!.duration).toBe(1440);
   });
 
   test("zero or negative duration yields nothing", () => {
@@ -73,6 +82,14 @@ describe("deltasForBlock", () => {
   test("completed break contributes break minutes only", () => {
     const deltas = deltasForBlock({ start: 1_800_000_000, duration: 300, type: "short", completed: true, tag: "Work" }, OFFSET);
     expect(deltas).toEqual([{ date: dateStringOf(1_800_000_000, OFFSET), earnedBlocks: 0, focusMinutes: 0, breakMinutes: 5 }]);
+  });
+
+  test("completed break crossing midnight contributes break minutes to both days", () => {
+    const start = MIDNIGHT - 600;
+    const deltas = deltasForBlock({ start, duration: 1200, type: "short", completed: true, tag: "Work" }, OFFSET);
+    expect(deltas).toHaveLength(2);
+    expect(deltas[0]).toMatchObject({ earnedBlocks: 0, breakMinutes: 10 });
+    expect(deltas[1]).toMatchObject({ earnedBlocks: 0, breakMinutes: 10 });
   });
 
   test("midnight-crossing completed work block splits the earned block to the start day", () => {

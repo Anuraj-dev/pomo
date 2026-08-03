@@ -79,7 +79,7 @@ describe("recovery codec", () => {
     await expect(encodeRecovery(PRIVATE_KEY, [], short)).rejects.toThrow(/at least 12 characters/);
   });
 
-  test("rejects private keys outside the secp256k1 scalar range", async () => {
+  test("rejects private keys outside the secp256k1 scalar range", async (): Promise<void> => {
     await expect(encodeRecovery("0".repeat(64), [], PASSPHRASE)).rejects.toThrow(/secp256k1/);
   });
 

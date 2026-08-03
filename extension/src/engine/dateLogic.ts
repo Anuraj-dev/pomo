@@ -1,10 +1,10 @@
 export function dateStringOf(epochSeconds: number, offsetMinutes: number): string {
   const ms = epochSeconds * 1000 + offsetMinutes * 60000;
-  const d = new Date(ms);
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  const date = new Date(ms);
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function epochOfDate(date: string, offsetMinutes: number): number {
@@ -27,11 +27,11 @@ export function utcOffsetMinutesAt(epochSeconds: number): number {
 }
 
 export function localDateStringOf(epochSeconds: number): string {
-  const d = new Date(epochSeconds * 1000);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+  const date = new Date(epochSeconds * 1000);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 export function nextLocalMidnightAt(epochSeconds: number): number {

@@ -134,21 +134,23 @@ describe("TimerEngine — date reconciliation", () => {
     expect(engine.snapshot().date).toBe(dateStringOf(NOW + 87900, OFFSET));
   });
 
-  test("a work block crossing midnight uses the start-day cadence for its break", () => {
+  test("a work block crossing midnight uses the start-day cadence for its break", (): void => {
     const start = epochOfDate("2026-08-01", OFFSET) + 23 * 60 * 60 + 50 * 60;
     const startDate = dateStringOf(start, OFFSET);
     const nextDate = dateStringOf(start + 1500, OFFSET);
     let now = start;
     const blocks: CompletedBlock[] = [];
     const ports: EnginePorts = {
-      now: () => now,
-      offsetMinutes: () => OFFSET,
-      commit: (block) => blocks.push(block),
-      earnedBlocksForDate: (date) => (date === startDate ? 3 : date === nextDate ? 0 : 0),
-      phaseSeconds: (phase) => (phase === "work" ? 1500 : phase === "short" ? 300 : 900),
-      goal: () => 8,
-      tag: () => "Work",
-      longBreakAfter: () => 4,
+      now: (): number => now,
+      offsetMinutes: (): number => OFFSET,
+      commit: (block): void => {
+        blocks.push(block);
+      },
+      earnedBlocksForDate: (date): number => (date === startDate ? 3 : date === nextDate ? 0 : 0),
+      phaseSeconds: (phase): number => (phase === "work" ? 1500 : phase === "short" ? 300 : 900),
+      goal: (): number => 8,
+      tag: (): string => "Work",
+      longBreakAfter: (): number => 4,
     };
     const engine = new TimerEngine(ports);
     engine.toggle();

@@ -31,25 +31,38 @@ export function splitBlockByCalendarDay(opts: {
 }): BlockSegment[] {
   const { start, duration, completed, type, tag, offsetMinutes } = opts;
   const endExclusive = start + duration;
-  const segments: BlockSegment[] = [];
+  const rawSegments: Array<{ date: string; start: number; exactSeconds: number }> = [];
   let segmentStart = start;
-  let index = 0;
   while (segmentStart < endExclusive) {
     const nextMidnight = nextMidnightAt(segmentStart, offsetMinutes);
     const segmentEnd = Math.min(endExclusive, nextMidnight);
-    const segmentDuration = Math.ceil((segmentEnd - segmentStart) / 60) * 60;
-    segments.push({
+    rawSegments.push({
       date: dateAt(segmentStart, offsetMinutes),
       start: segmentStart,
-      duration: segmentDuration,
-      type,
-      completed: completed && index === 0,
-      tag: index === 0 ? tag : null,
+      exactSeconds: segmentEnd - segmentStart,
     });
     segmentStart = segmentEnd;
-    index++;
   }
-  return segments;
+  const totalMinutes = Math.round(duration / 60);
+  const shares = rawSegments.map((segment) => (segment.exactSeconds * totalMinutes) / duration);
+  const minutes = shares.map(Math.floor);
+  let leftover = totalMinutes - minutes.reduce((sum, value) => sum + value, 0);
+  const byRemainder = shares
+    .map((share, index) => [index, share - minutes[index]!] as const)
+    .sort((a, b) => b[1] - a[1]);
+  for (const [index] of byRemainder) {
+    if (leftover === 0) break;
+    minutes[index]! += 1;
+    leftover -= 1;
+  }
+  return rawSegments.map((segment, index) => ({
+    date: segment.date,
+    start: segment.start,
+    duration: minutes[index]! * 60,
+    type,
+    completed: completed && index === 0,
+    tag: index === 0 ? tag : null,
+  }));
 }
 
 export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinutes): DayStat[] {
@@ -72,7 +85,7 @@ export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinut
     if (segment.type === "work") {
       if (segment.completed) delta.earnedBlocks += 1;
       delta.focusMinutes += segment.duration / 60;
-    } else if (segment.completed) {
+    } else if (block.completed) {
       delta.breakMinutes += segment.duration / 60;
     }
     byDate.set(segment.date, delta);

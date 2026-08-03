@@ -530,10 +530,13 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   switch (request.type) {
     case "pomo:command":
       switch (request.command) {
-        case "toggle":
+        case "toggle": {
+          const before = engine.snapshot();
           engine.tick();
+          if (before.status === "running" && engine.snapshot().status !== "running") break;
           engine.toggle();
           break;
+        }
         case "skip":
           engine.tick();
           engine.skip();
