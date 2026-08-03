@@ -51,15 +51,17 @@ export function tx<T>(
   fn: (transaction: IDBTransaction) => Promise<T>,
 ): Promise<T> {
   const transaction = db.transaction(stores, mode);
+  let operationError: unknown;
   const done = new Promise<void>((resolve, reject) => {
     transaction.oncomplete = () => resolve();
     transaction.onerror = () => reject(transaction.error);
-    transaction.onabort = () => reject(transaction.error);
+    transaction.onabort = () => reject(operationError ?? transaction.error);
   });
   let result: Promise<T>;
   try {
     result = Promise.resolve(fn(transaction));
   } catch (error) {
+    operationError = error;
     try {
       transaction.abort();
     } catch {
@@ -67,7 +69,8 @@ export function tx<T>(
     }
     return Promise.reject(error);
   }
-  result.catch(() => {
+  result.catch((error: unknown) => {
+    operationError = error;
     try {
       transaction.abort();
     } catch {

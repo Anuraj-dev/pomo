@@ -104,6 +104,17 @@ describe("snapshot codec", () => {
     await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/aggregates/i);
   });
 
+  test("rejects snapshots with duplicate daily aggregate dates", async () => {
+    const s = snapshot({
+      dailyAggregates: aggregates([
+        ["2024-01-02", 30, 1],
+        ["2024-01-02", 90, 3],
+      ]),
+    });
+    const envelope = await buildEnvelope(s, CREW_KEY);
+    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/duplicate/i);
+  });
+
   test("rejects snapshots with more than 30 daily aggregates", async () => {
     const entries: Array<[string, number, number]> = Array.from({ length: 31 }, (_, i) => [
       `2024-01-${String(31 - i).padStart(2, "0")}`,

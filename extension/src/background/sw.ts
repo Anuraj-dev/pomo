@@ -281,6 +281,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     if (existing === undefined) byCrew.set(membership.crewId, membershipFromBackup(membership));
   }
   const mergedMemberships = [...byCrew.values()];
+  const mergedCrewIds = new Set(mergedMemberships.map((membership) => membership.crewId));
   const historySummary = await dao.mergeBackup(
     backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
     backup.history.sessions.map((session) => ({ ...session })),
@@ -288,12 +289,14 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   await loadEarnedCount();
   engine.refreshCompletedCount();
   for (const snapshot of backup.crew.snapshots) {
+    if (!mergedCrewIds.has(snapshot.crewId)) continue;
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
     );
     await crewDao.upsertLatest(snapshot, daily);
   }
   for (const hidden of backup.crew.hiddenMembers) {
+    if (!mergedCrewIds.has(hidden.crewId)) continue;
     await crewDao.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
   }
   let identityRestored = false;

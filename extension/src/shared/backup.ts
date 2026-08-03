@@ -187,7 +187,11 @@ function validateBackup(value: unknown): PortableBackup {
       relays,
       key,
       displayName,
-      protocolVersion: numberValue(row.protocolVersion, "crew.memberships.protocolVersion"),
+      protocolVersion: (() => {
+        const protocolVersion = numberValue(row.protocolVersion, "crew.memberships.protocolVersion");
+        if (protocolVersion !== 2) throw new Error(`unsupported Crew membership protocol version: ${protocolVersion}`);
+        return protocolVersion;
+      })(),
     };
   });
   const snapshots = arrayValue(crew.snapshots, "crew.snapshots").map((raw) => {
@@ -195,6 +199,8 @@ function validateBackup(value: unknown): PortableBackup {
     const crewId = stringValue(row.crewId, "crew.snapshots.crewId");
     const identityPublicKey = stringValue(row.identityPublicKey, "crew.snapshots.identityPublicKey");
     if (!isLowerHex(crewId, 32) || !isLowerHex(identityPublicKey, 64)) throw new Error("backup contains an invalid Crew snapshot key");
+    const localDate = stringValue(row.localDate, "crew.snapshots.localDate");
+    if (!validDate(localDate)) throw new Error("backup contains an invalid Crew snapshot date");
     return {
       crewId,
       identityPublicKey,
@@ -202,7 +208,7 @@ function validateBackup(value: unknown): PortableBackup {
       avatarBase64: row.avatarBase64 === null || row.avatarBase64 === undefined ? null : stringValue(row.avatarBase64, "crew.snapshots.avatarBase64"),
       allTimeFocusMinutes: numberValue(row.allTimeFocusMinutes, "crew.snapshots.allTimeFocusMinutes", true),
       publishedAtEpochSeconds: numberValue(row.publishedAtEpochSeconds, "crew.snapshots.publishedAtEpochSeconds", true),
-      localDate: stringValue(row.localDate, "crew.snapshots.localDate"),
+      localDate,
       utcOffsetMinutes: numberValue(row.utcOffsetMinutes, "crew.snapshots.utcOffsetMinutes"),
       currentStreak: numberValue(row.currentStreak, "crew.snapshots.currentStreak", true),
       lastFocusedAtEpochSeconds: numberValue(row.lastFocusedAtEpochSeconds, "crew.snapshots.lastFocusedAtEpochSeconds", true),

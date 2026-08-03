@@ -73,6 +73,15 @@ describe("join code encode/decode", () => {
     expect(() => decodePayload(encodePayload(payload({ relays: ["wss://host/path"] })))).not.toThrow();
   });
 
+  test("accepts ordinary DNS names beginning with private IPv6 prefixes", () => {
+    expect(() => decodePayload(encodePayload(payload({ relays: ["wss://fdroid.example.org"] })))).not.toThrow();
+    expect(() => decodePayload(encodePayload(payload({ relays: ["wss://fc-relay.example.com"] })))).not.toThrow();
+  });
+
+  test("rejects IPv4-mapped private IPv6 relay hosts", () => {
+    expect(() => decodePayload(encodePayload(payload({ relays: ["wss://[::ffff:127.0.0.1]"] })))).toThrow(/relay/i);
+  });
+
   test("decodePayload rejects relays with userinfo credentials", () => {
     expect(() => decodePayload(encodePayload(payload({ relays: ["wss://user:pass@relay.example.com"] })))).toThrow(
       /relay/i,

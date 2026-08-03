@@ -84,6 +84,7 @@ function validateAggregates(aggregates: unknown): void {
     throw new Error("invalid snapshot: more than 30 daily aggregates");
   }
   let prev: string | null = null;
+  const seenDates = new Set<string>();
   for (const aggregate of aggregates) {
     if (typeof aggregate !== "object" || aggregate === null) {
       throw new Error("invalid snapshot: malformed daily aggregate");
@@ -98,10 +99,15 @@ function validateAggregates(aggregates: unknown): void {
     if (!isNonNegativeNumber(record.completedWorkBlocks)) {
       throw new Error("invalid snapshot: malformed aggregate completedWorkBlocks");
     }
-    if (prev !== null && (record.localDate as string) > prev) {
+    const localDate = record.localDate as string;
+    if (seenDates.has(localDate)) {
+      throw new Error("invalid snapshot: daily aggregates must not contain duplicate localDate values");
+    }
+    if (prev !== null && localDate > prev) {
       throw new Error("invalid snapshot: daily aggregates must be sorted by localDate descending");
     }
-    prev = record.localDate as string;
+    seenDates.add(localDate);
+    prev = localDate;
   }
 }
 

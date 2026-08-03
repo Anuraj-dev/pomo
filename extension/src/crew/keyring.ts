@@ -1,6 +1,6 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { isLowerHex } from "../shared/hex";
-import { decodePayload, encodePrefixedPayload, isValidRelayUrl } from "./joinCode";
+import { DEFAULT_RELAYS, decodePayload, encodePrefixedPayload, isValidRelayUrl } from "./joinCode";
 import { normalizeCrewName, normalizeDisplayName } from "./validation";
 import type { CrewMembership, StoredMembership } from "./types";
 
@@ -127,21 +127,36 @@ export async function encodeRecovery(
   if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
     throw new Error(`passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`);
   }
+  const normalizedMemberships = memberships.map((membership) => {
+    const crewName = normalizeCrewName(membership.crewName);
+    const displayName = normalizeDisplayName("displayName" in membership ? membership.displayName : membership.crewName);
+    const relays = membership.relays.length === 0 ? [...DEFAULT_RELAYS] : [...membership.relays];
+    if (
+      crewName === null ||
+      displayName === null ||
+      !isLowerHex(membership.crewId, 32) ||
+      !isLowerHex(membership.key, 64) ||
+      !relays.every(isValidRelayUrl)
+    ) {
+      throw new Error("encodeRecovery received an invalid Crew membership");
+    }
+    return { membership, crewName, displayName, relays };
+  });
   const payload: RecoveryPayload = {
     identityPrivateKey,
-    memberships: memberships.map((membership) => ({
+    memberships: normalizedMemberships.map(({ membership, crewName, displayName, relays }) => ({
       crewId: membership.crewId,
-      crewName: membership.crewName,
+      crewName,
       joinCode: encodePrefixedPayload({
         version: 2,
         crewId: membership.crewId,
-        crewName: membership.crewName,
-        relays: membership.relays,
+        crewName,
+        relays,
         key: membership.key,
       }),
-      relays: [...membership.relays],
+      relays,
       key: membership.key,
-      displayName: "displayName" in membership ? membership.displayName : membership.crewName,
+      displayName,
       protocolVersion: 2,
       isArchived: false,
     })),

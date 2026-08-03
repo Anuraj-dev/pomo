@@ -63,7 +63,10 @@ public class CrewStore(context: Context) {
     public fun replaceMemberships(memberships: List<CrewMembership>) {
         require(memberships.all { it.protocolVersion == CrewDefaults.PROTOCOL_VERSION && !it.isArchived })
         val next = memberships.distinctBy { it.crewId }.sortedBy { it.crewId }
-        saveMemberships(next, next.firstOrNull()?.crewId)
+        val active =
+            activeCrewId()?.takeIf { id -> next.any { it.crewId == id } }
+                ?: next.firstOrNull()?.crewId
+        saveMemberships(next, active)
     }
 
     public fun selectCrew(crewId: String): Boolean {

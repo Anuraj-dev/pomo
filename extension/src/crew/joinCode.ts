@@ -25,16 +25,25 @@ function randomHex(byteCount: number): string {
 }
 
 function isPrivateOrLocalHost(hostname: string): boolean {
-  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  const lower = hostname.toLowerCase();
+  const isIpv6 = lower.startsWith("[") && lower.endsWith("]");
+  let host = isIpv6 ? lower.slice(1, -1) : lower;
   if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::1" || host === "0.0.0.0") {
     return true;
+  }
+  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);
+  if (mapped !== null) {
+    const high = Number.parseInt(mapped[1]!, 16);
+    const low = Number.parseInt(mapped[2]!, 16);
+    host = `${high >> 8}.${high & 0xff}.${low >> 8}.${low & 0xff}`;
   }
   const octets = host.split(".").map(Number);
   if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
     const [a, b] = octets;
     return a === 10 || a === 127 || (a === 172 && b! >= 16 && b! <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
   }
-  return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb");
+  if (!isIpv6) return false;
+  return /^(f[cd]|fe[89ab])/.test(host);
 }
 
 export function isValidRelayUrl(value: string): boolean {
