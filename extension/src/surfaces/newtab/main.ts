@@ -248,7 +248,8 @@ async function chooseInitialTab(): Promise<void> {
   if (response.ok && response.settings?.newtabInstrument === false) {
     // chrome_url_overrides is manifest-scoped, so it cannot be unregistered at runtime.
     // Ask the service worker to hand this tab back to Chrome's real New Tab page instead.
-    await request({ type: "pomo:newtab:skip" });
+    const skipped = await request({ type: "pomo:newtab:skip" });
+    if (!skipped.ok) setActiveTab("history");
   }
 }
 

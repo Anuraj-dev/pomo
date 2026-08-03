@@ -129,7 +129,9 @@ function renderStanding(): void {
   meta.className = "meta";
   const parts: string[] = [`${standing.focusMinutes} min`];
   if (standing.tieCount > 1) parts.push(`tied with ${standing.tieCount}`);
-  if (standing.gapToNext !== null) parts.push(`${standing.gapToNext} min to next`);
+  if (standing.gapToNext !== null) {
+    parts.push(standing.rank === 1 && standing.tieCount === 1 ? `${standing.gapToNext} min lead` : `${standing.gapToNext} min to next`);
+  }
   if (standing.unranked) parts.push("unranked");
   meta.textContent = parts.join(" · ");
   slot.append(rank, meta);

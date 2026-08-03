@@ -519,6 +519,7 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
     case "pomo:crew:board": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
+      void refreshCrewsAndPublishIfDue();
       return { ok: true, board: await buildBoardResponse(request.crewId, request.window, nowSeconds()) };
     }
     case "pomo:crew:join": {
