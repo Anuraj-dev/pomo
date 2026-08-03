@@ -456,3 +456,24 @@
   padding-top: 0.75rem;
   border-top: 1px solid var(--border);
 }
+
+.backup-contract-note {
+  margin: -0.35rem 0 0;
+}
+
+.join-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.join-preview strong {
+  font-size: 1rem;
+}
+
+.join-preview span:last-of-type {
+  color: var(--accent);
+}

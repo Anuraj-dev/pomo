@@ -442,7 +442,7 @@ async function init(): Promise<void> {
   await sync();
 }
 
-async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
+async function handleRequest(request: PomoRequest, senderTabId?: number): Promise<PomoResponse> {
   switch (request.type) {
     case "pomo:command":
       switch (request.command) {
@@ -621,6 +621,10 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
+    case "pomo:newtab:skip":
+      if (senderTabId === undefined) return { ok: false, error: "New Tab context is unavailable" };
+      await chrome.tabs.update(senderTabId, { url: "chrome://newtab/" });
+      return { ok: true };
   }
 }
 
@@ -640,10 +644,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (!isPomoRequest(message)) return;
   void initOnce()
-    .then(() => handleRequest(message))
+    .then(() => handleRequest(message, sender.tab?.id))
     .then((response) => sendResponse(response))
     .catch((error: unknown) => {
       sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });

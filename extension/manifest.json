@@ -27,5 +27,5 @@
   "side_panel": {
     "default_path": "sidepanel.html"
   },
-  "permissions": ["alarms", "notifications", "storage", "sidePanel"]
+  "permissions": ["alarms", "notifications", "storage", "sidePanel", "tabs"]
 }

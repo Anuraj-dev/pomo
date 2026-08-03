@@ -98,6 +98,19 @@ body[data-phase="work"][data-status="running"] .time {
   border-top: 1px solid var(--border);
 }
 
+.surface-links {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 0.5rem;
+  padding-top: 0.25rem;
+}
+
+.surface-link {
+  padding: 0.55rem 0.25rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
 .stat {
   display: flex;
   flex-direction: column;

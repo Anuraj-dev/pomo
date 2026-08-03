@@ -21,6 +21,8 @@ const resetEl = document.getElementById("reset")!;
 const todayCountEl = document.getElementById("todayCount")!;
 const totalMinutesEl = document.getElementById("totalMinutes")!;
 const streakEl = document.getElementById("streak")!;
+const historyLinkEl = document.getElementById("historyLink")!;
+const crewLinkEl = document.getElementById("crewLink")!;
 
 let latest: TimerSnapshot | null = null;
 
@@ -40,3 +42,10 @@ attachTicker(
 );
 
 attachTimerControls(toggleEl, skipEl, resetEl);
+
+historyLinkEl.addEventListener("click", () => {
+  void chrome.tabs.create({ url: chrome.runtime.getURL("newtab.html") });
+});
+crewLinkEl.addEventListener("click", () => {
+  void chrome.tabs.create({ url: chrome.runtime.getURL("crew.html") });
+});

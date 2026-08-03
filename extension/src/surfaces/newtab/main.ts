@@ -246,7 +246,9 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
 async function chooseInitialTab(): Promise<void> {
   const response = await request({ type: "pomo:settings:get" });
   if (response.ok && response.settings?.newtabInstrument === false) {
-    setActiveTab("history");
+    // chrome_url_overrides is manifest-scoped, so it cannot be unregistered at runtime.
+    // Ask the service worker to hand this tab back to Chrome's real New Tab page instead.
+    await request({ type: "pomo:newtab:skip" });
   }
 }
 

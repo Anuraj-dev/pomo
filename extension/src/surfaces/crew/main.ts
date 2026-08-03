@@ -4,6 +4,7 @@ import type { BoardMember, WindowKey } from "../../crew/leaderboard";
 import type { CrewRelayStateRow } from "../../db/dao";
 import type { CrewBoardResult, CrewSummary } from "../../shared/messages";
 import type { PomoSettings } from "../../engine/settings";
+import { decodePayload } from "../../crew/joinCode";
 
 const chipsEl = document.getElementById("chips")!;
 const freshnessEl = document.getElementById("freshness")!;
@@ -264,19 +265,23 @@ function renderBoard(): void {
     return;
   }
 
+  const activeMemberCount = boardResult.board.members.filter((member) => !member.inactive).length;
+  const searchEnabled = activeMemberCount > 20;
+  if (!searchEnabled) {
+    searchQuery = "";
+    searchInputEl.value = "";
+  }
   const query = searchQuery.trim().toLowerCase();
+  searchSectionEl.hidden = !searchEnabled;
   const selfKey = boardResult.selfPublicKey;
   const active = boardResult.board.members.filter((m) => !m.inactive && matchesSearch(m, query));
   const inactive = boardResult.board.members.filter((m) => m.inactive && matchesSearch(m, query));
 
   if (active.length + inactive.length === 0) {
-    searchSectionEl.hidden = false;
     boardEl.dataset["empty"] = "true";
     boardEl.textContent = "No members match your search.";
     return;
   }
-  searchSectionEl.hidden = false;
-
   for (const member of active) {
     boardEl.appendChild(renderMember(member, selfKey));
   }
@@ -338,11 +343,20 @@ async function loadBoard(forceRefresh = false): Promise<void> {
       renderSummary();
       renderStanding();
       renderBoard();
-    } else {
+    } else if (boardResult === null || boardResult.board.members.length === 0) {
       renderBoardError(response.error ?? "could not load leaderboard");
+    } else {
+      renderBoard();
+      renderStanding();
+      renderFreshness(boardResult.relayStates);
     }
   } catch {
-    renderBoardError("Could not reach the crew service.");
+    if (boardResult === null || boardResult.board.members.length === 0) {
+      renderBoardError("Could not reach the crew service.");
+    } else {
+      renderBoard();
+      renderStanding();
+    }
   } finally {
     syncing = false;
   }
@@ -604,6 +618,69 @@ function backupSection(): HTMLElement {
     "Restoring replaces this device's identity. Crews in the backup will appear in your list.";
   const exportStatus = statusEl();
   const importStatus = statusEl();
+  const portableExportStatus = statusEl();
+  const portableImportStatus = statusEl();
+
+  const portableTitle = document.createElement("p");
+  portableTitle.className = "muted backup-contract-note";
+  portableTitle.textContent = "Phone-compatible backup · history, Crew cache, memberships";
+  const portableExportRow = document.createElement("div");
+  portableExportRow.className = "backup-row";
+  portableExportRow.append(
+    button("Export portable backup", () => {
+      void request({ type: "pomo:backup:export" }).then((response) => {
+        if (!response.ok || response.backup === undefined) {
+          setStatus(portableExportStatus, response.error ?? "export failed", "error");
+          return;
+        }
+        downloadBackup(response.backup);
+        setStatus(portableExportStatus, "Portable backup downloaded", "ok");
+      });
+    }, "primary"),
+    portableExportStatus,
+  );
+
+  const portableImportRow = document.createElement("div");
+  portableImportRow.className = "backup-row";
+  const portableFileWrap = document.createElement("label");
+  portableFileWrap.className = "field";
+  const portableFileCaption = document.createElement("span");
+  portableFileCaption.textContent = "Phone or extension backup (.json)";
+  const portableFileInput = document.createElement("input");
+  portableFileInput.type = "file";
+  portableFileInput.accept = ".json,application/json";
+  const portablePayload = document.createElement("input");
+  portablePayload.type = "hidden";
+  portableFileInput.addEventListener("change", () => {
+    const file = portableFileInput.files?.[0];
+    portablePayload.value = "";
+    if (file !== undefined) void file.text().then((text) => { portablePayload.value = text; });
+  });
+  portableFileWrap.append(portableFileCaption, portableFileInput);
+  portableImportRow.append(
+    portableFileWrap,
+    button("Import portable backup", () => {
+      const payload = portablePayload.value;
+      if (payload.length === 0) {
+        setStatus(portableImportStatus, "Choose a backup file first.", "error");
+        return;
+      }
+      void request({ type: "pomo:backup:import", payload }).then((response) => {
+        if (!response.ok && response.error?.includes("explicit confirmation") && window.confirm("This backup contains a different identity. Replace the extension identity? Export the current identity first if you may need it later.")) {
+          return request({ type: "pomo:backup:import", payload, confirmIdentityReplacement: true });
+        }
+        return response;
+      }).then((response) => {
+        if (!response.ok) {
+          setStatus(portableImportStatus, response.error ?? "import failed", "error");
+          return;
+        }
+        setStatus(portableImportStatus, "Imported history and Crew data", "ok");
+        void loadCrews();
+      });
+    }, "primary"),
+    portableImportStatus,
+  );
 
   const exportRow = document.createElement("div");
   exportRow.className = "backup-row";
@@ -681,7 +758,7 @@ function backupSection(): HTMLElement {
     importStatus,
   );
 
-  section.append(title, note, exportRow, importRow);
+  section.append(title, note, portableTitle, portableExportRow, portableImportRow, exportRow, importRow);
   return section;
 }
 
@@ -697,6 +774,18 @@ function downloadRecovery(recovery: string): void {
   URL.revokeObjectURL(url);
 }
 
+function downloadBackup(backup: string): void {
+  const blob = new Blob([backup], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `pomo-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
 function openJoin(): void {
   const body = document.createElement("div");
   body.style.display = "flex";
@@ -704,25 +793,48 @@ function openJoin(): void {
   body.style.gap = "0.75rem";
   const joinField = field("Paste a pomo://crew/join/v2 link or code", "pomo://crew/join/v2/…");
   const nameField = field("Your display name in this crew", "Name");
-  const submit = button("Join crew", () => {
+  const preview = document.createElement("section");
+  preview.className = "join-preview";
+  preview.hidden = true;
+  const confirm = button("Confirm and join", () => {
     const payload = joinField.input.value.trim();
-    const displayName = nameField.input.value.trim();
-    if (payload.length === 0 || displayName.length === 0) return;
-    void request({ type: "pomo:crew:join", payload, displayName })
-      .then((response) => {
-        if (!response.ok) {
-          showError(response.error ?? "join failed");
-          return;
-        }
-        crews = response.crews ?? crews;
-        activeCrewId = crews[crews.length - 1]?.crewId ?? null;
-        closeManage();
-        resetSearch();
-        renderChips();
-        void loadBoard();
-      });
+    const displayName = nameField.input.value;
+    void request({ type: "pomo:crew:join", payload, displayName }).then((response) => {
+      if (!response.ok) {
+        showError(response.error ?? "join failed");
+        return;
+      }
+      crews = response.crews ?? crews;
+      activeCrewId = crews[crews.length - 1]?.crewId ?? null;
+      closeManage();
+      resetSearch();
+      renderChips();
+      void loadBoard();
+    });
   }, "primary");
-  body.append(joinField.wrap, nameField.wrap, submit);
+  const submit = button("Review invite", () => {
+    const payload = joinField.input.value.trim();
+    if (payload.length === 0 || nameField.input.value.trim().length === 0) {
+      showError("Invite and display name are required.");
+      return;
+    }
+    try {
+      const decoded = decodePayload(payload);
+      preview.textContent = "";
+      const heading = document.createElement("strong");
+      heading.textContent = decoded.crewName;
+      const relays = document.createElement("span");
+      relays.textContent = `Relays: ${decoded.relays.map((relay) => new URL(relay).hostname).join(", ")}`;
+      const warning = document.createElement("span");
+      warning.textContent = "Anyone holding this link can read aggregate Crew stats and publish self-reported scores.";
+      preview.append(heading, relays, warning, confirm);
+      preview.hidden = false;
+      confirm.focus();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Invite is invalid.");
+    }
+  }, "primary");
+  body.append(joinField.wrap, nameField.wrap, submit, preview);
   openManage("Join a crew", body);
 }
 
