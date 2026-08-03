@@ -1,6 +1,7 @@
 import type { DayStatRow, SessionRow } from "../../db/types";
 import { lastNDays } from "../../engine/stats";
 import { dateStringOf, utcOffsetMinutesAt } from "../../engine/dateLogic";
+import type { PomoSettings } from "../../engine/settings";
 import type { TimerSnapshot } from "../../engine/timer";
 import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
@@ -16,15 +17,17 @@ import {
   renderTime,
 } from "../../shared/instrument";
 
-type TabKey = "instrument" | "history" | "stats";
+type TabKey = "instrument" | "history" | "stats" | "settings";
 
 const tabsEl = document.getElementById("tabs")!;
 const pages: Record<TabKey, HTMLElement> = {
   instrument: document.getElementById("page-instrument")!,
   history: document.getElementById("page-history")!,
   stats: document.getElementById("page-stats")!,
+  settings: document.getElementById("page-settings")!,
 };
 
+const buildVersionEl = document.getElementById("buildVersion")!;
 const phaseEl = document.getElementById("phase")!;
 const statusEl = document.getElementById("status")!;
 const timeEl = document.getElementById("time")!;
@@ -33,21 +36,36 @@ const progressEl = document.getElementById("progress")!;
 const toggleEl = document.getElementById("toggle")!;
 const skipEl = document.getElementById("skip")!;
 const resetEl = document.getElementById("reset")!;
-const crewLinkEl = document.getElementById("crewLink")!;
 const todayCountEl = document.getElementById("todayCount")!;
 const totalMinutesEl = document.getElementById("totalMinutes")!;
 const streakEl = document.getElementById("streak")!;
 const dayGroupsEl = document.getElementById("dayGroups")!;
+const historySummaryEl = document.getElementById("historySummary")!;
 const statsTodayEl = document.getElementById("statsToday")!;
 const statsTotalEl = document.getElementById("statsTotal")!;
 const statsStreakEl = document.getElementById("statsStreak")!;
+const statsActiveDaysEl = document.getElementById("statsActiveDays")!;
 const statsBarsEl = document.getElementById("statsBars")!;
+const statsTrendMetaEl = document.getElementById("statsTrendMeta")!;
 const statsTableBodyEl = document.getElementById("statsTableBody")!;
 const statsNoteEl = document.getElementById("statsNote")!;
+const settingsFormEl = document.getElementById("settingsForm") as HTMLFormElement;
+const settingsStatusEl = document.getElementById("settingsStatus")!;
+const settingWorkEl = document.getElementById("settingWork") as HTMLInputElement;
+const settingShortEl = document.getElementById("settingShort") as HTMLInputElement;
+const settingLongEl = document.getElementById("settingLong") as HTMLInputElement;
+const settingAfterEl = document.getElementById("settingAfter") as HTMLInputElement;
+const settingGoalEl = document.getElementById("settingGoal") as HTMLInputElement;
+const settingTagEl = document.getElementById("settingTag") as HTMLInputElement;
+const settingThemeEl = document.getElementById("settingTheme") as HTMLSelectElement;
+const settingSoundEl = document.getElementById("settingSound") as HTMLInputElement;
+const settingNewtabEl = document.getElementById("settingNewtab") as HTMLInputElement;
 
 let activeTab: TabKey = "instrument";
 let latest: TimerSnapshot | null = null;
 let previousStatus: TimerSnapshot["status"] | null = null;
+
+buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 
 function tabButtons(): HTMLElement[] {
   return Array.from(tabsEl.querySelectorAll<HTMLElement>('[role="tab"]'));
@@ -65,6 +83,7 @@ function setActiveTab(key: TabKey): void {
   }
   if (key === "history") void loadHistory();
   if (key === "stats") void loadStats();
+  if (key === "settings") void loadSettingsPage();
 }
 
 tabsEl.addEventListener("click", (event) => {
@@ -96,6 +115,33 @@ document.addEventListener("keydown", (event) => {
   sendCommand("toggle");
 });
 
+settingsFormEl.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const settings: Partial<PomoSettings> = {
+    workMinutes: Number(settingWorkEl.value),
+    shortMinutes: Number(settingShortEl.value),
+    longMinutes: Number(settingLongEl.value),
+    longBreakAfter: Number(settingAfterEl.value),
+    dailyGoal: Number(settingGoalEl.value),
+    tag: settingTagEl.value.trim(),
+    theme: settingThemeEl.value as PomoSettings["theme"],
+    soundEnabled: settingSoundEl.checked,
+    newtabInstrument: settingNewtabEl.checked,
+  };
+  settingsStatusEl.textContent = "Saving…";
+  void request({ type: "pomo:settings:set", settings }).then((response) => {
+    if (!response.ok || response.settings === undefined) {
+      settingsStatusEl.textContent = response.error ?? "Could not save";
+      settingsStatusEl.dataset["kind"] = "error";
+      return;
+    }
+    populateSettings(response.settings);
+    applySelectedTheme(response.settings.theme);
+    settingsStatusEl.textContent = "Saved";
+    settingsStatusEl.dataset["kind"] = "ok";
+  });
+});
+
 async function fetchHistory(): Promise<HistoryPayload | null> {
   const response = await request({ type: "pomo:history" });
   if (response.ok && response.history !== undefined) return response.history;
@@ -108,6 +154,36 @@ async function loadHistory(): Promise<void> {
 
 async function loadStats(): Promise<void> {
   void renderStats(await fetchHistory());
+}
+
+async function loadSettingsPage(): Promise<void> {
+  const response = await request({ type: "pomo:settings:get" });
+  if (!response.ok || response.settings === undefined) {
+    settingsStatusEl.textContent = response.error ?? "Could not load settings";
+    settingsStatusEl.dataset["kind"] = "error";
+    return;
+  }
+  populateSettings(response.settings);
+}
+
+function populateSettings(settings: PomoSettings): void {
+  settingWorkEl.value = String(settings.workMinutes);
+  settingShortEl.value = String(settings.shortMinutes);
+  settingLongEl.value = String(settings.longMinutes);
+  settingAfterEl.value = String(settings.longBreakAfter);
+  settingGoalEl.value = String(settings.dailyGoal);
+  settingTagEl.value = settings.tag;
+  settingThemeEl.value = settings.theme;
+  settingSoundEl.checked = settings.soundEnabled;
+  settingNewtabEl.checked = settings.newtabInstrument;
+}
+
+function applySelectedTheme(theme: PomoSettings["theme"]): void {
+  if (theme === "system") {
+    delete document.documentElement.dataset["theme"];
+  } else {
+    document.documentElement.dataset["theme"] = theme;
+  }
 }
 
 function note(message: string): HTMLElement {
@@ -135,9 +211,12 @@ function timeOf(epochSeconds: number): string {
 function renderHistory(payload: HistoryPayload | null): void {
   dayGroupsEl.textContent = "";
   if (payload === null) {
+    historySummaryEl.textContent = "unavailable";
     dayGroupsEl.appendChild(note("Could not load history."));
     return;
   }
+  const completed = payload.sessions.filter((session) => session.completed).length;
+  historySummaryEl.textContent = `${payload.sessions.length} sessions · ${completed} completed`;
   if (payload.sessions.length === 0) {
     dayGroupsEl.appendChild(note("No sessions yet. Start a focus block to build history."));
     return;
@@ -167,7 +246,14 @@ function dayGroup(date: string, day: DayStatRow | undefined): HTMLElement {
   meta.className = "day-meta num";
   meta.textContent = day === undefined ? "" : `${day.earnedBlocks} blocks · ${Math.round(day.focusMinutes)} min`;
   head.append(label, meta);
-  group.appendChild(head);
+  const columns = document.createElement("div");
+  columns.className = "session-head";
+  for (const text of ["Time", "Phase", "Duration", "Result", "Tag"]) {
+    const cell = document.createElement("span");
+    cell.textContent = text;
+    columns.appendChild(cell);
+  }
+  group.append(head, columns);
   return group;
 }
 
@@ -199,6 +285,8 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
   statsNoteEl.textContent = "";
   statsBarsEl.textContent = "";
   statsTableBodyEl.textContent = "";
+  statsTrendMetaEl.textContent = "—";
+  statsActiveDaysEl.textContent = "—";
   if (payload === null) {
     statsNoteEl.textContent = "Could not load stats.";
     statsNoteEl.hidden = false;
@@ -223,22 +311,29 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
   const today = dateStringOf(now, offset);
   const last = lastNDays(days, today, 30, offset);
   const max = Math.max(1, ...last.map((day) => day.focusMinutes));
-  for (const day of last) {
+  const activeDays = last.filter((day) => day.focusMinutes > 0 || day.earnedBlocks > 0);
+  statsActiveDaysEl.textContent = String(activeDays.length);
+  statsTrendMetaEl.textContent = `${activeDays.length} active days · ${Math.round(last.reduce((sum, day) => sum + day.focusMinutes, 0))} min`;
+  last.forEach((day, index) => {
+    const column = document.createElement("div");
+    column.className = "bar-column";
     const bar = document.createElement("span");
     bar.className = "bar";
     bar.title = `${day.date} · ${Math.round(day.focusMinutes)} min`;
-    if (day.focusMinutes > 0) {
-      bar.dataset["v"] = "";
-      bar.style.height = `${Math.round((day.focusMinutes / max) * 100)}%`;
-    }
-    statsBarsEl.appendChild(bar);
-  }
+    bar.style.height = `${day.focusMinutes > 0 ? Math.max(5, Math.round((day.focusMinutes / max) * 100)) : 2}%`;
+    if (day.focusMinutes > 0) bar.dataset["v"] = "";
+    const label = document.createElement("span");
+    label.className = "bar-label";
+    label.textContent = index % 5 === 0 ? dayLabel(day.date).replace(/\.$/, "") : "";
+    column.append(bar, label);
+    statsBarsEl.appendChild(column);
+  });
 
-  if (days.length === 0) {
+  if (activeDays.length === 0) {
     statsNoteEl.textContent = "No sessions yet.";
     statsNoteEl.hidden = false;
   }
-  for (const day of last) {
+  for (const day of activeDays) {
     const row = document.createElement("tr");
     const date = document.createElement("td");
     date.textContent = dayLabel(day.date);
@@ -284,8 +379,5 @@ attachTicker(
 );
 
 attachTimerControls(toggleEl, skipEl, resetEl);
-crewLinkEl.addEventListener("click", () => {
-  void chrome.tabs.create({ url: chrome.runtime.getURL("crew.html") });
-});
 
 void chooseInitialTab();

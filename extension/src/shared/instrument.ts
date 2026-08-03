@@ -1,5 +1,5 @@
 import type { TimerSnapshot } from "../engine/timer";
-import { formatTenths, phaseLabel, statusLabel } from "./format";
+import { formatMilliseconds, phaseLabel, statusLabel } from "./format";
 import { readSurfaceStats } from "./statsReader";
 import { sendCommand } from "./surface";
 
@@ -17,9 +17,9 @@ export function elapsedFraction(state: TimerSnapshot): number {
 }
 
 export function renderTime(timeEl: HTMLElement, fractionEl: HTMLElement, remaining: number): void {
-  const { whole, tenths } = formatTenths(remaining);
+  const { whole, milliseconds } = formatMilliseconds(remaining);
   timeEl.textContent = whole;
-  fractionEl.textContent = `.${tenths}`;
+  fractionEl.textContent = `.${milliseconds}`;
 }
 
 export function renderProgress(progressEl: HTMLElement, state: TimerSnapshot): void {
@@ -60,7 +60,7 @@ export function applyInstrument(
 export function attachTicker(
   getLatest: () => TimerSnapshot | null,
   render: (state: TimerSnapshot) => void,
-  intervalMs = 100,
+  intervalMs = 50,
 ): void {
   setInterval(() => {
     const latest = getLatest();

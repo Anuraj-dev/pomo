@@ -1,18 +1,18 @@
 import type { Phase, Status as TimerStatus } from "../engine/timer";
 
-export interface TenthsFormat {
+export interface MillisecondsFormat {
   whole: string;
-  tenths: string;
+  milliseconds: string;
 }
 
-export function formatTenths(totalSeconds: number): TenthsFormat {
-  const tenthsTotal = Math.max(0, Math.floor(totalSeconds * 10));
-  const whole = Math.floor(tenthsTotal / 10);
+export function formatMilliseconds(totalSeconds: number): MillisecondsFormat {
+  const millisecondsTotal = Math.max(0, Math.floor(totalSeconds * 1000));
+  const whole = Math.floor(millisecondsTotal / 1000);
   const minutes = Math.floor(whole / 60);
   const seconds = whole % 60;
   return {
     whole: `${minutes}:${seconds.toString().padStart(2, "0")}`,
-    tenths: String(tenthsTotal % 10),
+    milliseconds: String(millisecondsTotal % 1000).padStart(3, "0"),
   };
 }
 
