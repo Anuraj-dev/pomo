@@ -51,10 +51,10 @@ import com.pomo.ui.theme.displayName
 import com.pomo.ui.theme.preferenceValue
 import com.pomo.ui.theme.themeMode
 import com.pomo.util.UtilPreferenceManager
+import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
-import kotlinx.coroutines.launch
 
 public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreferenceChangeListener {
     private val gson = Gson()
