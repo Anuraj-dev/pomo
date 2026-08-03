@@ -117,14 +117,14 @@ export function aggregateBoard(
     groupStart = groupEnd;
   }
 
-  const zeroFocusActive = rows
-    .filter((r) => r.active && r.focusMinutes === 0)
+  const zeroFocusMembers = rows
+    .filter((r) => !r.inactive && r.focusMinutes === 0)
     .sort((a, b) => b.snapshot.lastFocusedAtEpochSeconds - a.snapshot.lastFocusedAtEpochSeconds);
   const inactive = rows
     .filter((r) => r.inactive)
     .sort((a, b) => b.snapshot.lastFocusedAtEpochSeconds - a.snapshot.lastFocusedAtEpochSeconds);
 
-  const ordered = [...ranked, ...zeroFocusActive, ...inactive];
+  const ordered = [...ranked, ...zeroFocusMembers, ...inactive];
   const members: BoardMember[] = ordered.map((r) => {
     const s = r.snapshot;
     const fingerprint = fingerprintOf(s.identityPublicKey);
