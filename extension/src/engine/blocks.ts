@@ -1,6 +1,16 @@
-import { dateStringOf, nextLocalMidnight } from "./dateLogic";
+import { dateStringOf, localDateStringOf, nextLocalMidnight, nextLocalMidnightAt } from "./dateLogic";
 import type { DayStat } from "./stats";
 import type { CompletedBlock, Phase } from "./timer";
+
+export type OffsetMinutes = number | ((epochSeconds: number) => number);
+
+function dateAt(epochSeconds: number, offsetMinutes: OffsetMinutes): string {
+  return typeof offsetMinutes === "function" ? localDateStringOf(epochSeconds) : dateStringOf(epochSeconds, offsetMinutes);
+}
+
+function nextMidnightAt(epochSeconds: number, offsetMinutes: OffsetMinutes): number {
+  return typeof offsetMinutes === "function" ? nextLocalMidnightAt(epochSeconds) : nextLocalMidnight(epochSeconds, offsetMinutes);
+}
 
 export interface BlockSegment {
   date: string;
@@ -17,7 +27,7 @@ export function splitBlockByCalendarDay(opts: {
   completed: boolean;
   type: Phase;
   tag: string | null;
-  offsetMinutes: number;
+  offsetMinutes: OffsetMinutes;
 }): BlockSegment[] {
   const { start, duration, completed, type, tag, offsetMinutes } = opts;
   const endExclusive = start + duration;
@@ -25,11 +35,11 @@ export function splitBlockByCalendarDay(opts: {
   let segmentStart = start;
   let index = 0;
   while (segmentStart < endExclusive) {
-    const nextMidnight = nextLocalMidnight(segmentStart, offsetMinutes);
+    const nextMidnight = nextMidnightAt(segmentStart, offsetMinutes);
     const segmentEnd = Math.min(endExclusive, nextMidnight);
     const segmentDuration = Math.ceil((segmentEnd - segmentStart) / 60) * 60;
     segments.push({
-      date: dateStringOf(segmentStart, offsetMinutes),
+      date: dateAt(segmentStart, offsetMinutes),
       start: segmentStart,
       duration: segmentDuration,
       type,
@@ -42,7 +52,7 @@ export function splitBlockByCalendarDay(opts: {
   return segments;
 }
 
-export function deltasForBlock(block: CompletedBlock, offsetMinutes: number): DayStat[] {
+export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinutes): DayStat[] {
   const segments = splitBlockByCalendarDay({
     start: block.start,
     duration: block.duration,

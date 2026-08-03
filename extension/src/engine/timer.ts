@@ -14,6 +14,7 @@ export interface CompletedBlock {
 export interface EnginePorts {
   now(): number;
   offsetMinutes?(): number;
+  offsetMinutesAt?(epochSeconds: number): number;
   commit(block: CompletedBlock): void;
   earnedBlocksForDate(date: string): number;
   phaseSeconds(phase: Phase): number;
@@ -59,8 +60,12 @@ export class TimerEngine {
     this.lastAction = now;
   }
 
+  private offsetAt(epochSeconds: number): number {
+    return this.ports.offsetMinutesAt?.(epochSeconds) ?? this.ports.offsetMinutes?.() ?? 0;
+  }
+
   private offset(): number {
-    return this.ports.offsetMinutes?.() ?? 0;
+    return this.offsetAt(this.ports.now());
   }
 
   private today(): string {
@@ -170,9 +175,11 @@ export class TimerEngine {
   private complete(now: number): void {
     const endedPhase = this.phase;
     const tag = this.tag;
-    const crossedDate = dateStringOf(this.startTime, this.offset()) !== this.today();
+    const startDate = dateStringOf(this.startTime, this.offsetAt(this.startTime));
+    const cadenceCount = this.ports.earnedBlocksForDate(startDate);
+    const crossedDate = startDate !== this.today();
     this.ports.commit({ start: this.startTime, duration: this.duration, type: endedPhase, completed: true, tag });
-    this.phase = this.nextPhaseOf(endedPhase, this.completed);
+    this.phase = this.nextPhaseOf(endedPhase, cadenceCount);
     if (endedPhase === "work") {
       this.completed = crossedDate ? this.ports.earnedBlocksForDate(this.today()) : this.completed + 1;
     }

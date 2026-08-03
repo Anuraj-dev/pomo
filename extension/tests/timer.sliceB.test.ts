@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { TimerEngine, type CompletedBlock, type EnginePorts } from "../src/engine/timer";
-import { dateStringOf } from "../src/engine/dateLogic";
+import { dateStringOf, epochOfDate } from "../src/engine/dateLogic";
 
 const OFFSET = 330;
 const NOW = 1_800_000_000;
@@ -132,6 +132,31 @@ describe("TimerEngine — date reconciliation", () => {
     expect(ports.blocks).toHaveLength(1);
     expect(engine.snapshot().phase).toBe("short");
     expect(engine.snapshot().date).toBe(dateStringOf(NOW + 87900, OFFSET));
+  });
+
+  test("a work block crossing midnight uses the start-day cadence for its break", () => {
+    const start = epochOfDate("2026-08-01", OFFSET) + 23 * 60 * 60 + 50 * 60;
+    const startDate = dateStringOf(start, OFFSET);
+    const nextDate = dateStringOf(start + 1500, OFFSET);
+    let now = start;
+    const blocks: CompletedBlock[] = [];
+    const ports: EnginePorts = {
+      now: () => now,
+      offsetMinutes: () => OFFSET,
+      commit: (block) => blocks.push(block),
+      earnedBlocksForDate: (date) => (date === startDate ? 3 : date === nextDate ? 0 : 0),
+      phaseSeconds: (phase) => (phase === "work" ? 1500 : phase === "short" ? 300 : 900),
+      goal: () => 8,
+      tag: () => "Work",
+      longBreakAfter: () => 4,
+    };
+    const engine = new TimerEngine(ports);
+    engine.toggle();
+    now = start + 1500;
+    engine.tick();
+    expect(blocks).toHaveLength(1);
+    expect(engine.snapshot().phase).toBe("long");
+    expect(engine.snapshot().completed).toBe(0);
   });
 });
 

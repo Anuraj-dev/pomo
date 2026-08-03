@@ -82,7 +82,7 @@ function earnedBlocksForDate(date: string): number {
 }
 
 function commit(block: CompletedBlock): void {
-  const offset = timezoneOffsetMinutes();
+  const offset = utcOffsetMinutesAt;
   const deltasByDate = new Map(deltasForBlock(block, offset).map((delta) => [delta.date, delta]));
   const segments = splitBlockByCalendarDay({
     start: block.start,
@@ -142,6 +142,7 @@ function enginePorts(): ConstructorParameters<typeof TimerEngine>[0] {
   return {
     now: nowSeconds,
     offsetMinutes: timezoneOffsetMinutes,
+    offsetMinutesAt: utcOffsetMinutesAt,
     commit,
     earnedBlocksForDate,
     phaseSeconds: (phase) =>

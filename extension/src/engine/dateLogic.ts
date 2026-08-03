@@ -25,3 +25,17 @@ export function prevDate(date: string, offsetMinutes: number): string {
 export function utcOffsetMinutesAt(epochSeconds: number): number {
   return -new Date(epochSeconds * 1000).getTimezoneOffset();
 }
+
+export function localDateStringOf(epochSeconds: number): string {
+  const d = new Date(epochSeconds * 1000);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+export function nextLocalMidnightAt(epochSeconds: number): number {
+  const d = new Date(epochSeconds * 1000);
+  d.setHours(24, 0, 0, 0);
+  return d.getTime() / 1000;
+}
