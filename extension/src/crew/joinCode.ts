@@ -24,12 +24,26 @@ function randomHex(byteCount: number): string {
   return bytesToHex(bytes);
 }
 
-function isValidRelayUrl(value: string): boolean {
+function isPrivateOrLocalHost(hostname: string): boolean {
+  const host = hostname.toLowerCase().replace(/^\[|\]$/g, "");
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::1" || host === "0.0.0.0") {
+    return true;
+  }
+  const octets = host.split(".").map(Number);
+  if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
+    const [a, b] = octets;
+    return a === 10 || a === 127 || (a === 172 && b! >= 16 && b! <= 31) || (a === 192 && b === 168) || (a === 169 && b === 254);
+  }
+  return host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe8") || host.startsWith("fe9") || host.startsWith("fea") || host.startsWith("feb");
+}
+
+export function isValidRelayUrl(value: string): boolean {
   try {
     const url = new URL(value);
     return (
       url.protocol === "wss:" &&
       url.hostname.length > 0 &&
+      !isPrivateOrLocalHost(url.hostname) &&
       url.username.length === 0 &&
       url.password.length === 0
     );

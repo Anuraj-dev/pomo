@@ -56,8 +56,24 @@ export function tx<T>(
     transaction.onerror = () => reject(transaction.error);
     transaction.onabort = () => reject(transaction.error);
   });
-  const result = Promise.resolve(fn(transaction));
-  result.catch(() => undefined);
+  let result: Promise<T>;
+  try {
+    result = Promise.resolve(fn(transaction));
+  } catch (error) {
+    try {
+      transaction.abort();
+    } catch {
+      // The transaction may already have completed or aborted.
+    }
+    return Promise.reject(error);
+  }
+  result.catch(() => {
+    try {
+      transaction.abort();
+    } catch {
+      // The transaction may already have completed or aborted.
+    }
+  });
   return done.then(() => result);
 }
 

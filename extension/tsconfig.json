@@ -12,7 +12,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "noEmit": true,
-    "types": ["@types/bun", "@types/chrome"]
+    "types": ["bun", "chrome"]
   },
   "include": ["src", "tests", "scripts"]
 }

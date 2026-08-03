@@ -108,39 +108,42 @@ function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
-function validateStats(stats: CrewStatsExtras | null): void {
+function validateStats(stats: unknown): void {
   if (stats === null) return;
-  if (stats.hourBuckets.length !== 24) throw new Error("invalid snapshot: hourBuckets must have exactly 24 entries");
-  if (stats.weekdayBuckets.length !== 7) throw new Error("invalid snapshot: weekdayBuckets must have exactly 7 entries");
-  if (!stats.hourBuckets.every(isNonNegativeNumber) || !stats.weekdayBuckets.every(isNonNegativeNumber)) {
-    throw new Error("invalid snapshot: buckets must be non-negative numbers");
+  if (typeof stats !== "object" || Array.isArray(stats)) throw new Error("invalid snapshot: malformed stats");
+  const record = stats as Record<string, unknown>;
+  const optionalBuckets = (name: string, expected: number): void => {
+    const value = record[name];
+    if (value === undefined || value === null) return;
+    if (!Array.isArray(value) || value.length !== expected || !value.every(isNonNegativeNumber)) {
+      throw new Error(`invalid snapshot: ${name} is malformed`);
+    }
+  };
+  optionalBuckets("hourBuckets", 24);
+  optionalBuckets("weekdayBuckets", 7);
+  for (const name of ["allTimeWorkBlocks", "allTimeActiveDays", "bestStreak", "bestDayFocusMinutes", "bestDayWorkBlocks", "bestWeekFocusMinutes", "bestWeekWorkBlocks"]) {
+    const value = record[name];
+    if (value !== undefined && value !== null && !isNonNegativeNumber(value)) {
+      throw new Error(`invalid snapshot: malformed ${name}`);
+    }
   }
-  if (!isNonNegativeNumber(stats.allTimeWorkBlocks) || !isNonNegativeNumber(stats.allTimeActiveDays)) {
-    throw new Error("invalid snapshot: malformed stats counters");
-  }
-  if (!isNonNegativeNumber(stats.bestStreak)) throw new Error("invalid snapshot: malformed bestStreak");
-  if (!isNonNegativeNumber(stats.bestDayFocusMinutes) || !isNonNegativeNumber(stats.bestDayWorkBlocks)) {
-    throw new Error("invalid snapshot: malformed best day");
-  }
-  if (!isNonNegativeNumber(stats.bestWeekFocusMinutes) || !isNonNegativeNumber(stats.bestWeekWorkBlocks)) {
-    throw new Error("invalid snapshot: malformed best week");
-  }
-  const hasMinutes = "historyFocusMinutes" in stats;
-  const hasBlocks = "historyWorkBlocks" in stats;
-  if (hasMinutes !== hasBlocks) throw new Error("invalid snapshot: partial history arrays are not allowed");
+  const hasMinutes = record.historyFocusMinutes !== undefined && record.historyFocusMinutes !== null;
+  const hasBlocks = record.historyWorkBlocks !== undefined && record.historyWorkBlocks !== null;
+  const hasStart = record.historyStartDate !== undefined && record.historyStartDate !== null;
+  if (hasMinutes !== hasBlocks || hasMinutes !== hasStart) throw new Error("invalid snapshot: partial history arrays are not allowed");
   if (hasMinutes) {
-    if (!Array.isArray(stats.historyFocusMinutes) || !Array.isArray(stats.historyWorkBlocks)) {
+    if (!Array.isArray(record.historyFocusMinutes) || !Array.isArray(record.historyWorkBlocks)) {
       throw new Error("invalid snapshot: history arrays must be arrays");
     }
-    if (stats.historyFocusMinutes.length !== stats.historyWorkBlocks.length) {
+    if (record.historyFocusMinutes.length !== record.historyWorkBlocks.length) {
       throw new Error("invalid snapshot: history arrays must have equal length");
     }
-    if (stats.historyFocusMinutes.length > MAX_HISTORY_DAYS) {
+    if (record.historyFocusMinutes.length > MAX_HISTORY_DAYS) {
       throw new Error("invalid snapshot: history arrays exceed 120 entries");
     }
     if (
-      !stats.historyFocusMinutes.every(isNonNegativeNumber) ||
-      !stats.historyWorkBlocks.every(isNonNegativeNumber)
+      !record.historyFocusMinutes.every(isNonNegativeNumber) ||
+      !record.historyWorkBlocks.every(isNonNegativeNumber)
     ) {
       throw new Error("invalid snapshot: history arrays must be non-negative numbers");
     }
@@ -178,7 +181,7 @@ function validateSnapshot(snapshot: unknown, envelope: Envelope): SnapshotPlain 
     throw new Error("invalid snapshot: malformed lastFocusedAtEpochSeconds");
   }
   validateAggregates(s.dailyAggregates);
-  validateStats(s.stats as CrewStatsExtras | null);
+  validateStats(s.stats);
   return s as unknown as SnapshotPlain;
 }
 

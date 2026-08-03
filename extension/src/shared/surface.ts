@@ -20,7 +20,14 @@ export function sendCommand(command: PomoCommand, seconds?: number): void {
 
 export function request(message: PomoRequest): Promise<PomoResponse> {
   return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (response) => resolve(response as PomoResponse));
+    chrome.runtime.sendMessage(message, (response) => {
+      const runtimeError = chrome.runtime.lastError;
+      if (runtimeError !== undefined || response === undefined) {
+        resolve({ ok: false, error: runtimeError?.message ?? "service worker unavailable" });
+        return;
+      }
+      resolve(response as PomoResponse);
+    });
   });
 }
 

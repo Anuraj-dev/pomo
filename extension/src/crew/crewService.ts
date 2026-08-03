@@ -87,10 +87,19 @@ async function recordCompletions(
   crewId: string,
   attempt: number,
   completions: RelayCompletion[],
+  requirePublishAcceptance = false,
 ): Promise<void> {
   for (const completion of completions) {
-    const success = completion.status === "completed" ? attempt : null;
-    const error = completion.status === "failed" ? (completion.reason ?? "connection closed") : null;
+    const success =
+      completion.status === "completed" && (!requirePublishAcceptance || completion.note === "ok") ? attempt : null;
+    const error =
+      completion.status === "failed"
+        ? (completion.reason ?? "connection closed")
+        : completion.status === "rejected"
+          ? (completion.reason ?? "relay rejected event")
+          : completion.status === "timedOut"
+            ? "relay timed out"
+            : null;
     await dao.updateRelayState(crewId, completion.relayUrl, attempt, success, error);
   }
 }
@@ -130,6 +139,7 @@ export async function refreshMembership(
     } catch {
       continue;
     }
+    if (snapshot.identityPublicKey !== event.pubkey || snapshot.crewId !== membership.crewId) continue;
     if (snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) continue;
     if (snapshot.publishedAtEpochSeconds > event.created_at + MAX_CREATED_AT_SKEW_SECONDS) continue;
     const daily = dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates);
@@ -189,7 +199,7 @@ export async function publishOwnSnapshot(
     timeoutMs: seam.timeoutMs,
     socketFactory: seam.socketFactory,
   });
-  await recordCompletions(dao, membership.crewId, now, result.completions);
+  await recordCompletions(dao, membership.crewId, now, result.completions, true);
   return { crewId: membership.crewId, ok: result.ok, okRelayUrl: result.okRelayUrl, reason: result.reason, completions: result.completions };
 }
 

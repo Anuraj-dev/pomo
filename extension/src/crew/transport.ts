@@ -1,9 +1,11 @@
 import type { NostrEvent } from "./types";
 
 export const DEFAULT_RELAY_TIMEOUT_MS = 2_750;
+export const MAX_EVENTS_PER_BURST = 1_000;
 
 export type RelayCompletion =
   | { relayUrl: string; status: "completed"; note?: string }
+  | { relayUrl: string; status: "rejected"; reason?: string }
   | { relayUrl: string; status: "timedOut" }
   | { relayUrl: string; status: "failed"; reason?: string };
 
@@ -28,6 +30,7 @@ type Frame = unknown[];
 
 type CompletionWithoutRelay =
   | { status: "completed"; note?: string }
+  | { status: "rejected"; reason?: string }
   | { status: "timedOut" }
   | { status: "failed"; reason?: string };
 
@@ -133,6 +136,15 @@ export async function fetchEventsBurst(
       if (type === "EVENT" && rest[0] === subId) {
         const candidate = rest[1] as NostrEvent | undefined;
         if (candidate && typeof candidate.id === "string" && !seen.has(candidate.id)) {
+          if (events.length >= MAX_EVENTS_PER_BURST) {
+            try {
+              socket.send(JSON.stringify(["CLOSE", subId]));
+            } catch {
+              // best-effort close
+            }
+            settle({ status: "completed", note: "event limit reached" });
+            return;
+          }
           seen.add(candidate.id);
           events.push(candidate);
         }
@@ -171,7 +183,11 @@ export async function publishEventBurst(
       const [type, ...rest] = frame;
       if (type === "OK" && rest[0] === event.id) {
         const ok = rest[1] === true;
-        settle({ status: "completed", note: ok ? "ok" : String(rest[2] ?? "") });
+        if (ok) {
+          settle({ status: "completed", note: "ok" });
+        } else {
+          settle({ status: "rejected", reason: String(rest[2] ?? "relay rejected event") });
+        }
       }
     },
     timeoutMs,
@@ -180,6 +196,12 @@ export async function publishEventBurst(
   const okRelayUrl = completions.find((c) => c.status === "completed" && c.note === "ok")?.relayUrl ?? null;
   const answered = completions.find((c) => c.status === "completed");
   const ok = okRelayUrl !== null;
-  const reason = !ok ? (answered?.status === "completed" ? (answered.note ?? null) : null) : null;
+  const reason = !ok
+    ? answered?.status === "rejected"
+      ? (answered.reason ?? "relay rejected event")
+      : answered?.status === "completed"
+        ? (answered.note ?? null)
+        : null
+    : null;
   return { ok, okRelayUrl, reason, completions };
 }

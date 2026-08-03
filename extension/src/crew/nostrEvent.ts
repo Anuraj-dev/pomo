@@ -49,6 +49,9 @@ export async function signEvent(evt: SignableEvent, privateKeyHex64: string): Pr
 }
 
 export async function verifyEvent(evt: NostrEvent, opts: { crewId: string; now: number }): Promise<boolean> {
+  if (!Array.isArray(evt.tags) || evt.tags.some((tag) => !Array.isArray(tag) || tag.some((value) => typeof value !== "string"))) {
+    return false;
+  }
   if (!isLowerHex(evt.id, 64) || !isLowerHex(evt.pubkey, 64) || !isLowerHex(evt.sig, 128)) return false;
   if (!Number.isInteger(evt.created_at)) return false;
   if (evt.created_at > opts.now + MAX_CREATED_AT_SKEW_SECONDS) return false;
