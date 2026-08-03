@@ -54,7 +54,8 @@ let initPromise: Promise<void> | null = null;
 let identityPrivateKey: string | null = null;
 let identityRecoveryRequired = false;
 let crewMemberships: StoredMembership[] = [];
-let crewSyncInFlight = false;
+let crewSyncPromise: Promise<void> | null = null;
+let crewRefreshPromise: Promise<void> | null = null;
 let forcedCrewPublishPending = false;
 
 function initOnce(): Promise<void> {
@@ -285,6 +286,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     backup.history.sessions.map((session) => ({ ...session })),
   );
   await loadEarnedCount();
+  engine.refreshCompletedCount();
   for (const snapshot of backup.crew.snapshots) {
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
@@ -358,12 +360,12 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<b
 
 async function publishCrews(force = false): Promise<void> {
   if (force) forcedCrewPublishPending = true;
-  if (crewSyncInFlight || crewMemberships.length === 0) return;
-  crewSyncInFlight = true;
-  const shouldForce = forcedCrewPublishPending;
-  forcedCrewPublishPending = false;
-  const now = nowSeconds();
-  try {
+  if (crewSyncPromise !== null) return crewSyncPromise;
+  if (crewMemberships.length === 0) return;
+  const operation = (async () => {
+    const shouldForce = forcedCrewPublishPending;
+    forcedCrewPublishPending = false;
+    const now = nowSeconds();
     const stored = await chrome.storage.local.get(CREW_SYNC_KEY);
     const lastPublish = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
     if (!shouldForce && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
@@ -373,17 +375,22 @@ async function publishCrews(force = false): Promise<void> {
       if (!published) publishedAll = false;
     }
     if (publishedAll) await chrome.storage.local.set({ [CREW_SYNC_KEY]: now });
+  })();
+  crewSyncPromise = operation;
+  try {
+    await operation;
   } finally {
-    crewSyncInFlight = false;
+    if (crewSyncPromise === operation) crewSyncPromise = null;
     if (forcedCrewPublishPending) void publishCrews(true);
   }
 }
 
 async function refreshCrewsAndPublishIfDue(): Promise<void> {
-  if (crewSyncInFlight || crewMemberships.length === 0) return;
-  const now = nowSeconds();
-  crewSyncInFlight = true;
-  try {
+  if (crewMemberships.length === 0) return;
+  if (crewRefreshPromise !== null) return crewRefreshPromise;
+  const operation = (async () => {
+    if (crewSyncPromise !== null) await crewSyncPromise;
+    const now = nowSeconds();
     for (const membership of crewMemberships) {
       try {
         await refreshMembership(membership, crewDao, now);
@@ -391,10 +398,14 @@ async function refreshCrewsAndPublishIfDue(): Promise<void> {
         console.error(`crew refresh failed for ${membership.crewId}`, error);
       }
     }
+    await publishCrews(false);
+  })();
+  crewRefreshPromise = operation;
+  try {
+    await operation;
   } finally {
-    crewSyncInFlight = false;
+    if (crewRefreshPromise === operation) crewRefreshPromise = null;
   }
-  await publishCrews(false);
 }
 
 async function crewSummaries(): Promise<CrewSummary[]> {

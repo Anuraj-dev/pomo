@@ -152,6 +152,11 @@ export class TimerEngine {
     this.lastAction = this.ports.now();
   }
 
+  refreshCompletedCount(): void {
+    this.reconcileDate();
+    this.completed = this.ports.earnedBlocksForDate(this.date);
+  }
+
   tick(): void {
     const now = this.ports.now();
     this.reconcileDate();
