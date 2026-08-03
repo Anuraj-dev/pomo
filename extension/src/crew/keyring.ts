@@ -1,6 +1,7 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { isLowerHex } from "../shared/hex";
 import { DEFAULT_RELAYS, decodePayload, encodePrefixedPayload, isValidRelayUrl } from "./joinCode";
+import { publicKeyOf } from "./identity";
 import { normalizeCrewName, normalizeDisplayName } from "./validation";
 import type { CrewMembership, StoredMembership } from "./types";
 
@@ -20,6 +21,16 @@ export const NONCE_BYTES = 12;
 export const GCM_TAG_BITS = 128;
 
 const AES_GCM = { name: "AES-GCM", tagLength: GCM_TAG_BITS } as const;
+
+function isValidPrivateKey(value: unknown): value is string {
+  if (typeof value !== "string" || !isLowerHex(value, 64)) return false;
+  try {
+    publicKeyOf(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export interface RecoveryPayload {
   identityPrivateKey: string;
@@ -64,6 +75,7 @@ export async function importWrappingKey(encoded: string): Promise<CryptoKey> {
 
 export async function wrapIdentityKey(privateKeyHex64: string, wrappingKey: CryptoKey): Promise<string> {
   if (!isLowerHex(privateKeyHex64, 64)) throw new Error("wrapIdentityKey requires a 64-char lowercase hex private key");
+  if (!isValidPrivateKey(privateKeyHex64)) throw new Error("wrapIdentityKey requires a valid secp256k1 private key");
   const nonce = crypto.getRandomValues(new Uint8Array(NONCE_BYTES));
   const ciphertext = new Uint8Array(
     await crypto.subtle.encrypt({ ...AES_GCM, iv: nonce }, wrappingKey, bufferOf(utf8ToBytes(privateKeyHex64))),
@@ -99,7 +111,7 @@ export async function unwrapIdentityKey(envelopeJson: string, wrappingKey: Crypt
     throw new Error("failed to unwrap keyring: wrong wrapping key or tampered envelope");
   }
   const privateKeyHex64 = bytesToUtf8(new Uint8Array(plaintext));
-  if (!isLowerHex(privateKeyHex64, 64)) throw new Error("unwrapped keyring is not a valid private key");
+  if (!isValidPrivateKey(privateKeyHex64)) throw new Error("unwrapped keyring is not a valid private key");
   return privateKeyHex64;
 }
 
@@ -124,6 +136,7 @@ export async function encodeRecovery(
   passphrase: string,
 ): Promise<string> {
   if (!isLowerHex(identityPrivateKey, 64)) throw new Error("encodeRecovery requires a valid identity private key");
+  if (!isValidPrivateKey(identityPrivateKey)) throw new Error("encodeRecovery requires a valid secp256k1 private key");
   if (passphrase.length < MIN_PASSPHRASE_LENGTH) {
     throw new Error(`passphrase must be at least ${MIN_PASSPHRASE_LENGTH} characters`);
   }
@@ -195,7 +208,7 @@ export async function decodeRecovery(value: string, passphrase: string): Promise
     const payload: unknown = JSON.parse(bytesToUtf8(new Uint8Array(plaintext)));
     if (typeof payload !== "object" || payload === null) return null;
     const record = payload as Record<string, unknown>;
-    if (typeof record.identityPrivateKey !== "string" || !isLowerHex(record.identityPrivateKey, 64) || !Array.isArray(record.memberships)) {
+    if (!isValidPrivateKey(record.identityPrivateKey) || !Array.isArray(record.memberships)) {
       return null;
     }
     const memberships: RecoveryMembership[] = [];

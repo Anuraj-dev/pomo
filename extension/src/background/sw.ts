@@ -181,9 +181,11 @@ async function loadSettings(): Promise<void> {
   settings = sanitizeSettings(stored[SETTINGS_KEY]);
 }
 
-async function loadEarnedCount(): Promise<void> {
+async function loadEarnedCount(extraDate?: string): Promise<void> {
   const today = dateStringOf(nowSeconds(), timezoneOffsetMinutes());
-  earnedByDate.set(today, await dao.earnedBlocksForDate(today));
+  const dates = new Set([today]);
+  if (extraDate !== undefined) dates.add(extraDate);
+  await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao.earnedBlocksForDate(date))));
 }
 
 async function initIdentity(): Promise<void> {
@@ -505,12 +507,14 @@ async function init(): Promise<void> {
   dao = new HistoryDao(db);
   crewDao = new CrewDao(db);
   await loadSettings();
-  await loadEarnedCount();
+  const stored = await chrome.storage.local.get(ENGINE_KEY);
+  const saved = stored[ENGINE_KEY] as TimerSnapshot | undefined;
+  const restoredStartDate =
+    saved?.startTime !== undefined && saved.startTime > 0 ? dateStringOf(saved.startTime, utcOffsetMinutesAt(saved.startTime)) : undefined;
+  await loadEarnedCount(restoredStartDate);
   await initIdentity();
   await loadMemberships();
   engine = new TimerEngine(enginePorts());
-  const stored = await chrome.storage.local.get(ENGINE_KEY);
-  const saved = stored[ENGINE_KEY] as TimerSnapshot | undefined;
   if (saved !== undefined) {
     try {
       engine.restore(saved);
