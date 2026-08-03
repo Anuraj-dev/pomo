@@ -1,7 +1,64 @@
-.wrap {
-  max-width: 720px;
+.crew-stage {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 1.25rem 1.5rem 2rem;
+}
+
+.crew-nav {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.crew-nav .tabset {
+  display: flex;
+  justify-content: center;
+  gap: 0.25rem;
+}
+
+.crew-nav .tab-link {
+  text-decoration: none;
+}
+
+.crew-nav .tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  margin-bottom: -1px;
+  padding: 0.5rem 0.9rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.crew-nav .tab:hover {
+  color: var(--text);
+}
+
+.crew-nav .tab[aria-current="page"] {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.crew-nav .build {
+  position: absolute;
+  right: 0;
+  bottom: 0.55rem;
+  color: var(--text-muted);
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+}
+
+.crew-wrap {
+  width: 100%;
+  max-width: 940px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 2.25rem 1rem 4rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
@@ -107,10 +164,9 @@
   flex-wrap: wrap;
   gap: 0.4rem 1.2rem;
   align-items: baseline;
-  padding: 0.65rem 0.9rem;
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
+  padding: 0.8rem 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--text-muted);
 }
@@ -132,10 +188,8 @@
 }
 
 .standing {
-  background: var(--bg-panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 0.9rem 1rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--border);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -502,4 +556,23 @@
 
 .join-preview span:last-of-type {
   color: var(--accent);
+}
+
+@media (max-width: 680px) {
+  .crew-stage {
+    padding-inline: 0.9rem;
+  }
+
+  .crew-nav .build {
+    display: none;
+  }
+
+  .crew-nav .tab {
+    padding-inline: 0.45rem;
+    font-size: 0.68rem;
+  }
+
+  .crew-wrap {
+    padding-inline: 0;
+  }
 }

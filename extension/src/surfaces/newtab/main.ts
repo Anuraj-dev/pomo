@@ -71,8 +71,9 @@ function tabButtons(): HTMLElement[] {
   return Array.from(tabsEl.querySelectorAll<HTMLElement>('[role="tab"]'));
 }
 
-function setActiveTab(key: TabKey): void {
+function setActiveTab(key: TabKey, updateUrl = true): void {
   activeTab = key;
+  if (updateUrl) history.replaceState(null, "", `#${key}`);
   for (const tab of tabButtons()) {
     const active = tab.dataset["tab"] === key;
     tab.setAttribute("aria-selected", String(active));
@@ -349,6 +350,11 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
 }
 
 async function chooseInitialTab(): Promise<void> {
+  const hash = location.hash.slice(1) as TabKey;
+  if (hash in pages) {
+    setActiveTab(hash, false);
+    return;
+  }
   const response = await request({ type: "pomo:settings:get" });
   if (response.ok && response.settings?.newtabInstrument === false) {
     // chrome_url_overrides is manifest-scoped, so fall back to a non-instrument view.
