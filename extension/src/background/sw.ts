@@ -52,6 +52,7 @@ let earnedByDate = new Map<string, number>();
 let pendingWrite = Promise.resolve();
 let initPromise: Promise<void> | null = null;
 let identityPrivateKey: string | null = null;
+let identityRecoveryRequired = false;
 let crewMemberships: StoredMembership[] = [];
 let crewSyncInFlight = false;
 
@@ -105,13 +106,11 @@ function commit(block: CompletedBlock): void {
       })
       .then(() => dao.insertSessionWithDayStats(row, delta));
   }
-  if (block.completed) {
-    notifyPhaseComplete(block.type);
-    if (block.type === "work") {
-      void pendingWrite.then(() => publishCrews(true)).catch((error: unknown) => {
-        console.error("crew publication skipped because history was not durable", error);
-      });
-    }
+  if (block.completed) notifyPhaseComplete(block.type);
+  if (block.type === "work") {
+    void pendingWrite.then(() => publishCrews(true)).catch((error: unknown) => {
+      console.error("crew publication skipped because history was not durable", error);
+    });
   }
 }
 
@@ -177,14 +176,23 @@ async function loadEarnedCount(): Promise<void> {
 async function initIdentity(): Promise<void> {
   const stored = await chrome.storage.local.get(KEYRING_STORAGE_KEY);
   const keyring = stored[KEYRING_STORAGE_KEY] as { wrappingKey?: string; identity?: string } | undefined;
-  if (keyring?.wrappingKey !== undefined && keyring.identity !== undefined) {
+  if (keyring !== undefined) {
+    if (keyring.wrappingKey === undefined || keyring.identity === undefined) {
+      identityPrivateKey = null;
+      identityRecoveryRequired = true;
+      console.error("keyring is incomplete; recovery is required");
+      return;
+    }
     try {
       const wrapping = await importWrappingKey(keyring.wrappingKey);
       identityPrivateKey = await unwrapIdentityKey(keyring.identity, wrapping);
+      identityRecoveryRequired = false;
       return;
     } catch (error) {
+      identityPrivateKey = null;
+      identityRecoveryRequired = true;
       console.error("keyring unwrap failed; recovery is required", error);
-      throw new Error("identity recovery required; restore a Pomo recovery file before using Crew");
+      return;
     }
   }
   const identity = generateIdentity();
@@ -197,9 +205,13 @@ async function initIdentity(): Promise<void> {
     },
   });
   identityPrivateKey = identity.privateKey;
+  identityRecoveryRequired = false;
 }
 
 async function exportPortableBackup(): Promise<string> {
+  if (identityRecoveryRequired && crewMemberships.length > 0) {
+    throw new Error("identity recovery required before exporting Crew memberships");
+  }
   const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
   const snapshots = [];
   const dailyAggregates = [];
@@ -238,7 +250,10 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   }
   const importedIdentity = backup.crew.identityPrivateKey;
   const currentIdentity = identityPrivateKey;
-  const identityDiffers = importedIdentity !== "" && currentIdentity !== null && importedIdentity !== currentIdentity;
+  if (backup.crew.memberships.length > 0 && importedIdentity === "") {
+    return { ok: false, error: "backup contains Crew memberships but no identity; restore the identity first" };
+  }
+  const identityDiffers = importedIdentity !== "" && (currentIdentity === null || importedIdentity !== currentIdentity);
   if (identityDiffers && crewMemberships.length > 0) {
     return { ok: false, error: "backup identity differs from the active identity; export this device before importing" };
   }
@@ -259,6 +274,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
     backup.history.sessions.map((session) => ({ ...session })),
   );
+  await loadEarnedCount();
   for (const snapshot of backup.crew.snapshots) {
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
@@ -278,6 +294,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
       },
     });
     identityPrivateKey = importedIdentity;
+    identityRecoveryRequired = false;
     identityRestored = true;
   }
   crewMemberships = mergedMemberships;
@@ -390,6 +407,9 @@ async function addMembership(
   key: string,
   displayName: string,
 ): Promise<PomoResponse> {
+  if (identityRecoveryRequired || identityPrivateKey === null) {
+    return { ok: false, error: "identity recovery required; restore a Pomo recovery file first" };
+  }
   const normalizedName = normalizeDisplayName(displayName);
   if (normalizedName === null) return { ok: false, error: "display name is invalid" };
   crewMemberships.push({
@@ -555,7 +575,7 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
       };
     }
     case "pomo:recovery:export": {
-      if (identityPrivateKey === null) return { ok: false, error: "identity not ready" };
+      if (identityRecoveryRequired || identityPrivateKey === null) return { ok: false, error: "identity recovery required" };
       try {
         const recovery = await encodeRecovery(identityPrivateKey, crewMemberships, request.passphrase);
         return { ok: true, recovery };
@@ -593,6 +613,7 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
           });
         }
         identityPrivateKey = payload.identityPrivateKey;
+        identityRecoveryRequired = false;
         const wrapping = await generateWrappingKey();
         const identityEnvelope = await wrapIdentityKey(identityPrivateKey, wrapping);
         await chrome.storage.local.set({

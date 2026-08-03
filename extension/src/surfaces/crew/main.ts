@@ -330,6 +330,7 @@ function renderBoardError(message: string): void {
 
 async function loadBoard(forceRefresh = false): Promise<void> {
   if (activeCrewId === null) return;
+  if (boardResult !== null && boardResult.crew.crewId !== activeCrewId) boardResult = null;
   syncing = true;
   renderFreshness(boardResult?.relayStates ?? []);
   try {

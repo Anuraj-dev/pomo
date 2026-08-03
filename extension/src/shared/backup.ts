@@ -100,8 +100,10 @@ function validateSession(value: unknown): PortableBackup["history"]["sessions"][
   const type = stringValue(row.type, "history.sessions.type");
   const date = stringValue(row.date, "history.sessions.date");
   if (!PHASES.has(type) || !validDate(date)) throw new Error("backup contains an invalid history session");
+  const start = numberValue(row.start, "history.sessions.start");
+  if (start <= 0) throw new Error("backup contains an invalid history session start");
   return {
-    start: numberValue(row.start, "history.sessions.start"),
+    start,
     date,
     type: type as "work" | "short" | "long",
     duration: numberValue(row.duration, "history.sessions.duration", true),
@@ -134,21 +136,27 @@ function validateBackup(value: unknown): PortableBackup {
   const memberships = arrayValue(crew.memberships, "crew.memberships").map((raw) => {
     const row = record(raw);
     const relays = arrayValue(row.relays, "crew.memberships.relays").map((relay) => stringValue(relay, "crew.memberships.relay"));
+    const crewId = stringValue(row.crewId, "crew.memberships.crewId");
+    const key = stringValue(row.key, "crew.memberships.key");
+    if (!isLowerHex(crewId, 32) || !isLowerHex(key, 64)) throw new Error("backup contains an invalid Crew membership key");
     return {
-      crewId: stringValue(row.crewId, "crew.memberships.crewId"),
+      crewId,
       crewName: stringValue(row.crewName, "crew.memberships.crewName"),
       joinCode: stringValue(row.joinCode, "crew.memberships.joinCode"),
       relays,
-      key: stringValue(row.key, "crew.memberships.key"),
+      key,
       displayName: stringValue(row.displayName, "crew.memberships.displayName"),
       protocolVersion: numberValue(row.protocolVersion, "crew.memberships.protocolVersion"),
     };
   });
   const snapshots = arrayValue(crew.snapshots, "crew.snapshots").map((raw) => {
     const row = record(raw);
+    const crewId = stringValue(row.crewId, "crew.snapshots.crewId");
+    const identityPublicKey = stringValue(row.identityPublicKey, "crew.snapshots.identityPublicKey");
+    if (!isLowerHex(crewId, 32) || !isLowerHex(identityPublicKey, 64)) throw new Error("backup contains an invalid Crew snapshot key");
     return {
-      crewId: stringValue(row.crewId, "crew.snapshots.crewId"),
-      identityPublicKey: stringValue(row.identityPublicKey, "crew.snapshots.identityPublicKey"),
+      crewId,
+      identityPublicKey,
       displayName: stringValue(row.displayName, "crew.snapshots.displayName"),
       avatarBase64: row.avatarBase64 === null || row.avatarBase64 === undefined ? null : stringValue(row.avatarBase64, "crew.snapshots.avatarBase64"),
       allTimeFocusMinutes: numberValue(row.allTimeFocusMinutes, "crew.snapshots.allTimeFocusMinutes", true),
@@ -165,9 +173,12 @@ function validateBackup(value: unknown): PortableBackup {
     const row = record(raw);
     const localDate = stringValue(row.localDate, "crew.dailyAggregates.localDate");
     if (!validDate(localDate)) throw new Error("backup contains an invalid Crew date");
+    const crewId = stringValue(row.crewId, "crew.dailyAggregates.crewId");
+    const identityPublicKey = stringValue(row.identityPublicKey, "crew.dailyAggregates.identityPublicKey");
+    if (!isLowerHex(crewId, 32) || !isLowerHex(identityPublicKey, 64)) throw new Error("backup contains an invalid Crew aggregate key");
     return {
-      crewId: stringValue(row.crewId, "crew.dailyAggregates.crewId"),
-      identityPublicKey: stringValue(row.identityPublicKey, "crew.dailyAggregates.identityPublicKey"),
+      crewId,
+      identityPublicKey,
       localDate,
       focusMinutes: numberValue(row.focusMinutes, "crew.dailyAggregates.focusMinutes", true),
       completedWorkBlocks: numberValue(row.completedWorkBlocks, "crew.dailyAggregates.completedWorkBlocks", true),
@@ -175,9 +186,12 @@ function validateBackup(value: unknown): PortableBackup {
   });
   const hiddenMembers = arrayValue(crew.hiddenMembers, "crew.hiddenMembers").map((raw) => {
     const row = record(raw);
+    const crewId = stringValue(row.crewId, "crew.hiddenMembers.crewId");
+    const identityPublicKey = stringValue(row.identityPublicKey, "crew.hiddenMembers.identityPublicKey");
+    if (!isLowerHex(crewId, 32) || !isLowerHex(identityPublicKey, 64)) throw new Error("backup contains an invalid hidden Crew key");
     return {
-      crewId: stringValue(row.crewId, "crew.hiddenMembers.crewId"),
-      identityPublicKey: stringValue(row.identityPublicKey, "crew.hiddenMembers.identityPublicKey"),
+      crewId,
+      identityPublicKey,
       hiddenAtEpochSeconds: numberValue(row.hiddenAtEpochSeconds, "crew.hiddenMembers.hiddenAtEpochSeconds", true),
     };
   });
