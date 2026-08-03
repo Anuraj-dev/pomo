@@ -176,8 +176,8 @@ export class TimerEngine {
     const endedPhase = this.phase;
     const tag = this.tag;
     const startDate = dateStringOf(this.startTime, this.offsetAt(this.startTime));
-    const cadenceCount = this.ports.earnedBlocksForDate(startDate);
     const crossedDate = startDate !== this.today();
+    const cadenceCount = crossedDate ? this.ports.earnedBlocksForDate(startDate) : this.completed;
     this.ports.commit({ start: this.startTime, duration: this.duration, type: endedPhase, completed: true, tag });
     this.phase = this.nextPhaseOf(endedPhase, cadenceCount);
     if (endedPhase === "work") {
