@@ -1,8 +1,8 @@
 # Pomo Chrome Extension
 
-Feature-complete MV3 port of Pomo's pomodoro timer plus the decentralized Crew
-leaderboard. The phone remains the source of truth; the extension is a separate
-instrument with its own data.
+Feature-complete MV3 port of Pomo's pomodoro timer, history, stats, and
+decentralized Crew leaderboard. The phone and extension are separate local
+surfaces backed by the same user-owned portable backup contract.
 
 ## Build
 
@@ -20,9 +20,9 @@ original "Bun + Vite + CRXJS" plan.
 
 1. `bun run build`
 2. chrome://extensions → Developer mode → Load unpacked → select `dist/`
-3. New Tab shows the timer (flagship instrument). The popup and side panel
-   mirror it; the Crew page is reachable via the "Crew" button in the popup or
-   new tab.
+3. New Tab shows the timer (flagship instrument) when enabled. The side panel
+   mirrors the instrument and links to History, Stats, and Crew. The Popup is a
+   compact timer control surface; Crew lives in its full page.
 
 ## Test
 
@@ -31,7 +31,8 @@ bun test          # unit + integration (fake relays, fake-indexeddb)
 bunx tsc --noEmit # typecheck
 ```
 
-Per repo convention, linting and formatting run only in CI.
+Per repo convention, all extension tests, typecheck, linting, formatting, and
+build validation run in CI rather than locally.
 
 ## Architecture notes
 
@@ -41,15 +42,18 @@ Per repo convention, linting and formatting run only in CI.
 - Time derives from the stored `endAt` (ADR-0007): running remaining is
   `startTime + duration - now`, so Chrome being closed just completes the block
   as-if-finished on the next wake.
-- Crew sync runs from the service worker on a throttled alarm cycle: burst-fetch
-  snapshots from relays, verify the Nostr event and decrypt the envelope,
-  latest-wins into IndexedDB, then publish the member's own snapshot (built from
-  local history) and store it locally so the member always ranks themselves.
+- Crew refresh is explicit when the Crew page opens or Refresh is pressed. Own
+  snapshots publish after durable focus-aggregate, display-identity, create,
+  join, or restore changes; unchanged data is republished only after 24 hours.
+  Timer completion never waits on relay work.
 - Identity: the Nostr secp256k1 private key is wrapped with a random AES-256
-  wrapping key kept in `storage.local` (`pomo:keyring`); the recovery file uses
-  the phone's `pomo-recovery.v1.` envelope (PBKDF2-HMAC-SHA256 at 600k
-  iterations, AES-256-GCM), so a passphrase export on the extension restores on
-  the phone and vice versa.
+  wrapping key kept in `storage.local` (`pomo:keyring`); the passphrase recovery
+  file is extension-specific. A corrupted keyring never mints a replacement
+  identity; the worker stays available to restore that recovery file.
+- Portable backup: `pomo-backup` v1 is the Android Room backup shape. Exporting
+  or importing it from either surface carries history, Crew memberships,
+  identity, and cached projections. It is a sensitive user-owned JSON file when
+  Crew memberships are present; export it only to trusted storage.
 - Zero host permissions: Nostr relay traffic is plain WebSockets.
 - Known platform constraint: Chrome toolbar badges fit roughly 4 characters,
   so the badge shows `M:SS` under 10 minutes and `Nm` above — the plan's

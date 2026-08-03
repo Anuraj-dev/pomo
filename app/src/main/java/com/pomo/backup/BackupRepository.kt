@@ -18,6 +18,11 @@ import com.pomo.profile.AvatarStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** The backup belongs to a different active Crew identity and cannot be merged safely. */
+public class BackupIdentityConflictException : IllegalStateException(
+    "backup identity differs from the active phone identity",
+)
+
 /**
  * Writes every piece of local state the user cannot get back any other way into one plain JSON file
  * they own, and folds such a file back in after a reinstall.
@@ -176,6 +181,13 @@ public class BackupRepository(context: Context) {
 
     public suspend fun restore(backup: PomoBackup): BackupRestoreSummary =
         withContext(Dispatchers.IO) {
+            val hadMemberships = crewStore.loadMemberships().isNotEmpty()
+            if (hadMemberships && backup.crew.identityPrivateKey.isNotBlank()) {
+                val currentIdentity = identityStore.identity().privateKey
+                if (currentIdentity != backup.crew.identityPrivateKey) {
+                    throw BackupIdentityConflictException()
+                }
+            }
             val merged =
                 BackupMerge.merge(
                     existingDayStats = historyDao.getAllDayStatsSnapshot(),
@@ -187,7 +199,6 @@ public class BackupRepository(context: Context) {
             // The identity is only taken back when this device is in no crews — the reinstall case it
             // exists for. Swapping the key out from under a device that is actively publishing would
             // orphan everything it has already put on its crews' boards under the old public key.
-            val hadMemberships = crewStore.loadMemberships().isNotEmpty()
             val identityRestored = backup.crew.identityPrivateKey.isNotBlank() && !hadMemberships
             if (identityRestored) {
                 identityStore.replaceIdentity(backup.crew.identityPrivateKey)
