@@ -24,7 +24,7 @@ function unsafeNameCharacter(character: string): boolean {
   if (code <= 0x1f || code === 0x7f || (code >= 0x80 && code <= 0x9f)) return true;
   if (BIDI_OVERRIDES.has(character)) return true;
   // Unicode General Category Cc/Cf without requiring a Unicode-property-regex runtime.
-  return /[\u00ad\u0600-\u0605\u061c\u06dd\u070f\u0890-\u0891\u08e2\u180e\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\u206a\u206b\u206c\u206d\u206e\u206f\ufeff]/u.test(character);
+  return /[\u00ad\u0600-\u0605\u061c\u06dd\u070f\u0890-\u0891\u08e2\u180e\u200b-\u200c\u200e-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u206f\u206a\u206b\u206c\u206d\u206e\u206f\ufeff]/u.test(character);
 }
 
 function normalizeName(value: string, limit: number): string | null {
