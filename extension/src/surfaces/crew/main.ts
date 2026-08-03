@@ -28,6 +28,7 @@ let syncing = false;
 let lastFocus: HTMLElement | null = null;
 let chipIndex = 0;
 let searchQuery = "";
+let boardRequestSequence = 0;
 const statusTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
 
 function nowSeconds(): number {
@@ -128,9 +129,9 @@ function renderStanding(): void {
   const meta = document.createElement("span");
   meta.className = "meta";
   const parts: string[] = [`${standing.focusMinutes} min`];
-  if (standing.tieCount > 1) parts.push(`tied with ${standing.tieCount}`);
+  if (standing.tieCount > 0) parts.push(`tied with ${standing.tieCount}`);
   if (standing.gapToNext !== null) {
-    parts.push(standing.rank === 1 && standing.tieCount === 1 ? `${standing.gapToNext} min lead` : `${standing.gapToNext} min to next`);
+    parts.push(standing.rank === 1 && standing.tieCount === 0 ? `${standing.gapToNext} min lead` : `${standing.gapToNext} min to next`);
   }
   if (standing.unranked) parts.push("unranked");
   meta.textContent = parts.join(" · ");
@@ -332,6 +333,9 @@ function renderBoardError(message: string): void {
 
 async function loadBoard(forceRefresh = false): Promise<void> {
   if (activeCrewId === null) return;
+  const requestId = ++boardRequestSequence;
+  const requestedCrewId = activeCrewId;
+  const requestedWindow = windowKey;
   if (boardResult !== null && boardResult.crew.crewId !== activeCrewId) boardResult = null;
   syncing = true;
   renderFreshness(boardResult?.relayStates ?? []);
@@ -341,6 +345,7 @@ async function loadBoard(forceRefresh = false): Promise<void> {
         ? { type: "pomo:crew:refresh", crewId: activeCrewId, window: windowKey }
         : { type: "pomo:crew:board", crewId: activeCrewId, window: windowKey },
     );
+    if (requestId !== boardRequestSequence || activeCrewId !== requestedCrewId || windowKey !== requestedWindow) return;
     if (response.ok && response.board !== undefined) {
       boardResult = response.board;
       renderSummary();
@@ -354,6 +359,7 @@ async function loadBoard(forceRefresh = false): Promise<void> {
       renderFreshness(boardResult.relayStates);
     }
   } catch {
+    if (requestId !== boardRequestSequence || activeCrewId !== requestedCrewId || windowKey !== requestedWindow) return;
     if (boardResult === null || boardResult.board.members.length === 0) {
       renderBoardError("Could not reach the crew service.");
     } else {
@@ -361,9 +367,9 @@ async function loadBoard(forceRefresh = false): Promise<void> {
       renderStanding();
     }
   } finally {
-    syncing = false;
+    if (requestId === boardRequestSequence) syncing = false;
   }
-  renderFreshness(boardResult?.relayStates ?? []);
+  if (requestId === boardRequestSequence) renderFreshness(boardResult?.relayStates ?? []);
 }
 
 async function loadCrews(): Promise<void> {
@@ -508,6 +514,27 @@ function openManageHome(): void {
         void loadBoard();
       });
     }, "danger"));
+
+    const hiddenSection = document.createElement("div");
+    hiddenSection.className = "manage-hidden";
+    const hiddenTitle = document.createElement("h4");
+    hiddenTitle.className = "section-title";
+    hiddenTitle.textContent = "Hidden members";
+    hiddenSection.appendChild(hiddenTitle);
+    void request({ type: "pomo:crew:hidden", crewId: activeCrew.crewId }).then((response) => {
+      if (!response.ok || response.hiddenMembers === undefined || response.hiddenMembers.length === 0) return;
+      for (const identityPublicKey of response.hiddenMembers) {
+        hiddenSection.appendChild(
+          button(`Unhide ${identityPublicKey.slice(0, 8)}`, () => {
+            void request({ type: "pomo:crew:hide", crewId: activeCrew.crewId, identityPublicKey, hidden: false }).then(() => {
+              hiddenSection.remove();
+              void loadBoard();
+            });
+          }),
+        );
+      }
+      body.appendChild(hiddenSection);
+    });
   }
 
   const addSection = document.createElement("h4");

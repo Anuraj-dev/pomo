@@ -165,10 +165,11 @@ export class TimerEngine {
   private complete(now: number): void {
     const endedPhase = this.phase;
     const tag = this.tag;
+    const crossedDate = dateStringOf(this.startTime, this.offset()) !== this.today();
     this.ports.commit({ start: this.startTime, duration: this.duration, type: endedPhase, completed: true, tag });
     this.phase = this.nextPhaseOf(endedPhase, this.completed);
     if (endedPhase === "work") {
-      this.completed += 1;
+      this.completed = crossedDate ? this.ports.earnedBlocksForDate(this.today()) : this.completed + 1;
     }
     this.status = "stopped";
     this.armFullDuration();

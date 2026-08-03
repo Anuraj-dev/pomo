@@ -142,9 +142,8 @@ export function aggregateBoard(
   });
 
   const totalFocusMinutes = rows.reduce((sum, r) => sum + r.focusMinutes, 0);
-  const positive = rows
+  const positive = ranked
     .map((r) => r.focusMinutes)
-    .filter((f) => f > 0)
     .sort((a, b) => a - b);
   let medianFocusMinutes = 0;
   if (positive.length > 0) {
@@ -165,7 +164,7 @@ export function standingFor(board: Board, selfKey: string): Standing | null {
   if (!self) {
     return null;
   }
-  const tieCount = self.rank === null ? 0 : board.members.filter((m) => m.rank === self.rank).length;
+  const tieCount = self.rank === null ? 0 : board.members.filter((m) => m.rank === self.rank).length - 1;
   let gapToNext: number | null = null;
   if (self.rank === null) {
     const rankedFocus = board.members.filter((m) => m.rank !== null).map((m) => m.focusMinutes);

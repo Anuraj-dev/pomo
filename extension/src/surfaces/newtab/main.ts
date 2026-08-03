@@ -202,10 +202,18 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
     statsNoteEl.hidden = false;
     return;
   }
-  const stats = await readSurfaceStats();
-  statsTodayEl.textContent = String(stats.todayEarned);
-  statsTotalEl.textContent = String(Math.round(stats.totalFocusMinutes));
-  statsStreakEl.textContent = String(stats.streak);
+  try {
+    const stats = await readSurfaceStats();
+    statsTodayEl.textContent = String(stats.todayEarned);
+    statsTotalEl.textContent = String(Math.round(stats.totalFocusMinutes));
+    statsStreakEl.textContent = String(stats.streak);
+  } catch {
+    statsTodayEl.textContent = "—";
+    statsTotalEl.textContent = "—";
+    statsStreakEl.textContent = "—";
+    statsNoteEl.textContent = "Could not load stats.";
+    statsNoteEl.hidden = false;
+  }
 
   const days = payload.dayStats;
   const now = Date.now() / 1000;

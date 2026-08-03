@@ -178,13 +178,13 @@ describe("aggregateBoard", () => {
     const board = aggregateBoard([a, b, c, d], { window: "today", now: NOW, hiddenKeys: new Set() });
     const leader = standingFor(board, key(1))!;
     expect(leader.rank).toBe(1);
-    expect(leader.tieCount).toBe(2);
+    expect(leader.tieCount).toBe(1);
     expect(leader.gapToNext).toBeNull();
-    expect(standingFor(board, key(2))!.tieCount).toBe(2);
+    expect(standingFor(board, key(2))!.tieCount).toBe(1);
     const third = standingFor(board, key(3))!;
     expect(third.rank).toBe(3);
     expect(third.focusMinutes).toBe(50);
-    expect(third.tieCount).toBe(1);
+    expect(third.tieCount).toBe(0);
     expect(third.gapToNext).toBe(50);
     const unranked = standingFor(board, key(4))!;
     expect(unranked.rank).toBeNull();
