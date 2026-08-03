@@ -332,7 +332,16 @@ function renderBoardError(message: string): void {
 }
 
 async function loadBoard(forceRefresh = false): Promise<void> {
-  if (activeCrewId === null) return;
+  if (activeCrewId === null) {
+    boardRequestSequence++;
+    boardResult = null;
+    syncing = false;
+    renderSummary();
+    renderStanding();
+    renderBoard();
+    renderFreshness([]);
+    return;
+  }
   const requestId = ++boardRequestSequence;
   const requestedCrewId = activeCrewId;
   const requestedWindow = windowKey;

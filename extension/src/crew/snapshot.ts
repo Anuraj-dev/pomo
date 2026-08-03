@@ -1,6 +1,7 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { hexToBytes, isLowerHex } from "../shared/hex";
 import { NONCE_BYTES } from "./keyring";
+import { normalizeDisplayName } from "./validation";
 import type { CrewStatsExtras, SnapshotPlain } from "./types";
 
 const GCM_TAG_BITS = 128;
@@ -160,7 +161,9 @@ function validateSnapshot(snapshot: unknown, envelope: Envelope): SnapshotPlain 
   if (s.identityPublicKey !== envelope.identityPublicKey) {
     throw new Error("snapshot identityPublicKey does not match envelope");
   }
-  if (typeof s.displayName !== "string") throw new Error("invalid snapshot: malformed displayName");
+  if (typeof s.displayName !== "string" || normalizeDisplayName(s.displayName) !== s.displayName) {
+    throw new Error("invalid snapshot: malformed displayName");
+  }
   if (s.avatarBase64 !== null && typeof s.avatarBase64 !== "string") {
     throw new Error("invalid snapshot: malformed avatarBase64");
   }
