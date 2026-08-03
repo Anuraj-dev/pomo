@@ -131,6 +131,13 @@ describe("aggregateBoard", () => {
     expect(board.members[2]!.inactive).toBe(true);
   });
 
+  test("never-focused members are not classified as inactive", () => {
+    const neverFocused = snapshot({ identityPublicKey: key(4), displayName: "N", lastFocusedAtEpochSeconds: 0 });
+    const board = aggregateBoard([neverFocused], { window: "today", now: NOW, hiddenKeys: new Set() });
+    expect(board.members[0]!.active).toBe(false);
+    expect(board.members[0]!.inactive).toBe(false);
+  });
+
   test("hidden members are removed entirely", () => {
     const a = snapshot({ identityPublicKey: key(1), dailyAggregates: [agg("2023-11-14", 30)] });
     const b = snapshot({ identityPublicKey: key(2), dailyAggregates: [agg("2023-11-14", 20)] });

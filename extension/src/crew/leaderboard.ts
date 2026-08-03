@@ -45,6 +45,7 @@ interface Row {
   focusMinutes: number;
   dailyTrend: (number | null)[];
   active: boolean;
+  inactive: boolean;
   stale: boolean;
   rank: number | null;
 }
@@ -86,12 +87,14 @@ export function aggregateBoard(
       }
       dailyTrend.push(byDate.get(date) ?? null);
     }
-    const active = s.lastFocusedAtEpochSeconds >= opts.now - 30 * DAY;
+    const hasFocused = s.lastFocusedAtEpochSeconds > 0;
+    const active = hasFocused && s.lastFocusedAtEpochSeconds >= opts.now - 30 * DAY;
     return {
       snapshot: s,
       focusMinutes,
       dailyTrend,
       active,
+      inactive: hasFocused && !active,
       stale: active && s.lastFocusedAtEpochSeconds < opts.now - 7 * DAY,
       rank: null,
     };
@@ -118,7 +121,7 @@ export function aggregateBoard(
     .filter((r) => r.active && r.focusMinutes === 0)
     .sort((a, b) => b.snapshot.lastFocusedAtEpochSeconds - a.snapshot.lastFocusedAtEpochSeconds);
   const inactive = rows
-    .filter((r) => !r.active)
+    .filter((r) => r.inactive)
     .sort((a, b) => b.snapshot.lastFocusedAtEpochSeconds - a.snapshot.lastFocusedAtEpochSeconds);
 
   const ordered = [...ranked, ...zeroFocusActive, ...inactive];
@@ -136,7 +139,7 @@ export function aggregateBoard(
       rank: r.rank,
       active: r.active,
       stale: r.stale,
-      inactive: !r.active,
+      inactive: r.inactive,
       lastFocusedAtEpochSeconds: s.lastFocusedAtEpochSeconds,
     };
   });

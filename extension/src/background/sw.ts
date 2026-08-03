@@ -115,6 +115,15 @@ function commit(block: CompletedBlock): void {
   }
 }
 
+async function syncAfterWrites(): Promise<void> {
+  try {
+    await pendingWrite;
+  } catch (error) {
+    console.error("state sync continued after history commit failure", error);
+  }
+  await sync();
+}
+
 function notifyPhaseComplete(phase: Phase): void {
   if (!settings.soundEnabled) return;
   const isWork = phase === "work";
@@ -484,7 +493,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           engine.extend(request.seconds ?? 0);
           break;
       }
-      void sync();
+      await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:query":
       return { ok: true, state: engine.snapshot() };
@@ -528,7 +537,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
     case "pomo:crew:board": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
-      void refreshCrewsAndPublishIfDue();
+      await refreshCrewsAndPublishIfDue();
       return { ok: true, board: await buildBoardResponse(request.crewId, request.window, nowSeconds()) };
     }
     case "pomo:crew:join": {
@@ -664,7 +673,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return;
   void initOnce().then(() => {
     engine.tick();
-    void sync();
+    return syncAfterWrites();
   });
 });
 

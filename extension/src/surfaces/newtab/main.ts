@@ -47,6 +47,7 @@ const statsNoteEl = document.getElementById("statsNote")!;
 
 let activeTab: TabKey = "instrument";
 let latest: TimerSnapshot | null = null;
+let previousStatus: TimerSnapshot["status"] | null = null;
 
 function tabButtons(): HTMLElement[] {
   return Array.from(tabsEl.querySelectorAll<HTMLElement>('[role="tab"]'));
@@ -262,9 +263,15 @@ async function chooseInitialTab(): Promise<void> {
 
 applyTheme();
 subscribeState((state) => {
+  const completedOrStopped = previousStatus === "running" && state.status === "stopped";
+  previousStatus = state.status;
   latest = state;
   applyInstrument(document.body, phaseEl, statusEl, state, { timeEl, fractionEl });
   void refreshStats(todayCountEl, totalMinutesEl, streakEl);
+  if (completedOrStopped) {
+    if (activeTab === "history") void loadHistory();
+    if (activeTab === "stats") void loadStats();
+  }
 });
 
 attachTicker(

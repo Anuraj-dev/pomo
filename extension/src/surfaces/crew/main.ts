@@ -7,6 +7,7 @@ import type { PomoSettings } from "../../engine/settings";
 import { decodePayload } from "../../crew/joinCode";
 
 const chipsEl = document.getElementById("chips")!;
+const buildVersionEl = document.getElementById("buildVersion")!;
 const freshnessEl = document.getElementById("freshness")!;
 const summaryEl = document.getElementById("summary")!;
 const standingEl = document.getElementById("standing")!;
@@ -30,6 +31,8 @@ let chipIndex = 0;
 let searchQuery = "";
 let boardRequestSequence = 0;
 const statusTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
+
+buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 
 function nowSeconds(): number {
   return Date.now() / 1000;
@@ -504,6 +507,7 @@ function openManageHome(): void {
           crews = response.crews ?? crews;
           closeManage();
           renderChips();
+          void loadBoard();
         });
     }, "primary");
     body.append(nameField.wrap, save);
@@ -829,6 +833,7 @@ function downloadBackup(backup: string): void {
 
 function openJoin(): void {
   const body = document.createElement("div");
+  body.className = "manage-menu";
   body.style.display = "flex";
   body.style.flexDirection = "column";
   body.style.gap = "0.75rem";
@@ -881,6 +886,7 @@ function openJoin(): void {
 
 function openCreate(): void {
   const body = document.createElement("div");
+  body.className = "manage-menu";
   body.style.display = "flex";
   body.style.flexDirection = "column";
   body.style.gap = "0.75rem";
@@ -914,7 +920,7 @@ function openShare(): void {
   body.style.flexDirection = "column";
   body.style.gap = "0.9rem";
   const bodyEl = body as HTMLDivElement;
-  bodyEl.className = "qr";
+  bodyEl.className = "qr manage-menu";
   void request({ type: "pomo:crew:joinCode", crewId: activeCrewId! }).then((response) => {
     if (!response.ok || response.joinCode === undefined) {
       showError(response.error ?? "could not build join code");
