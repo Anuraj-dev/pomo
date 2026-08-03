@@ -13,7 +13,7 @@ export interface CrewJoinPayload {
 export const DEFAULT_RELAYS = ["wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net"];
 
 const URI_PREFIX = "pomo://crew/join/v2/";
-const RAW_PREFIX = "pomo-crew.v2.";
+export const RAW_PREFIX = "pomo-crew.v2.";
 const LEGACY_PREFIX = "pomo-crew.";
 const MAX_ENCODED_LENGTH = 16 * 1024;
 const MAX_RELAYS = 8;
@@ -61,6 +61,10 @@ export function encodePayload(p: CrewJoinPayload): string {
     key: p.key,
   });
   return bytesToBase64Url(utf8ToBytes(json));
+}
+
+export function encodePrefixedPayload(p: CrewJoinPayload): string {
+  return RAW_PREFIX + encodePayload(p);
 }
 
 export function decodePayload(input: string): CrewJoinPayload {

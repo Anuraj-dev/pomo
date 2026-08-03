@@ -55,6 +55,7 @@ let identityPrivateKey: string | null = null;
 let identityRecoveryRequired = false;
 let crewMemberships: StoredMembership[] = [];
 let crewSyncInFlight = false;
+let forcedCrewPublishPending = false;
 
 function initOnce(): Promise<void> {
   if (initPromise === null) {
@@ -347,13 +348,16 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<b
 }
 
 async function publishCrews(force = false): Promise<void> {
+  if (force) forcedCrewPublishPending = true;
   if (crewSyncInFlight || crewMemberships.length === 0) return;
   crewSyncInFlight = true;
+  const shouldForce = forcedCrewPublishPending;
+  forcedCrewPublishPending = false;
   const now = nowSeconds();
   try {
     const stored = await chrome.storage.local.get(CREW_SYNC_KEY);
     const lastPublish = (stored[CREW_SYNC_KEY] as number | undefined) ?? 0;
-    if (!force && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
+    if (!shouldForce && now - lastPublish < CREW_PUBLISH_MIN_INTERVAL) return;
     let publishedAll = true;
     for (const membership of crewMemberships) {
       const published = await publishSelf(membership, now);
@@ -362,6 +366,7 @@ async function publishCrews(force = false): Promise<void> {
     if (publishedAll) await chrome.storage.local.set({ [CREW_SYNC_KEY]: now });
   } finally {
     crewSyncInFlight = false;
+    if (forcedCrewPublishPending) void publishCrews(true);
   }
 }
 
@@ -462,7 +467,7 @@ async function init(): Promise<void> {
   await sync();
 }
 
-async function handleRequest(request: PomoRequest, senderTabId?: number): Promise<PomoResponse> {
+async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   switch (request.type) {
     case "pomo:command":
       switch (request.command) {
@@ -644,10 +649,6 @@ async function handleRequest(request: PomoRequest, senderTabId?: number): Promis
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
-    case "pomo:newtab:skip":
-      if (senderTabId === undefined) return { ok: false, error: "New Tab context is unavailable" };
-      await chrome.tabs.update(senderTabId, { url: "chrome://newtab/" });
-      return { ok: true };
   }
 }
 
@@ -667,10 +668,10 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   });
 });
 
-chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
   if (!isPomoRequest(message)) return;
   void initOnce()
-    .then(() => handleRequest(message, sender.tab?.id))
+    .then(() => handleRequest(message))
     .then((response) => sendResponse(response))
     .catch((error: unknown) => {
       sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });

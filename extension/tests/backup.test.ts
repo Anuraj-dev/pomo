@@ -18,6 +18,7 @@ describe("portable Android backup contract", () => {
     expect(decoded.version).toBe(1);
     expect(decoded.history.sessions[0]?.tag).toBe("Study");
     expect(decoded.crew.memberships[0]?.protocolVersion).toBe(2);
+    expect(decoded.crew.memberships[0]?.joinCode).toMatch(/^pomo-crew\.v2\./);
     expect(decoded.crew.identityPrivateKey).toBe("ab".repeat(32));
   });
 

@@ -60,6 +60,7 @@ describe("recovery codec", () => {
     expect(decoded!.memberships[0]).toMatchObject({
       crewId: memberships[0]!.crewId,
       crewName: memberships[0]!.crewName,
+      joinCode: expect.stringMatching(/^pomo-crew\.v2\./),
       relays: memberships[0]!.relays,
       key: memberships[0]!.key,
       displayName: memberships[0]!.crewName,

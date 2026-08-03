@@ -1,6 +1,6 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { isLowerHex } from "../shared/hex";
-import { decodePayload, encodePayload, isValidRelayUrl } from "./joinCode";
+import { decodePayload, encodePrefixedPayload, isValidRelayUrl } from "./joinCode";
 import { normalizeCrewName, normalizeDisplayName } from "./validation";
 import type { CrewMembership, StoredMembership } from "./types";
 
@@ -132,7 +132,7 @@ export async function encodeRecovery(
     memberships: memberships.map((membership) => ({
       crewId: membership.crewId,
       crewName: membership.crewName,
-      joinCode: encodePayload({
+      joinCode: encodePrefixedPayload({
         version: 2,
         crewId: membership.crewId,
         crewName: membership.crewName,

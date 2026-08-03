@@ -139,10 +139,6 @@ export interface PomoBackupImportMessage {
   confirmIdentityReplacement?: boolean;
 }
 
-export interface PomoNewTabSkipMessage {
-  type: "pomo:newtab:skip";
-}
-
 export type PomoRequest =
   | PomoCommandMessage
   | PomoQueryMessage
@@ -163,8 +159,7 @@ export type PomoRequest =
   | PomoRecoveryExportMessage
   | PomoRecoveryImportMessage
   | PomoBackupExportMessage
-  | PomoBackupImportMessage
-  | PomoNewTabSkipMessage;
+  | PomoBackupImportMessage;
 
 export interface PomoResponse {
   ok: boolean;
@@ -203,7 +198,6 @@ const POMO_REQUEST_TYPES = new Set<string>([
   "pomo:recovery:import",
   "pomo:backup:export",
   "pomo:backup:import",
-  "pomo:newtab:skip",
 ]);
 
 export function isPomoRequest(value: unknown): value is PomoRequest {

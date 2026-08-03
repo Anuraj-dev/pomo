@@ -2,7 +2,7 @@ import type { CrewDailyRow, CrewSnapshotRow } from "../db/dao";
 import type { DayStatRow, SessionRow } from "../db/types";
 import { isLowerHex } from "./hex";
 import type { CrewMembership, StoredMembership } from "../crew/types";
-import { decodePayload, encodePayload } from "../crew/joinCode";
+import { decodePayload, encodePrefixedPayload } from "../crew/joinCode";
 import { normalizeCrewName, normalizeDisplayName } from "../crew/validation";
 
 export const BACKUP_FORMAT = "pomo-backup" as const;
@@ -269,7 +269,7 @@ export function encodePortableBackup(input: {
       memberships: input.memberships.map((membership) => ({
         crewId: membership.crewId,
         crewName: membership.crewName,
-        joinCode: encodePayload({
+        joinCode: encodePrefixedPayload({
           version: 2,
           crewId: membership.crewId,
           crewName: membership.crewName,
