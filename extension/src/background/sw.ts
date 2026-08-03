@@ -530,9 +530,11 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           engine.toggle();
           break;
         case "skip":
+          engine.tick();
           engine.skip();
           break;
         case "reset":
+          engine.tick();
           engine.reset();
           break;
         case "extend":
