@@ -130,7 +130,12 @@ settingsFormEl.addEventListener("submit", (event) => {
     newtabInstrument: settingNewtabEl.checked,
   };
   settingsStatusEl.textContent = "Saving…";
-  void request({ type: "pomo:settings:set", settings }).then((response) => {
+  void saveSettings(settings);
+});
+
+async function saveSettings(settings: Partial<PomoSettings>): Promise<void> {
+  try {
+    const response = await request({ type: "pomo:settings:set", settings });
     if (!response.ok || response.settings === undefined) {
       settingsStatusEl.textContent = response.error ?? "Could not save";
       settingsStatusEl.dataset["kind"] = "error";
@@ -140,8 +145,11 @@ settingsFormEl.addEventListener("submit", (event) => {
     applySelectedTheme(response.settings.theme);
     settingsStatusEl.textContent = "Saved";
     settingsStatusEl.dataset["kind"] = "ok";
-  });
-});
+  } catch {
+    settingsStatusEl.textContent = "Could not save";
+    settingsStatusEl.dataset["kind"] = "error";
+  }
+}
 
 async function fetchHistory(): Promise<HistoryPayload | null> {
   const response = await request({ type: "pomo:history" });
@@ -158,13 +166,18 @@ async function loadStats(): Promise<void> {
 }
 
 async function loadSettingsPage(): Promise<void> {
-  const response = await request({ type: "pomo:settings:get" });
-  if (!response.ok || response.settings === undefined) {
-    settingsStatusEl.textContent = response.error ?? "Could not load settings";
+  try {
+    const response = await request({ type: "pomo:settings:get" });
+    if (!response.ok || response.settings === undefined) {
+      settingsStatusEl.textContent = response.error ?? "Could not load settings";
+      settingsStatusEl.dataset["kind"] = "error";
+      return;
+    }
+    populateSettings(response.settings);
+  } catch {
+    settingsStatusEl.textContent = "Could not load settings";
     settingsStatusEl.dataset["kind"] = "error";
-    return;
   }
-  populateSettings(response.settings);
 }
 
 function populateSettings(settings: PomoSettings): void {
@@ -293,12 +306,14 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
     statsNoteEl.hidden = false;
     return;
   }
+  let statsFailed = false;
   try {
     const stats = await readSurfaceStats();
     statsTodayEl.textContent = String(stats.todayEarned);
     statsTotalEl.textContent = String(Math.round(stats.totalFocusMinutes));
     statsStreakEl.textContent = String(stats.streak);
   } catch {
+    statsFailed = true;
     statsTodayEl.textContent = "—";
     statsTotalEl.textContent = "—";
     statsStreakEl.textContent = "—";
@@ -330,7 +345,7 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
     statsBarsEl.appendChild(column);
   });
 
-  if (activeDays.length === 0) {
+  if (!statsFailed && activeDays.length === 0) {
     statsNoteEl.textContent = "No sessions yet.";
     statsNoteEl.hidden = false;
   }
@@ -350,9 +365,9 @@ async function renderStats(payload: HistoryPayload | null): Promise<void> {
 }
 
 async function chooseInitialTab(): Promise<void> {
-  const hash = location.hash.slice(1) as TabKey;
-  if (hash in pages) {
-    setActiveTab(hash, false);
+  const hash = location.hash.slice(1);
+  if (Object.hasOwn(pages, hash)) {
+    setActiveTab(hash as TabKey, false);
     return;
   }
   const response = await request({ type: "pomo:settings:get" });

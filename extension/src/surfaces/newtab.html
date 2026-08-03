@@ -14,9 +14,9 @@
           <button type="button" role="tab" id="tab-instrument" class="tab" data-tab="instrument" aria-selected="true" aria-controls="page-instrument" tabindex="0">Instrument</button>
           <button type="button" role="tab" id="tab-history" class="tab" data-tab="history" aria-selected="false" aria-controls="page-history" tabindex="-1">History</button>
           <button type="button" role="tab" id="tab-stats" class="tab" data-tab="stats" aria-selected="false" aria-controls="page-stats" tabindex="-1">Stats</button>
-          <a class="tab tab-link" href="crew.html">Crew</a>
           <button type="button" role="tab" id="tab-settings" class="tab" data-tab="settings" aria-selected="false" aria-controls="page-settings" tabindex="-1">Settings</button>
         </div>
+        <a class="tab tab-link" href="crew.html">Crew</a>
         <span class="build num" id="buildVersion" aria-label="Extension version"></span>
       </div>
 
@@ -52,7 +52,7 @@
         </section>
       </section>
 
-      <section class="view" id="page-history" role="tabpanel" aria-labelledby="tab-history" hidden>
+      <section class="view" id="page-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
         <div class="column">
           <header class="section-head">
             <div>
@@ -65,7 +65,7 @@
         </div>
       </section>
 
-      <section class="view" id="page-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+      <section class="view" id="page-stats" role="tabpanel" aria-labelledby="tab-stats" tabindex="0" hidden>
         <div class="column">
           <header class="section-head">
             <div>

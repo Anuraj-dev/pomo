@@ -27,6 +27,7 @@ import { decodePortableBackup, encodePortableBackup, membershipFromBackup } from
 import { badgeColorOf, badgeTextOf } from "../shared/badge";
 import {
   CREW_MEMBERSHIPS_KEY,
+  CREW_ACTIVE_KEY,
   CREW_SYNC_KEY,
   ENGINE_KEY,
   SETTINGS_KEY,
@@ -242,7 +243,7 @@ async function exportPortableBackup(): Promise<string> {
     sessions,
     memberships: crewMemberships,
     identityPrivateKey: crewMemberships.length === 0 ? "" : identityPrivateKey ?? "",
-    activeCrewId: crewMemberships[0]?.crewId ?? null,
+    activeCrewId: await activeCrewIdForMemberships(),
     snapshots,
     dailyAggregates,
     hiddenMembers,
@@ -269,10 +270,15 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     return { ok: false, error: "backup identity differs from the active identity; export this device before importing" };
   }
   if (identityDiffers && !confirmIdentityReplacement) {
-    return { ok: false, error: "identity replacement requires explicit confirmation" };
+    return {
+      ok: false,
+      error: "identity replacement requires explicit confirmation",
+      needsIdentityConfirmation: true,
+    };
   }
   const byCrew = new Map(crewMemberships.map((membership) => [membership.crewId, membership]));
   const previousMembershipCount = byCrew.size;
+  const previousActiveCrewId = await activeCrewIdForMemberships();
   for (const membership of backup.crew.memberships) {
     const existing = byCrew.get(membership.crewId);
     if (existing !== undefined && (existing.key !== membership.key || existing.crewName !== membership.crewName)) {
@@ -314,6 +320,14 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   }
   crewMemberships = mergedMemberships;
   await saveMemberships();
+  const importedActiveCrewId = backup.crew.activeCrewId;
+  await setActiveCrewId(
+    importedActiveCrewId !== null && mergedCrewIds.has(importedActiveCrewId)
+      ? importedActiveCrewId
+      : previousActiveCrewId !== null && mergedCrewIds.has(previousActiveCrewId)
+        ? previousActiveCrewId
+        : mergedMemberships[0]?.crewId ?? null,
+  );
   await publishCrews(true);
   return {
     ok: true,
@@ -327,14 +341,30 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
 }
 
 async function loadMemberships(): Promise<void> {
-  const stored = await chrome.storage.local.get(CREW_MEMBERSHIPS_KEY);
+  const stored = await chrome.storage.local.get([CREW_MEMBERSHIPS_KEY, CREW_ACTIVE_KEY]);
   crewMemberships = Array.isArray(stored[CREW_MEMBERSHIPS_KEY])
     ? (stored[CREW_MEMBERSHIPS_KEY] as StoredMembership[])
     : [];
+  const active = stored[CREW_ACTIVE_KEY];
+  const activeCrewId = typeof active === "string" && crewMemberships.some((membership) => membership.crewId === active)
+    ? active
+    : crewMemberships[0]?.crewId ?? null;
+  await setActiveCrewId(activeCrewId);
 }
 
 async function saveMemberships(): Promise<void> {
   await chrome.storage.local.set({ [CREW_MEMBERSHIPS_KEY]: crewMemberships });
+}
+
+async function activeCrewIdForMemberships(): Promise<string | null> {
+  const stored = await chrome.storage.local.get(CREW_ACTIVE_KEY);
+  const active = stored[CREW_ACTIVE_KEY];
+  if (typeof active === "string" && crewMemberships.some((membership) => membership.crewId === active)) return active;
+  return crewMemberships[0]?.crewId ?? null;
+}
+
+async function setActiveCrewId(crewId: string | null): Promise<void> {
+  await chrome.storage.local.set({ [CREW_ACTIVE_KEY]: crewId });
 }
 
 async function publishSelf(membership: StoredMembership, now: number): Promise<boolean> {
@@ -449,6 +479,7 @@ async function addMembership(
     joinedAtEpochSeconds: nowSeconds(),
   });
   await saveMemberships();
+  await setActiveCrewId(crewId);
   await publishCrews(true);
   return { ok: true, crews: await crewSummaries() };
 }
@@ -547,7 +578,11 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       void sync();
       return { ok: true, settings };
     case "pomo:crew:list":
-      return { ok: true, crews: await crewSummaries() };
+      return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
+    case "pomo:crew:select":
+      if (!crewMemberships.some((membership) => membership.crewId === request.crewId)) return { ok: false, error: "crew not found" };
+      await setActiveCrewId(request.crewId);
+      return { ok: true, activeCrewId: request.crewId };
     case "pomo:crew:board": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
@@ -565,10 +600,14 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return addMembership(payload.crewId, payload.crewName, payload.relays, payload.key, request.displayName);
     }
     case "pomo:crew:leave":
+      {
+      const previousActiveCrewId = await activeCrewIdForMemberships();
       crewMemberships = crewMemberships.filter((m) => m.crewId !== request.crewId);
       await saveMemberships();
+      await setActiveCrewId(previousActiveCrewId === request.crewId ? crewMemberships[0]?.crewId ?? null : previousActiveCrewId);
       await crewDao.deleteCrew(request.crewId);
-      return { ok: true, crews: await crewSummaries() };
+      return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
+      }
     case "pomo:crew:hide":
       if (request.hidden) {
         await crewDao.setHidden(request.crewId, request.identityPublicKey, nowSeconds());
@@ -651,8 +690,10 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
         for (const membership of crewMemberships) {
           if (!importedCrewIds.has(membership.crewId)) await crewDao.deleteCrew(membership.crewId);
         }
+        const previousActiveCrewId = await activeCrewIdForMemberships();
         crewMemberships = memberships;
         await saveMemberships();
+        await setActiveCrewId(memberships.some((membership) => membership.crewId === previousActiveCrewId) ? previousActiveCrewId : memberships[0]?.crewId ?? null);
         await publishCrews(true);
         return { ok: true, crews: await crewSummaries() };
       } catch (error) {

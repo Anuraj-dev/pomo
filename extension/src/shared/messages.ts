@@ -9,6 +9,7 @@ export const STATE_KEY = "pomo:state";
 export const ENGINE_KEY = "pomo:engine";
 export const SETTINGS_KEY = "pomo:settings";
 export const CREW_MEMBERSHIPS_KEY = "pomo:crew:memberships";
+export const CREW_ACTIVE_KEY = "pomo:crew:active";
 export const CREW_SYNC_KEY = "pomo:crew:lastPublish";
 
 export type PomoCommand = "toggle" | "skip" | "reset" | "extend";
@@ -64,6 +65,11 @@ export interface CrewBoardResult {
 
 export interface PomoCrewListMessage {
   type: "pomo:crew:list";
+}
+
+export interface PomoCrewSelectMessage {
+  type: "pomo:crew:select";
+  crewId: string;
 }
 
 export interface PomoCrewBoardMessage {
@@ -147,6 +153,7 @@ export type PomoRequest =
   | PomoSettingsGetMessage
   | PomoSettingsSetMessage
   | PomoCrewListMessage
+  | PomoCrewSelectMessage
   | PomoCrewBoardMessage
   | PomoCrewJoinMessage
   | PomoCrewCreateMessage
@@ -167,12 +174,14 @@ export interface PomoResponse {
   state?: TimerSnapshot;
   settings?: PomoSettings;
   crews?: CrewSummary[];
+  activeCrewId?: string | null;
   board?: CrewBoardResult;
   joinCode?: string;
   hiddenMembers?: string[];
   recovery?: string;
   backup?: string;
   restoreSummary?: { sessionsAdded: number; daysAffected: number; membershipsAdded: number; identityRestored: boolean };
+  needsIdentityConfirmation?: boolean;
   stats?: SurfaceStats;
   history?: HistoryPayload;
 }
@@ -185,6 +194,7 @@ const POMO_REQUEST_TYPES = new Set<string>([
   "pomo:settings:get",
   "pomo:settings:set",
   "pomo:crew:list",
+  "pomo:crew:select",
   "pomo:crew:board",
   "pomo:crew:join",
   "pomo:crew:create",
@@ -220,6 +230,8 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
       return stringField("payload") && stringField("displayName");
     case "pomo:crew:create":
       return stringField("crewName") && stringField("displayName");
+    case "pomo:crew:select":
+      return stringField("crewId");
     case "pomo:crew:leave":
     case "pomo:crew:joinCode":
       return stringField("crewId");

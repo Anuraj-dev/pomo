@@ -78,13 +78,19 @@ function renderChips(): void {
     chip.tabIndex = active ? 0 : -1;
     chip.textContent = crew.crewName;
     chip.addEventListener("click", () => {
-      activeCrewId = crew.crewId;
-      chipIndex = crews.findIndex((c) => c.crewId === crew.crewId);
-      resetSearch();
-      void loadBoard(true);
+      void selectCrew(crew);
     });
     chipsEl.appendChild(chip);
   }
+}
+
+async function selectCrew(crew: CrewSummary): Promise<void> {
+  activeCrewId = crew.crewId;
+  chipIndex = crews.findIndex((candidate) => candidate.crewId === crew.crewId);
+  resetSearch();
+  const response = await request({ type: "pomo:crew:select", crewId: crew.crewId });
+  if (!response.ok) return;
+  await loadBoard(true);
 }
 
 function renderFreshness(relayStates: CrewRelayStateRow[]): void {
@@ -195,12 +201,19 @@ function renderMember(member: BoardMember, selfKey: string): DocumentFragment {
     hide.type = "button";
     hide.textContent = "Hide";
     hide.addEventListener("click", () => {
-      void request({
-        type: "pomo:crew:hide",
-        crewId: activeCrewId!,
-        identityPublicKey: member.identityPublicKey,
-        hidden: true,
-      }).then(() => loadBoard());
+      void (async (): Promise<void> => {
+        try {
+          await request({
+            type: "pomo:crew:hide",
+            crewId: activeCrewId!,
+            identityPublicKey: member.identityPublicKey,
+            hidden: true,
+          });
+          await loadBoard();
+        } catch {
+          renderBoardError("Could not update member visibility.");
+        }
+      })();
     });
     actions.appendChild(hide);
   }
@@ -393,7 +406,9 @@ async function loadCrews(): Promise<void> {
   } else {
     crews = [];
   }
-  if (activeCrewId === null || !crews.some((crew) => crew.crewId === activeCrewId)) {
+  if (response.activeCrewId !== undefined) {
+    activeCrewId = response.activeCrewId;
+  } else if (activeCrewId === null || !crews.some((crew) => crew.crewId === activeCrewId)) {
     activeCrewId = crews[0]?.crewId ?? null;
   }
   chipIndex = Math.max(0, crews.findIndex((c) => c.crewId === activeCrewId));
@@ -498,8 +513,9 @@ function openManageHome(): void {
     const nameField = field("Your display name in this crew", activeCrew.displayName);
     nameField.input.value = activeCrew.displayName;
     const save = button("Save name", () => {
-      void request({ type: "pomo:crew:rename", crewId: activeCrew.crewId, displayName: nameField.input.value })
-        .then((response) => {
+      void (async (): Promise<void> => {
+        try {
+          const response = await request({ type: "pomo:crew:rename", crewId: activeCrew.crewId, displayName: nameField.input.value });
           if (!response.ok) {
             showError(response.error ?? "rename failed");
             return;
@@ -508,13 +524,18 @@ function openManageHome(): void {
           closeManage();
           renderChips();
           void loadBoard();
-        });
+        } catch {
+          showError("Could not reach the crew service.");
+        }
+      })();
     }, "primary");
     body.append(nameField.wrap, save);
 
     body.append(button("Share invite / QR", () => openShare()));
     body.append(button("Leave crew", () => {
-      void request({ type: "pomo:crew:leave", crewId: activeCrew.crewId }).then((response) => {
+      void (async (): Promise<void> => {
+        try {
+          const response = await request({ type: "pomo:crew:leave", crewId: activeCrew.crewId });
         if (!response.ok) {
           showError(response.error ?? "leave failed");
           return;
@@ -527,7 +548,10 @@ function openManageHome(): void {
         resetSearch();
         renderChips();
         void loadBoard();
-      });
+        } catch {
+          showError("Could not reach the crew service.");
+        }
+      })();
     }, "danger"));
 
     const hiddenSection = document.createElement("div");
@@ -536,20 +560,34 @@ function openManageHome(): void {
     hiddenTitle.className = "section-title";
     hiddenTitle.textContent = "Hidden members";
     hiddenSection.appendChild(hiddenTitle);
-    void request({ type: "pomo:crew:hidden", crewId: activeCrew.crewId }).then((response) => {
-      if (!response.ok || response.hiddenMembers === undefined || response.hiddenMembers.length === 0) return;
-      for (const identityPublicKey of response.hiddenMembers) {
-        hiddenSection.appendChild(
-          button(`Unhide ${identityPublicKey.slice(0, 8)}`, () => {
-            void request({ type: "pomo:crew:hide", crewId: activeCrew.crewId, identityPublicKey, hidden: false }).then(() => {
-              hiddenSection.remove();
-              void loadBoard();
-            });
-          }),
-        );
+    void (async (): Promise<void> => {
+      try {
+        const response = await request({ type: "pomo:crew:hidden", crewId: activeCrew.crewId });
+        if (!response.ok || response.hiddenMembers === undefined || response.hiddenMembers.length === 0) return;
+        for (const identityPublicKey of response.hiddenMembers) {
+          const unhide = button(`Unhide ${identityPublicKey.slice(0, 8)}`, () => {
+            void (async (): Promise<void> => {
+              try {
+                const result = await request({ type: "pomo:crew:hide", crewId: activeCrew.crewId, identityPublicKey, hidden: false });
+                if (!result.ok) {
+                  showError(result.error ?? "could not unhide member");
+                  return;
+                }
+                unhide.remove();
+                if (hiddenSection.querySelector("button") === null) hiddenSection.remove();
+                await loadBoard();
+              } catch {
+                showError("Could not reach the crew service.");
+              }
+            })();
+          });
+          hiddenSection.appendChild(unhide);
+        }
+        body.appendChild(hiddenSection);
+      } catch {
+        showError("Could not load hidden members.");
       }
-      body.appendChild(hiddenSection);
-    });
+    })();
   }
 
   const addSection = document.createElement("h4");
@@ -628,28 +666,37 @@ function settingsSection(): HTMLElement {
 
   section.append(title, sound.wrap, tagField.wrap, newtab.wrap, status);
 
-  void request({ type: "pomo:settings:get" }).then((response) => {
-    if (response.ok && response.settings !== undefined) {
-      sound.input.checked = response.settings.soundEnabled;
-      newtab.input.checked = response.settings.newtabInstrument;
-      tagField.input.value = response.settings.tag;
-    } else {
-      setStatus(status, response.error ?? "could not load settings", "error");
+  void (async (): Promise<void> => {
+    try {
+      const response = await request({ type: "pomo:settings:get" });
+      if (response.ok && response.settings !== undefined) {
+        sound.input.checked = response.settings.soundEnabled;
+        newtab.input.checked = response.settings.newtabInstrument;
+        tagField.input.value = response.settings.tag;
+      } else {
+        setStatus(status, response.error ?? "could not load settings", "error");
+      }
+    } catch {
+      setStatus(status, "could not load settings", "error");
+    } finally {
+      for (const control of controls) control.disabled = false;
     }
-    for (const control of controls) control.disabled = false;
-  });
+  })();
 
   return section;
 }
 
-function saveSetting(patch: Partial<PomoSettings>, status: HTMLElement): void {
-  void request({ type: "pomo:settings:set", settings: patch }).then((response) => {
+async function saveSetting(patch: Partial<PomoSettings>, status: HTMLElement): Promise<void> {
+  try {
+    const response = await request({ type: "pomo:settings:set", settings: patch });
     if (response.ok) {
       setStatus(status, "Saved", "ok");
     } else {
       setStatus(status, response.error ?? "save failed", "error");
     }
-  });
+  } catch {
+    setStatus(status, "save failed", "error");
+  }
 }
 
 function backupSection(): HTMLElement {
@@ -673,14 +720,19 @@ function backupSection(): HTMLElement {
   portableExportRow.className = "backup-row";
   portableExportRow.append(
     button("Export portable backup", () => {
-      void request({ type: "pomo:backup:export" }).then((response) => {
-        if (!response.ok || response.backup === undefined) {
-          setStatus(portableExportStatus, response.error ?? "export failed", "error");
-          return;
+      void (async (): Promise<void> => {
+        try {
+          const response = await request({ type: "pomo:backup:export" });
+          if (!response.ok || response.backup === undefined) {
+            setStatus(portableExportStatus, response.error ?? "export failed", "error");
+            return;
+          }
+          downloadBackup(response.backup);
+          setStatus(portableExportStatus, "Portable backup downloaded", "ok");
+        } catch {
+          setStatus(portableExportStatus, "export failed", "error");
         }
-        downloadBackup(response.backup);
-        setStatus(portableExportStatus, "Portable backup downloaded", "ok");
-      });
+      })();
     }, "primary"),
     portableExportStatus,
   );
@@ -694,35 +746,41 @@ function backupSection(): HTMLElement {
   const portableFileInput = document.createElement("input");
   portableFileInput.type = "file";
   portableFileInput.accept = ".json,application/json";
-  const portablePayload = document.createElement("input");
-  portablePayload.type = "hidden";
+  let portablePayload: Promise<string> | null = null;
   portableFileInput.addEventListener("change", () => {
     const file = portableFileInput.files?.[0];
-    portablePayload.value = "";
-    if (file !== undefined) void file.text().then((text) => { portablePayload.value = text; });
+    portablePayload = file === undefined ? null : file.text();
   });
   portableFileWrap.append(portableFileCaption, portableFileInput);
   portableImportRow.append(
     portableFileWrap,
     button("Import portable backup", () => {
-      const payload = portablePayload.value;
-      if (payload.length === 0) {
+      const pending = portablePayload;
+      if (pending === null) {
         setStatus(portableImportStatus, "Choose a backup file first.", "error");
         return;
       }
-      void request({ type: "pomo:backup:import", payload }).then((response) => {
-        if (!response.ok && response.error?.includes("explicit confirmation") && window.confirm("This backup contains a different identity. Replace the extension identity? Export the current identity first if you may need it later.")) {
-          return request({ type: "pomo:backup:import", payload, confirmIdentityReplacement: true });
+      void (async (): Promise<void> => {
+        try {
+          const payload = await pending;
+          if (pending !== portablePayload) {
+            setStatus(portableImportStatus, "File selection changed. Choose Import again.", "error");
+            return;
+          }
+          let response = await request({ type: "pomo:backup:import", payload });
+          if (!response.ok && response.needsIdentityConfirmation && window.confirm("This backup contains a different identity. Replace the extension identity? Export the current identity first if you may need it later.")) {
+            response = await request({ type: "pomo:backup:import", payload, confirmIdentityReplacement: true });
+          }
+          if (!response.ok) {
+            setStatus(portableImportStatus, response.error ?? "import failed", "error");
+            return;
+          }
+          setStatus(portableImportStatus, "Imported history and Crew data", "ok");
+          await loadCrews();
+        } catch {
+          setStatus(portableImportStatus, "import failed", "error");
         }
-        return response;
-      }).then((response) => {
-        if (!response.ok) {
-          setStatus(portableImportStatus, response.error ?? "import failed", "error");
-          return;
-        }
-        setStatus(portableImportStatus, "Imported history and Crew data", "ok");
-        void loadCrews();
-      });
+      })();
     }, "primary"),
     portableImportStatus,
   );
@@ -740,14 +798,19 @@ function backupSection(): HTMLElement {
         setStatus(exportStatus, "Passphrase must be at least 12 characters.", "error");
         return;
       }
-      void request({ type: "pomo:recovery:export", passphrase }).then((response) => {
-        if (!response.ok || response.recovery === undefined) {
-          setStatus(exportStatus, response.error ?? "export failed", "error");
-          return;
+      void (async (): Promise<void> => {
+        try {
+          const response = await request({ type: "pomo:recovery:export", passphrase });
+          if (!response.ok || response.recovery === undefined) {
+            setStatus(exportStatus, response.error ?? "export failed", "error");
+            return;
+          }
+          downloadRecovery(response.recovery);
+          setStatus(exportStatus, "Backup downloaded", "ok");
+        } catch {
+          setStatus(exportStatus, "export failed", "error");
         }
-        downloadRecovery(response.recovery);
-        setStatus(exportStatus, "Backup downloaded", "ok");
-      });
+      })();
     }, "primary"),
     exportStatus,
   );
@@ -761,17 +824,10 @@ function backupSection(): HTMLElement {
   const fileInput = document.createElement("input");
   fileInput.type = "file";
   fileInput.accept = ".json,application/json";
-  const payloadField = document.createElement("input");
-  payloadField.type = "hidden";
+  let recoveryPayload: Promise<string> | null = null;
   fileInput.addEventListener("change", () => {
     const file = fileInput.files?.[0];
-    if (file === undefined) {
-      payloadField.value = "";
-      return;
-    }
-    void file.text().then((text) => {
-      payloadField.value = text;
-    });
+    recoveryPayload = file === undefined ? null : file.text();
   });
   fileWrap.append(fileCaption, fileInput);
   const importPassField = field("Passphrase", "passphrase used at export");
@@ -781,9 +837,9 @@ function backupSection(): HTMLElement {
     fileWrap,
     importPassField.wrap,
     button("Restore backup", () => {
-      const payload = payloadField.value;
+      const pending = recoveryPayload;
       const passphrase = importPassField.input.value;
-      if (payload.length === 0) {
+      if (pending === null) {
         setStatus(importStatus, "Choose a backup file first.", "error");
         return;
       }
@@ -791,14 +847,24 @@ function backupSection(): HTMLElement {
         setStatus(importStatus, "Enter the passphrase.", "error");
         return;
       }
-      void request({ type: "pomo:recovery:import", payload, passphrase }).then((response) => {
-        if (!response.ok) {
-          setStatus(importStatus, response.error ?? "restore failed", "error");
-          return;
+      void (async (): Promise<void> => {
+        try {
+          const payload = await pending;
+          if (pending !== recoveryPayload) {
+            setStatus(importStatus, "File selection changed. Choose Restore again.", "error");
+            return;
+          }
+          const response = await request({ type: "pomo:recovery:import", payload, passphrase });
+          if (!response.ok) {
+            setStatus(importStatus, response.error ?? "restore failed", "error");
+            return;
+          }
+          setStatus(importStatus, "Restored", "ok");
+          await loadCrews();
+        } catch {
+          setStatus(importStatus, "restore failed", "error");
         }
-        setStatus(importStatus, "Restored", "ok");
-        void loadCrews();
-      });
+      })();
     }, "primary"),
     importStatus,
   );
@@ -845,18 +911,24 @@ function openJoin(): void {
   const confirm = button("Confirm and join", () => {
     const payload = joinField.input.value.trim();
     const displayName = nameField.input.value;
-    void request({ type: "pomo:crew:join", payload, displayName }).then((response) => {
-      if (!response.ok) {
-        showError(response.error ?? "join failed");
-        return;
+    void (async (): Promise<void> => {
+      try {
+        const response = await request({ type: "pomo:crew:join", payload, displayName });
+        if (!response.ok) {
+          showError(response.error ?? "join failed");
+          return;
+        }
+        crews = response.crews ?? crews;
+        activeCrewId = crews[crews.length - 1]?.crewId ?? null;
+        if (activeCrewId !== null) await request({ type: "pomo:crew:select", crewId: activeCrewId });
+        closeManage();
+        resetSearch();
+        renderChips();
+        await loadBoard(true);
+      } catch {
+        showError("Could not reach the crew service.");
       }
-      crews = response.crews ?? crews;
-      activeCrewId = crews[crews.length - 1]?.crewId ?? null;
-      closeManage();
-      resetSearch();
-      renderChips();
-      void loadBoard();
-    });
+    })();
   }, "primary");
   const submit = button("Review invite", () => {
     const payload = joinField.input.value.trim();
@@ -896,19 +968,24 @@ function openCreate(): void {
     const crewName = nameField.input.value.trim();
     const displayName = displayField.input.value.trim();
     if (crewName.length === 0 || displayName.length === 0) return;
-    void request({ type: "pomo:crew:create", crewName, displayName })
-      .then((response) => {
+    void (async (): Promise<void> => {
+      try {
+        const response = await request({ type: "pomo:crew:create", crewName, displayName });
         if (!response.ok) {
           showError(response.error ?? "create failed");
           return;
         }
         crews = response.crews ?? crews;
         activeCrewId = crews[crews.length - 1]?.crewId ?? null;
+        if (activeCrewId !== null) await request({ type: "pomo:crew:select", crewId: activeCrewId });
         closeManage();
         resetSearch();
         renderChips();
-        void loadBoard();
-      });
+        await loadBoard(true);
+      } catch {
+        showError("Could not reach the crew service.");
+      }
+    })();
   }, "primary");
   body.append(nameField.wrap, displayField.wrap, submit);
   openManage("Create a crew", body);
@@ -921,31 +998,41 @@ function openShare(): void {
   body.style.gap = "0.9rem";
   const bodyEl = body as HTMLDivElement;
   bodyEl.className = "qr manage-menu";
-  void request({ type: "pomo:crew:joinCode", crewId: activeCrewId! }).then((response) => {
-    if (!response.ok || response.joinCode === undefined) {
-      showError(response.error ?? "could not build join code");
-      return;
-    }
-    const uri = `pomo://crew/join/v2/${response.joinCode}`;
-    const canvas = document.createElement("canvas");
-    canvas.width = 220;
-    canvas.height = 220;
-    void QRCode.toCanvas(canvas, uri, { width: 220, margin: 2 }).catch(() => undefined);
-    body.append(canvas);
-    const row = document.createElement("div");
-    row.className = "row";
-    const code = document.createElement("span");
-    code.className = "meta num";
-    code.textContent = uri;
-    row.appendChild(code);
-    const copy = button("Copy", () => {
-      void navigator.clipboard.writeText(uri).then(() => {
-        copy.textContent = "Copied";
+  void (async (): Promise<void> => {
+    try {
+      const response = await request({ type: "pomo:crew:joinCode", crewId: activeCrewId! });
+      if (!response.ok || response.joinCode === undefined) {
+        showError(response.error ?? "could not build join code");
+        return;
+      }
+      const uri = `pomo://crew/join/v2/${response.joinCode}`;
+      const canvas = document.createElement("canvas");
+      canvas.width = 220;
+      canvas.height = 220;
+      await QRCode.toCanvas(canvas, uri, { width: 220, margin: 2 });
+      body.append(canvas);
+      const row = document.createElement("div");
+      row.className = "row";
+      const code = document.createElement("span");
+      code.className = "meta num";
+      code.textContent = uri;
+      row.appendChild(code);
+      const copy = button("Copy", () => {
+        void (async (): Promise<void> => {
+          try {
+            await navigator.clipboard.writeText(uri);
+            copy.textContent = "Copied";
+          } catch {
+            copy.textContent = "Copy failed";
+          }
+        })();
       });
-    });
-    row.appendChild(copy);
-    body.append(row);
-  });
+      row.appendChild(copy);
+      body.append(row);
+    } catch {
+      showError("Could not build join code.");
+    }
+  })();
   openManage("Share invite", body);
 }
 

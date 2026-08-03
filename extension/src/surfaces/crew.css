@@ -40,6 +40,11 @@
   color: var(--text);
 }
 
+.crew-nav .tab:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 .crew-nav .tab[aria-current="page"] {
   color: var(--text);
   border-bottom-color: var(--accent);
