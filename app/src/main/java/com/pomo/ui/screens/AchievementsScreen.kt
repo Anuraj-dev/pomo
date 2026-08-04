@@ -312,7 +312,10 @@ private fun SectionLabel(text: String) {
     Text(text.uppercase(Locale.ROOT), style = MaterialTheme.typography.labelSmall, color = PomoTokens.colors.onSurfaceFaint)
 }
 
-private fun trackReading(axis: AchievementAxis, snapshot: StatsSnapshot): String =
+private fun trackReading(
+    axis: AchievementAxis,
+    snapshot: StatsSnapshot,
+): String =
     when (axis) {
         AchievementAxis.Focus -> formatAchievementMinutes(snapshot.lifetime.focusMinutes)
         AchievementAxis.ActiveDays -> "${snapshot.lifetime.activeDays}d"

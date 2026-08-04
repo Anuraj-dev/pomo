@@ -116,7 +116,6 @@ public object CrewRecoveryCodec {
 
     private fun isValid(payload: CrewRecoveryPayload): Boolean =
         CrewValidation.isLowerHex(payload.identityPrivateKey, 64) &&
-            payload.memberships.isNotEmpty() &&
             payload.memberships.all { membership ->
                 membership.protocolVersion == CrewDefaults.PROTOCOL_VERSION &&
                     !membership.isArchived &&

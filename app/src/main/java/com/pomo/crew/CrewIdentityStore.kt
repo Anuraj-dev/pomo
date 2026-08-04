@@ -31,6 +31,17 @@ public class CrewIdentityStore(context: Context) {
         return CrewIdentity(privateKey, publicKeyFor(privateKey))
     }
 
+    /**
+     * Returns the wrapped private key when it can still be decrypted, or null when the Android
+     * Keystore entry is gone (for example after an Auto Backup restore onto a fresh install).
+     * Unlike [identity], this never mints a replacement, so callers can detect the unreadable
+     * state instead of silently ending up with a new identity.
+     */
+    public fun decryptedIdentityKey(): String? {
+        val encrypted = prefs.getString(IDENTITY_KEY, null) ?: return null
+        return encrypted.let(cipher::decryptString)?.takeIf { CrewValidation.isLowerHex(it, 64) }
+    }
+
     public fun publicKey(): String {
         val existing = prefs.getString(IDENTITY_PUBLIC_KEY, null)
         if (existing != null && CrewValidation.isLowerHex(existing, 64)) return existing

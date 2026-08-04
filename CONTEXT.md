@@ -175,3 +175,48 @@ A public Nostr-style server, run by strangers, that stores and forwards
 snapshots. Pomo uses several for redundancy and owns none of them. Their
 existence is what makes "decentralized" mean "no central authority", not "no
 servers anywhere".
+
+## Desktop Instruments
+
+**Instrument**:
+Any display-and-control surface that renders the timer engine's state. The
+phone's screens, widget, and notification are instruments; so are the extension
+surfaces (New Tab, side panel, popup, badge). Instruments render; they never own
+state. The phone's instrument set is the canonical one; the extension is a
+second instrument that happens to live on the work machine.
+_Avoid_: screen, panel, view (when the concept is the state-ownership rule).
+
+**Engine**:
+The single owner of timer state on a device — the phone's `OfflineTimer` and the
+extension's shared state machine. Exactly one engine exists per device; every
+instrument on that device reads the same engine state. The engine persists state
+and history; instruments are disposable.
+_Avoid_: controller, service, logic layer.
+
+**Reconciliation**:
+The engine's act of catching up to reality when it wakes after being asleep —
+browser or process suspended. Remaining time is always derived from the stored
+end point, never from counting ticks; a session that elapsed while the device
+slept completes as if it had finished on time. The phone reconciles after process
+death; the extension reconciles after every service-worker suspension.
+_Avoid_: sync, recovery, fix-up.
+
+**Burst**:
+A short-lived, self-contained relay exchange that opens, transacts, and closes
+within its timeout. Publishing one snapshot and refreshing the board are bursts
+on both phone and extension. The extension's service worker can only hold
+connections while it is awake, so burst discipline is mandatory there.
+_Avoid_: stream, long poll, connection.
+
+**Observe**:
+The long-lived relay subscription that streams live snapshots. It exists only
+while a Crew instrument is visible; closing the instrument closes the
+subscription. On the extension, Observe runs from the page context (New Tab or
+side panel), never from the service worker.
+_Avoid_: subscribe, listen (when the lifetime rule matters).
+
+**Surface**:
+One named render target of an instrument family — the extension's New Tab page,
+side panel, popup, or badge. Surfaces share one engine state and one theme token
+set; they differ only in size and density.
+_Avoid_: page, window (generic), widget (the Android term).

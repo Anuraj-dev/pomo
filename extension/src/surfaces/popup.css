@@ -1,0 +1,64 @@
+body {
+  width: 240px;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+
+.band {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.phase {
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.status {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.readout {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 0.15rem;
+}
+
+.time {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.fraction {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+}
+
+body[data-phase="work"][data-status="running"] .time {
+  color: var(--accent);
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 0.5rem;
+}
+
+.control {
+  padding: 0.5rem 0;
+  font-size: 0.9rem;
+}
+
+body[data-empty="true"] .time {
+  color: var(--text-muted);
+}

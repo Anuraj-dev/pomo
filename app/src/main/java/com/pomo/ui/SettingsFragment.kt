@@ -37,6 +37,7 @@ import com.google.zxing.MultiFormatWriter
 import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
+import com.pomo.backup.BackupIdentityConflictException
 import com.pomo.backup.BackupRepository
 import com.pomo.backup.PomoBackup
 import com.pomo.cues.CompletionCueFamily
@@ -656,7 +657,15 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         val backup = pendingRestore ?: return
         pendingRestore = null
         viewLifecycleOwner.lifecycleScope.launch {
-            val summary = runCatching { backupRepository.restore(backup) }.getOrNull()
+            val summary =
+                try {
+                    backupRepository.restore(backup)
+                } catch (_: BackupIdentityConflictException) {
+                    showMessage(R.string.backup_restore_identity_conflict)
+                    return@launch
+                } catch (_: Exception) {
+                    null
+                }
             if (summary == null) {
                 showMessage(R.string.backup_restore_failed)
                 return@launch
