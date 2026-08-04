@@ -28,7 +28,7 @@ function isPrivateOrLocalHost(hostname: string): boolean {
   const lower = hostname.toLowerCase().replace(/\.$/, "");
   const isIpv6 = lower.startsWith("[") && lower.endsWith("]");
   let host = isIpv6 ? lower.slice(1, -1) : lower;
-  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::1" || host === "0.0.0.0") {
+  if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "::" || host === "::1" || host === "0.0.0.0") {
     return true;
   }
   const mappedMatch = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(host);

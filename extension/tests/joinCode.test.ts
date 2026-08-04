@@ -82,6 +82,11 @@ describe("join code encode/decode", () => {
     expect(() => decodePayload(encodePayload(payload({ relays: ["wss://[::ffff:127.0.0.1]"] })))).toThrow(/relay/i);
   });
 
+  test("rejects IPv6 unspecified and loopback relay hosts", () => {
+    expect(() => decodePayload(encodePayload(payload({ relays: ["wss://[::]"] })))).toThrow(/relay/i);
+    expect(() => decodePayload(encodePayload(payload({ relays: ["wss://[::1]"] })))).toThrow(/relay/i);
+  });
+
   test("decodePayload rejects relays with userinfo credentials", () => {
     expect(() => decodePayload(encodePayload(payload({ relays: ["wss://user:pass@relay.example.com"] })))).toThrow(
       /relay/i,

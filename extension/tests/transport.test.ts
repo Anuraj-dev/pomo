@@ -18,6 +18,10 @@ interface FakeRelay {
 
 const relays: FakeRelay[] = [];
 
+function socketFactory(url: string): WebSocket {
+  return new WebSocket(url);
+}
+
 function startFakeRelay(config: FakeRelayConfig): FakeRelay {
   const received: unknown[][] = [];
   const server = serve({
@@ -88,7 +92,7 @@ describe("fetchEventsBurst", () => {
     const a = startFakeRelay({ events: [sampleEvent({ id: "a".repeat(64) })] });
     const b = startFakeRelay({ events: [sampleEvent({ id: "b".repeat(64) })] });
 
-    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url, b.url], { timeoutMs: 500 });
+    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url, b.url], { timeoutMs: 500, socketFactory });
 
     expect(result.events.map((e) => e.id).sort()).toEqual(["a".repeat(64), "b".repeat(64)].sort());
     expect(result.completions.filter((c) => c.status === "completed").length).toBe(2);
@@ -105,7 +109,7 @@ describe("fetchEventsBurst", () => {
     const a = startFakeRelay({ events: [shared] });
     const b = startFakeRelay({ events: [shared] });
 
-    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url, b.url], { timeoutMs: 500 });
+    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url, b.url], { timeoutMs: 500, socketFactory });
 
     expect(result.events).toHaveLength(1);
     expect(result.events[0]?.id).toBe("c".repeat(64));
@@ -114,7 +118,7 @@ describe("fetchEventsBurst", () => {
   test("times out relays that never send EOSE but keeps collected events", async () => {
     const a = startFakeRelay({ events: [sampleEvent({ id: "d".repeat(64) })], eose: false });
 
-    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url], { timeoutMs: 20 });
+    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url], { timeoutMs: 20, socketFactory });
 
     expect(result.events.map((e) => e.id)).toEqual(["d".repeat(64)]);
     expect(result.completions).toEqual([{ relayUrl: a.url, status: "timedOut" }]);
@@ -123,16 +127,21 @@ describe("fetchEventsBurst", () => {
   test("marks relays that close the connection as failed", async () => {
     const a = startFakeRelay({ closeOnOpen: true });
 
-    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url], { timeoutMs: 500 });
+    const result = await fetchEventsBurst([{ kinds: [39050] }], [a.url], { timeoutMs: 500, socketFactory });
 
     expect(result.events).toHaveLength(0);
     expect(result.completions[0]?.status).toBe("failed");
   });
 
   test("returns an empty result for no relays", async () => {
-    const result = await fetchEventsBurst([{ kinds: [39050] }], [], { timeoutMs: 500 });
-    expect(result.events).toHaveLength(0);
-    expect(result.completions).toHaveLength(0);
+    const result = await fetchEventsBurst([{ kinds: [39050] }], [], { timeoutMs: 500, socketFactory });
+    expect(result.events).toEqual([]);
+    expect(result.completions).toEqual([]);
+  });
+
+  test("rejects relays that fail the public-relay policy", async () => {
+    const result = await fetchEventsBurst([{ kinds: [39050] }], ["ws://127.0.0.1:1"], { timeoutMs: 500 });
+    expect(result.completions[0]!.status).toBe("failed");
   });
 });
 
@@ -142,7 +151,7 @@ describe("publishEventBurst", () => {
     const b = startFakeRelay({ ok: { ok: true, reason: "" } });
     const event = sampleEvent();
 
-    const result = await publishEventBurst(event, [a.url, b.url], { timeoutMs: 500 });
+    const result = await publishEventBurst(event, [a.url, b.url], { timeoutMs: 500, socketFactory });
 
     expect(result.ok).toBe(true);
     expect(result.okRelayUrl).not.toBeNull();
@@ -155,7 +164,7 @@ describe("publishEventBurst", () => {
     const a = startFakeRelay({ ok: { ok: false, reason: "rate-limited" } });
     const event = sampleEvent();
 
-    const result = await publishEventBurst(event, [a.url], { timeoutMs: 500 });
+    const result = await publishEventBurst(event, [a.url], { timeoutMs: 500, socketFactory });
 
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("rate-limited");
@@ -165,7 +174,7 @@ describe("publishEventBurst", () => {
     const a = startFakeRelay({ ok: null });
     const event = sampleEvent();
 
-    const result = await publishEventBurst(event, [a.url], { timeoutMs: 20 });
+    const result = await publishEventBurst(event, [a.url], { timeoutMs: 20, socketFactory });
 
     expect(result.ok).toBe(false);
     expect(result.completions).toEqual([{ relayUrl: a.url, status: "timedOut" }]);

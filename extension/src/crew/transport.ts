@@ -1,3 +1,4 @@
+import { isValidRelayUrl } from "./joinCode";
 import type { NostrEvent } from "./types";
 
 export const DEFAULT_RELAY_TIMEOUT_MS = 2_750;
@@ -39,6 +40,9 @@ type Settle = (completion: CompletionWithoutRelay) => void;
 type OnMessage = (frame: Frame, socket: WebSocket, subId: string, settle: Settle) => void;
 
 function defaultSocket(url: string): WebSocket {
+  if (!isValidRelayUrl(url)) {
+    throw new Error(`refusing to connect to a non-public relay: ${url}`);
+  }
   return new WebSocket(url);
 }
 

@@ -537,10 +537,13 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           engine.toggle();
           break;
         }
-        case "skip":
+        case "skip": {
+          const before = engine.snapshot();
           engine.tick();
+          if (before.status === "running" && engine.snapshot().status !== "running") break;
           engine.skip();
           break;
+        }
         case "reset":
           engine.tick();
           engine.reset();

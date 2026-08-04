@@ -9,7 +9,7 @@ import { generateIdentity } from "../src/crew/identity";
 import { buildEnvelope } from "../src/crew/snapshot";
 import { signEvent } from "../src/crew/nostrEvent";
 import { buildOwnSnapshot } from "../src/crew/ownSnapshot";
-import { loadCrewBoard, publishOwnSnapshot, refreshMembership, snapshotToRow } from "../src/crew/crewService";
+import { loadCrewBoard, publishOwnSnapshot, refreshMembership, snapshotToRow, type BurstSeam } from "../src/crew/crewService";
 import type { DayStatRow, SessionRow } from "../src/db/types";
 import { SNAPSHOT_EVENT_KIND, type NostrEvent } from "../src/crew/types";
 
@@ -19,6 +19,14 @@ interface FakeRelay {
 }
 
 const relays: FakeRelay[] = [];
+
+function socketFactory(url: string): WebSocket {
+  return new WebSocket(url);
+}
+
+function seams(): BurstSeam {
+  return { socketFactory };
+}
 let db: IDBDatabase;
 let dao: CrewDao;
 
@@ -129,7 +137,7 @@ describe("refreshMembership", () => {
     const relay = startRelay({ events: [await makeEvent()] });
     membership.relays = [relay.url];
 
-    const result = await refreshMembership(membership, dao, NOW);
+    const result = await refreshMembership(membership, dao, NOW, seams());
     expect(result.acceptedEvents).toBe(1);
 
     const rows = await dao.snapshotsForCrew(CREW_ID);
@@ -149,7 +157,7 @@ describe("refreshMembership", () => {
     const relay = startRelay({ events: [tampered] });
     membership.relays = [relay.url];
 
-    const result = await refreshMembership(membership, dao, NOW);
+    const result = await refreshMembership(membership, dao, NOW, seams());
     expect(result.acceptedEvents).toBe(0);
     expect(await dao.snapshotsForCrew(CREW_ID)).toHaveLength(0);
   });
@@ -199,7 +207,7 @@ describe("refreshMembership", () => {
     const relay = startRelay({ events: [olderEvent, newerEvent] });
     membership.relays = [relay.url];
 
-    const result = await refreshMembership(membership, dao, NOW);
+    const result = await refreshMembership(membership, dao, NOW, seams());
     expect(result.acceptedEvents).toBe(2);
     const rows = await dao.snapshotsForCrew(CREW_ID);
     expect(rows).toHaveLength(1);
@@ -224,6 +232,7 @@ describe("refreshMembership", () => {
         offsetMinutes: OFFSET,
       },
       dao,
+      seams(),
     );
     expect(publish.ok).toBe(true);
     expect(publish.okRelayUrl).toBe(relay.url);
@@ -239,7 +248,7 @@ describe("refreshMembership", () => {
   test("loadCrewBoard assembles snapshots with daily aggregates", async () => {
     const relay = startRelay({ events: [await makeEvent()] });
     membership.relays = [relay.url];
-    await refreshMembership(membership, dao, NOW);
+    await refreshMembership(membership, dao, NOW, seams());
 
     const { board, relayStates, memberCount } = await loadCrewBoard(dao, CREW_ID, "today", NOW);
     expect(memberCount).toBe(1);

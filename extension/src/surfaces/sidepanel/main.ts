@@ -44,7 +44,7 @@ attachTicker(
 attachTimerControls(toggleEl, skipEl, resetEl);
 
 historyLinkEl.addEventListener("click", () => {
-  void chrome.tabs.create({ url: chrome.runtime.getURL("newtab.html") });
+  void chrome.tabs.create({ url: chrome.runtime.getURL("newtab.html#history") });
 });
 crewLinkEl.addEventListener("click", () => {
   void chrome.tabs.create({ url: chrome.runtime.getURL("crew.html") });
