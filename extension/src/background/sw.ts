@@ -639,7 +639,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       if (membership === undefined) return { ok: false, error: "crew not found" };
       const displayName = normalizeDisplayName(request.displayName);
       if (displayName === null) return { ok: false, error: "display name is invalid" };
-      membership.displayName = displayName;
+      for (const candidate of crewMemberships) candidate.displayName = displayName;
       await saveMemberships();
       await publishCrews(true);
       return { ok: true, crews: await crewSummaries() };

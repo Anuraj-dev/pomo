@@ -54,9 +54,6 @@ function freshnessOf(relayStates: CrewRelayStateRow[]): { label: string; kind: s
     (state) => state.lastSuccessEpochSeconds !== null && state.lastSuccessEpochSeconds === state.lastAttemptEpochSeconds,
   ).length;
   if (syncing) return { label: "syncing…", kind: "syncing" };
-  if (lastAttempt > 0 && now - lastAttempt < 30 && successCount < relayStates.length) {
-    return { label: "syncing…", kind: "syncing" };
-  }
   if (lastSuccess === 0) return { label: "never synced", kind: "offline" };
   const ageSeconds = now - lastSuccess;
   if (successCount < relayStates.length) {
