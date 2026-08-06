@@ -1,8 +1,8 @@
 import { CrewDao, HistoryDao } from "../db/dao";
 import { openDb } from "../db/schema";
 import type { SessionRow } from "../db/types";
-import { deltasForBlock, splitBlockByCalendarDay } from "../engine/blocks";
-import { dateStringOf, utcOffsetMinutesAt } from "../engine/dateLogic";
+import { splitBlockByCalendarDay } from "../engine/blocks";
+import { dateStringOf, prevDate, utcOffsetMinutesAt } from "../engine/dateLogic";
 import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine/settings";
 import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
@@ -51,6 +51,7 @@ let settings: PomoSettings = { ...DEFAULT_SETTINGS };
 let engine: TimerEngine;
 let earnedByDate = new Map<string, number>();
 let pendingWrite = Promise.resolve();
+let syncPromise: Promise<void> = Promise.resolve();
 let initPromise: Promise<void> | null = null;
 let identityPrivateKey: string | null = null;
 let identityRecoveryRequired = false;
@@ -73,8 +74,8 @@ function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function timezoneOffsetMinutes(): number {
-  return utcOffsetMinutesAt(nowSeconds());
+function timezoneOffsetMinutes(now: number = nowSeconds()): number {
+  return utcOffsetMinutesAt(now);
 }
 
 function earnedBlocksForDate(date: string): number {
@@ -83,7 +84,6 @@ function earnedBlocksForDate(date: string): number {
 
 function commit(block: CompletedBlock): void {
   const offset = utcOffsetMinutesAt;
-  const deltasByDate = new Map(deltasForBlock(block, offset).map((delta) => [delta.date, delta]));
   const segments = splitBlockByCalendarDay({
     start: block.start,
     duration: block.duration,
@@ -92,23 +92,37 @@ function commit(block: CompletedBlock): void {
     tag: block.tag,
     offsetMinutes: offset,
   });
-  for (const segment of segments) {
-    const row: SessionRow = {
-      start: segment.start,
-      date: segment.date,
-      type: segment.type,
-      duration: segment.duration,
-      completed: segment.completed,
-      tag: segment.tag,
-    };
-    const delta = deltasByDate.get(segment.date)!;
-    earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + delta.earnedBlocks);
-    pendingWrite = pendingWrite
-      .catch((error: unknown) => {
-        console.error("session commit failed", error);
-      })
-      .then(() => dao.insertSessionWithDayStats(row, delta));
-  }
+  pendingWrite = pendingWrite
+    .catch((error: unknown) => {
+      console.error("session commit failed", error);
+    })
+    .then(async () => {
+      const insertedStarts = await dao.insertBlock(
+        segments.map((segment) => {
+          const delta =
+            segment.type === "work"
+              ? { earnedBlocks: segment.completed ? 1 : 0, focusMinutes: segment.duration / 60, breakMinutes: 0 }
+              : { earnedBlocks: 0, focusMinutes: 0, breakMinutes: block.completed ? segment.duration / 60 : 0 };
+          return {
+            row: {
+              start: segment.start,
+              date: segment.date,
+              type: segment.type,
+              duration: segment.duration,
+              completed: segment.completed,
+              tag: segment.tag,
+            } satisfies SessionRow,
+            delta,
+          };
+        }),
+      );
+      const inserted = new Set(insertedStarts);
+      for (const segment of segments) {
+        if (segment.completed && inserted.has(segment.start)) {
+          earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + 1);
+        }
+      }
+    });
   if (block.completed) notifyPhaseComplete(block.type);
   if (block.type === "work") {
     void pendingWrite.then(() => publishCrews(true)).catch((error: unknown) => {
@@ -129,13 +143,17 @@ async function syncAfterWrites(): Promise<void> {
 function notifyPhaseComplete(phase: Phase): void {
   if (!settings.soundEnabled) return;
   const isWork = phase === "work";
-  chrome.notifications.create(PHASE_COMPLETE_NOTIFICATION, {
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title: isWork ? "Focus session complete" : "Break over",
-    message: isWork ? "Great work. Time for a break." : "Ready for the next focus session?",
-    priority: 0,
-  });
+  chrome.notifications
+    .create(PHASE_COMPLETE_NOTIFICATION, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: isWork ? "Focus session complete" : "Break over",
+      message: isWork ? "Great work. Time for a break." : "Ready for the next focus session?",
+      priority: 0,
+    })
+    .catch((error: unknown) => {
+      console.error("phase-complete notification failed", error);
+    });
 }
 
 function enginePorts(): ConstructorParameters<typeof TimerEngine>[0] {
@@ -162,11 +180,27 @@ function applyBadge(state: TimerSnapshot): void {
   chrome.action.setBadgeBackgroundColor({ color: badgeColorOf(state.phase) });
 }
 
-async function sync(): Promise<void> {
-  const state = engine.snapshot();
-  await chrome.storage.local.set({ [ENGINE_KEY]: state });
-  await chrome.storage.session.set({ [STATE_KEY]: state });
-  applyBadge(state);
+/** Serialized state sync: snapshots are persisted in call order so an older
+ * write can never overwrite a newer one. The badge is applied from the same
+ * snapshot that was persisted. */
+function sync(): Promise<void> {
+  const operation = syncPromise.then(async () => {
+    const state = engine.snapshot();
+    await chrome.storage.local.set({ [ENGINE_KEY]: state });
+    await chrome.storage.session.set({ [STATE_KEY]: state });
+    applyBadge(state);
+  });
+  syncPromise = operation.catch(() => undefined);
+  return operation;
+}
+
+/** Awaits queued history writes so database-backed reads see durable state. */
+async function awaitHistoryWrites(): Promise<void> {
+  try {
+    await pendingWrite;
+  } catch (error) {
+    console.error("history write failed; continuing with possibly stale data", error);
+  }
 }
 
 async function ensureAlarm(): Promise<void> {
@@ -182,8 +216,12 @@ async function loadSettings(): Promise<void> {
 }
 
 async function loadEarnedCount(extraDate?: string): Promise<void> {
-  const today = dateStringOf(nowSeconds(), timezoneOffsetMinutes());
-  const dates = new Set([today]);
+  const now = nowSeconds();
+  const offset = timezoneOffsetMinutes(now);
+  const today = dateStringOf(now, offset);
+  // Cross-midnight sessions complete against their start date, which for a
+  // bounded work session is at most one day back.
+  const dates = new Set([today, prevDate(today, offset)]);
   if (extraDate !== undefined) dates.add(extraDate);
   await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao.earnedBlocksForDate(date))));
 }
@@ -484,7 +522,7 @@ async function addMembership(
   await saveMemberships();
   await setActiveCrewId(crewId);
   await publishCrews(true);
-  return { ok: true, crews: await crewSummaries() };
+  return { ok: true, crewId, activeCrewId: crewId, crews: await crewSummaries() };
 }
 
 async function buildBoardResponse(crewId: string, window: WindowKey, now: number): Promise<CrewBoardResult> {
@@ -526,6 +564,20 @@ async function init(): Promise<void> {
   await sync();
 }
 
+/** Ticks the engine and reports whether a state transition occurred, so callers
+ * only persist when the visible state actually changed. */
+function reconcileEngine(): boolean {
+  const before = engine.snapshot();
+  engine.tick();
+  const after = engine.snapshot();
+  return (
+    before.status !== after.status ||
+    before.phase !== after.phase ||
+    before.completed !== after.completed ||
+    before.date !== after.date
+  );
+}
+
 async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   switch (request.type) {
     case "pomo:command":
@@ -549,17 +601,20 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           engine.reset();
           break;
         case "extend":
+          // extend() ticks internally and rejects expired/invalid requests.
           engine.extend(request.seconds ?? 0);
           break;
       }
       await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:query":
+      if (reconcileEngine()) await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:stats": {
+      await awaitHistoryWrites();
       const days = await dao.dayStats();
       const now = nowSeconds();
-      const offset = timezoneOffsetMinutes();
+      const offset = timezoneOffsetMinutes(now);
       const today = dateStringOf(now, offset);
       const sum = totals(days);
       return {
@@ -576,9 +631,10 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:history": {
+      await awaitHistoryWrites();
       const [sessions, dayStats] = await Promise.all([dao.allSessions(), dao.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);
-      dayStats.sort((a, b) => (a.date < b.date ? 1 : -1));
+      dayStats.sort((a, b) => b.date.localeCompare(a.date));
       return {
         ok: true,
         history: { sessions: sessions.slice(0, 200), dayStats: dayStats.slice(0, 120) },
@@ -588,8 +644,9 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return { ok: true, settings };
     case "pomo:settings:set":
       settings = sanitizeSettings({ ...settings, ...request.settings });
-      void chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-      void sync();
+      engine.reconfigure();
+      await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+      await sync();
       return { ok: true, settings };
     case "pomo:crew:list":
       return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
@@ -729,20 +786,28 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   }
 }
 
+function logTopLevelError(context: string): (error: unknown) => void {
+  return (error: unknown) => {
+    console.error(`[${context}]`, error);
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  void initOnce();
+  void initOnce().catch(logTopLevelError("onInstalled"));
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void initOnce();
+  void initOnce().catch(logTopLevelError("onStartup"));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return;
-  void initOnce().then(() => {
-    engine.tick();
-    return syncAfterWrites();
-  });
+  void initOnce()
+    .then(() => {
+      engine.tick();
+      return syncAfterWrites();
+    })
+    .catch(logTopLevelError("alarm"));
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -756,4 +821,4 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   return true;
 });
 
-void initOnce();
+void initOnce().catch(logTopLevelError("module"));
