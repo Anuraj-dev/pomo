@@ -1,15 +1,20 @@
-import { dateStringOf, localDateStringOf, nextLocalMidnight, nextLocalMidnightAt } from "./dateLogic";
+import { dateStringOf, nextLocalMidnight, nextLocalMidnightAtOffset } from "./dateLogic";
 import type { DayStat } from "./stats";
 import type { CompletedBlock, Phase } from "./timer";
 
+/** A fixed UTC offset in minutes, or a callback resolving the offset at a given epoch. */
 export type OffsetMinutes = number | ((epochSeconds: number) => number);
 
 function dateAt(epochSeconds: number, offsetMinutes: OffsetMinutes): string {
-  return typeof offsetMinutes === "function" ? localDateStringOf(epochSeconds) : dateStringOf(epochSeconds, offsetMinutes);
+  return typeof offsetMinutes === "function"
+    ? dateStringOf(epochSeconds, offsetMinutes(epochSeconds))
+    : dateStringOf(epochSeconds, offsetMinutes);
 }
 
 function nextMidnightAt(epochSeconds: number, offsetMinutes: OffsetMinutes): number {
-  return typeof offsetMinutes === "function" ? nextLocalMidnightAt(epochSeconds) : nextLocalMidnight(epochSeconds, offsetMinutes);
+  return typeof offsetMinutes === "function"
+    ? nextLocalMidnightAtOffset(epochSeconds, offsetMinutes)
+    : nextLocalMidnight(epochSeconds, offsetMinutes);
 }
 
 export interface BlockSegment {
@@ -21,6 +26,15 @@ export interface BlockSegment {
   tag: string | null;
 }
 
+/**
+ * Splits a session across local calendar days.
+ *
+ * Attribution policy: rounding happens once for the whole block (to whole
+ * minutes); the earned block and tag are attributed to the session's start
+ * date (first segment), regardless of how minutes are distributed. A
+ * zero-length first segment is retained when it carries that metadata so the
+ * start-day earned block/tag survives rounding.
+ */
 export function splitBlockByCalendarDay(opts: {
   start: number;
   duration: number;
@@ -30,6 +44,7 @@ export function splitBlockByCalendarDay(opts: {
   offsetMinutes: OffsetMinutes;
 }): BlockSegment[] {
   const { start, duration, completed, type, tag, offsetMinutes } = opts;
+  if (!Number.isFinite(start) || !Number.isFinite(duration) || duration <= 0) return [];
   const endExclusive = start + duration;
   const rawSegments: Array<{ date: string; start: number; exactSeconds: number }> = [];
   let segmentStart = start;
@@ -55,14 +70,21 @@ export function splitBlockByCalendarDay(opts: {
     minutes[index]! += 1;
     leftover -= 1;
   }
-  return rawSegments.map((segment, index) => ({
-    date: segment.date,
-    start: segment.start,
-    duration: minutes[index]! * 60,
-    type,
-    completed: completed && index === 0,
-    tag: index === 0 ? tag : null,
-  }));
+  return rawSegments
+    .map((segment, index) => ({
+      date: segment.date,
+      start: segment.start,
+      duration: minutes[index]! * 60,
+      type,
+      completed: completed && index === 0,
+      tag: index === 0 ? tag : null,
+    }))
+    .filter((segment, index) => {
+      if (segment.duration > 0) return true;
+      // Keep the metadata-carrying first segment even at zero duration so a
+      // start-day earned block/tag is not lost to rounding.
+      return index === 0 && (segment.completed || segment.tag !== null);
+    });
 }
 
 export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinutes): DayStat[] {
