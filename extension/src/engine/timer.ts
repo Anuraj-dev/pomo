@@ -28,7 +28,6 @@ export const TIMER_STATE_VERSION = 2;
 export interface TimerSnapshot {
   status: Status;
   phase: Phase;
-  nextPhase: Phase;
   startTime: number;
   duration: number;
   remaining: number;
@@ -53,7 +52,7 @@ export class TimerEngine {
 
   constructor(private readonly ports: EnginePorts) {
     const now = ports.now();
-    this.date = this.today();
+    this.date = dateStringOf(now, this.offsetAt(now));
     this.armFullDuration();
     this.tag = ports.tag();
     this.completed = ports.earnedBlocksForDate(this.date);
@@ -94,7 +93,9 @@ export class TimerEngine {
 
   private nextPhaseOf(phase: Phase, completed: number): Phase {
     if (phase === "work") {
-      return (completed + 1) % this.ports.longBreakAfter() === 0 ? "long" : "short";
+      const cadence = this.ports.longBreakAfter();
+      if (!Number.isFinite(cadence) || Math.floor(cadence) < 1) return "short";
+      return (completed + 1) % Math.floor(cadence) === 0 ? "long" : "short";
     }
     return "work";
   }
@@ -137,6 +138,7 @@ export class TimerEngine {
         this.ports.commit({ start: this.startTime, duration: elapsed, type: "work", completed: false, tag: this.tag });
       }
     }
+    // Skipped work is not an earned block, so it never earns a long break.
     this.phase = this.phase === "work" ? "short" : "work";
     this.status = "stopped";
     this.armFullDuration();
@@ -152,9 +154,14 @@ export class TimerEngine {
   }
 
   extend(seconds: number): void {
+    if (!Number.isFinite(seconds) || seconds <= 0) return;
+    const secondsToAdd = Math.floor(seconds);
+    if (secondsToAdd <= 0) return;
+    const now = this.ports.now();
+    this.tick();
     if (this.status !== "running") return;
-    this.duration += seconds;
-    this.lastAction = this.ports.now();
+    this.duration += secondsToAdd;
+    this.lastAction = now;
   }
 
   refreshCompletedCount(): void {
@@ -162,13 +169,24 @@ export class TimerEngine {
     this.completed = this.ports.earnedBlocksForDate(this.date);
   }
 
+  /**
+   * Re-applies settings-dependent state: re-arms a stopped phase so a changed
+   * duration/goal/tag takes effect immediately. Running/paused sessions keep
+   * their in-progress durations until they next start.
+   */
+  reconfigure(): void {
+    this.reconcileDate();
+    if (this.status === "stopped") {
+      this.tag = this.ports.tag();
+      this.armFullDuration();
+    }
+  }
+
   tick(): void {
     const now = this.ports.now();
     this.reconcileDate();
     if (this.status === "running" && this.derivedRemaining() <= 0) {
       this.complete(now);
-    } else {
-      this.lastAction = now;
     }
   }
 
@@ -193,15 +211,15 @@ export class TimerEngine {
     if (saved.version !== TIMER_STATE_VERSION) {
       throw new Error(`unsupported saved state version: ${saved.version}`);
     }
-    this.status = saved.status;
-    this.phase = saved.phase;
-    this.startTime = saved.startTime;
-    this.duration = saved.duration;
-    this.remaining = saved.remaining;
-    this.completed = saved.completed;
-    this.date = saved.date;
-    this.lastAction = saved.lastActionTime;
-    this.tag = saved.tag;
+    this.status = sanitizeStatus(saved.status);
+    this.phase = sanitizePhase(saved.phase);
+    this.startTime = finiteAtLeast(saved.startTime, 0, "startTime");
+    this.duration = finiteAtLeast(saved.duration, 0, "duration");
+    this.remaining = finiteAtLeast(saved.remaining, 0, "remaining");
+    this.completed = finiteAtLeast(saved.completed, 0, "completed");
+    this.date = sanitizeDate(saved.date);
+    this.lastAction = Number.isFinite(saved.lastActionTime) ? saved.lastActionTime : now;
+    this.tag = typeof saved.tag === "string" ? saved.tag : "";
     if (this.status === "running") {
       this.tick();
     } else if (this.date !== this.today()) {
@@ -216,7 +234,6 @@ export class TimerEngine {
     return {
       status: this.status,
       phase: this.phase,
-      nextPhase: this.nextPhaseOf(this.phase, this.completed),
       startTime: this.startTime,
       duration: this.duration,
       remaining: Math.ceil(running ? this.derivedRemaining() : this.remaining),
@@ -228,4 +245,32 @@ export class TimerEngine {
       version: TIMER_STATE_VERSION,
     };
   }
+}
+
+const VALID_STATUSES: ReadonlySet<string> = new Set(["stopped", "running", "paused"]);
+const VALID_PHASES: ReadonlySet<string> = new Set(["work", "short", "long"]);
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function sanitizeStatus(value: Status): Status {
+  if (!VALID_STATUSES.has(value)) throw new Error(`invalid saved status: ${String(value)}`);
+  return value;
+}
+
+function sanitizePhase(value: Phase): Phase {
+  if (!VALID_PHASES.has(value)) throw new Error(`invalid saved phase: ${String(value)}`);
+  return value;
+}
+
+function finiteAtLeast(value: number, min: number, field: string): number {
+  if (!Number.isFinite(value) || value < min) {
+    throw new Error(`invalid saved ${field}: ${String(value)}`);
+  }
+  return value;
+}
+
+function sanitizeDate(value: string): string {
+  if (typeof value !== "string" || !DATE_PATTERN.test(value)) {
+    throw new Error(`invalid saved date: ${String(value)}`);
+  }
+  return value;
 }

@@ -168,7 +168,6 @@ describe("TimerEngine — restore from saved state", () => {
     const saved = {
       status: "running" as const,
       phase: "work" as const,
-      nextPhase: "long" as const,
       startTime: NOW - 1500,
       duration: 1500,
       remaining: 0,

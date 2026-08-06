@@ -35,13 +35,12 @@ function at(engine: TimerEngine, now: number) {
 }
 
 describe("TimerEngine — initial state", () => {
-  test("starts stopped, work phase, full duration armed, next is short", () => {
+  test("starts stopped, work phase, full duration armed", () => {
     const ports = makePorts();
     const engine = new TimerEngine(ports);
     const s = engine.snapshot();
     expect(s.status).toBe("stopped");
     expect(s.phase).toBe("work");
-    expect(s.nextPhase).toBe("short");
     expect(s.duration).toBe(1500);
     expect(s.remaining).toBe(1500);
     expect(s.completed).toBe(0);
@@ -122,7 +121,6 @@ describe("TimerEngine — completion & cadence", () => {
     const ports = makePorts();
     ports.setEarnedBlocksForDate(3);
     const engine = new TimerEngine(ports);
-    expect(engine.snapshot().nextPhase).toBe("long");
     engine.toggle();
     at(engine, NOW + 1500);
     engine.tick();
@@ -130,15 +128,17 @@ describe("TimerEngine — completion & cadence", () => {
     expect(engine.snapshot().phase).toBe("long");
   });
 
-  test("nextPhase preview flips to long for the Nth upcoming block", () => {
+  test("break completion returns to work", () => {
     const ports = makePorts();
     ports.setEarnedBlocksForDate(3);
     const engine = new TimerEngine(ports);
-    expect(engine.snapshot().nextPhase).toBe("long");
     engine.toggle();
     at(engine, NOW + 1500);
     engine.tick();
     expect(engine.snapshot().phase).toBe("long");
-    expect(engine.snapshot().nextPhase).toBe("work");
+    engine.toggle();
+    at(engine, NOW + 1800);
+    engine.tick();
+    expect(engine.snapshot().phase).toBe("work");
   });
 });
