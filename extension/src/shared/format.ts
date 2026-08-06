@@ -6,7 +6,7 @@ export interface MillisecondsFormat {
 }
 
 export function formatMilliseconds(totalSeconds: number): MillisecondsFormat {
-  const millisecondsTotal = Math.max(0, Math.floor(totalSeconds * 1000));
+  const millisecondsTotal = Math.max(0, Math.floor(Number.isFinite(totalSeconds) ? totalSeconds : 0) * 1000);
   const whole = Math.floor(millisecondsTotal / 1000);
   const minutes = Math.floor(whole / 60);
   const seconds = whole % 60;
@@ -17,7 +17,7 @@ export function formatMilliseconds(totalSeconds: number): MillisecondsFormat {
 }
 
 export function formatMss(totalSeconds: number): string {
-  const seconds = Math.max(0, Math.floor(totalSeconds));
+  const seconds = Math.max(0, Math.floor(Number.isFinite(totalSeconds) ? totalSeconds : 0));
   const minutes = Math.floor(seconds / 60);
   return `${minutes}:${String(seconds % 60).padStart(2, "0")}`;
 }

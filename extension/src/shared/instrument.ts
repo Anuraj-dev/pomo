@@ -1,7 +1,7 @@
 import type { TimerSnapshot } from "../engine/timer";
 import { formatMilliseconds, phaseLabel, statusLabel } from "./format";
 import { readSurfaceStats } from "./statsReader";
-import { sendCommand } from "./surface";
+import { applyTheme, sendCommand, subscribeState } from "./surface";
 
 export function remainingOf(state: TimerSnapshot): number {
   if (state.status === "running") {
@@ -57,24 +57,41 @@ export function applyInstrument(
   }
 }
 
+/** Renders at a fixed cadence while the timer runs, once per static-state
+ * transition otherwise, and returns a stop() function. */
 export function attachTicker(
   getLatest: () => TimerSnapshot | null,
   render: (state: TimerSnapshot) => void,
   intervalMs = 50,
-): void {
-  setInterval(() => {
+): () => void {
+  let lastStatus: TimerSnapshot["status"] | null = null;
+  const timer = setInterval(() => {
     const latest = getLatest();
-    if (latest !== null) render(latest);
+    if (latest === null) return;
+    if (latest.status !== "running") {
+      // Static states only need one render; constant ticking is wasted work.
+      if (lastStatus === latest.status) return;
+      lastStatus = latest.status;
+    }
+    render(latest);
   }, intervalMs);
+  return () => clearInterval(timer);
 }
 
+let statsRequestSeq = 0;
+
+/** Loads surface stats, validating values and ignoring stale responses so
+ * concurrent refreshes cannot overwrite newer data. */
 export async function refreshStats(todayEl: HTMLElement, minutesEl: HTMLElement, streakEl: HTMLElement): Promise<void> {
+  const requestSeq = ++statsRequestSeq;
   try {
     const stats = await readSurfaceStats();
-    todayEl.textContent = String(stats.todayEarned);
-    minutesEl.textContent = String(Math.round(stats.totalFocusMinutes));
-    streakEl.textContent = String(stats.streak);
+    if (requestSeq !== statsRequestSeq) return;
+    todayEl.textContent = String(Number.isFinite(stats.todayEarned) ? stats.todayEarned : 0);
+    minutesEl.textContent = String(Number.isFinite(stats.totalFocusMinutes) ? Math.round(stats.totalFocusMinutes) : 0);
+    streakEl.textContent = String(Number.isFinite(stats.streak) ? stats.streak : 0);
   } catch {
+    if (requestSeq !== statsRequestSeq) return;
     todayEl.textContent = "—";
     minutesEl.textContent = "—";
     streakEl.textContent = "—";
@@ -85,4 +102,44 @@ export function attachTimerControls(toggleEl: HTMLElement, skipEl: HTMLElement, 
   toggleEl.addEventListener("click", () => sendCommand("toggle"));
   skipEl.addEventListener("click", () => sendCommand("skip"));
   resetEl.addEventListener("click", () => sendCommand("reset"));
+}
+
+export interface InstrumentBootstrap {
+  phaseEl: HTMLElement;
+  statusEl: HTMLElement;
+  timeEl: HTMLElement;
+  fractionEl: HTMLElement;
+  progressEl?: HTMLElement;
+  toggleEl: HTMLElement;
+  skipEl: HTMLElement;
+  resetEl: HTMLElement;
+  toggleText?: (state: TimerSnapshot) => string;
+  onState?: (state: TimerSnapshot) => void;
+}
+
+/** Shared wiring for simple instrument surfaces (popup/sidepanel): theme,
+ * state subscription, ticking, and controls, in one place so the surfaces do
+ * not drift. */
+export function bootInstrument(bodyEl: HTMLElement, config: InstrumentBootstrap): void {
+  let latest: TimerSnapshot | null = null;
+  applyTheme();
+  subscribeState((state) => {
+    latest = state;
+    applyInstrument(bodyEl, config.phaseEl, config.statusEl, state, {
+      timeEl: config.timeEl,
+      fractionEl: config.fractionEl,
+      progressEl: config.progressEl,
+      toggleEl: config.toggleEl,
+      toggleText: config.toggleText,
+    });
+    config.onState?.(state);
+  });
+  attachTicker(
+    () => latest,
+    (state) => {
+      renderTime(config.timeEl, config.fractionEl, remainingOf(state));
+      if (config.progressEl !== undefined) renderProgress(config.progressEl, state);
+    },
+  );
+  attachTimerControls(config.toggleEl, config.skipEl, config.resetEl);
 }
