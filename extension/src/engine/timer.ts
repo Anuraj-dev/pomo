@@ -35,6 +35,7 @@ export interface TimerSnapshot {
   goal: number;
   date: string;
   lastUpdatedTime: number;
+  revision: number;
   tag: string;
   version: number;
 }
@@ -46,6 +47,7 @@ export class TimerEngine {
   private duration = 0;
   private remaining = 0;
   private lastAction = 0;
+  private revision = 0;
   private completed = 0;
   private date = "";
   private tag = "";
@@ -219,6 +221,7 @@ export class TimerEngine {
     this.completed = finiteAtLeast(saved.completed, 0, "completed");
     this.date = sanitizeDate(saved.date);
     this.lastAction = Number.isFinite(saved.lastUpdatedTime) ? saved.lastUpdatedTime : now;
+    this.revision = Number.isFinite(saved.revision) && saved.revision >= 0 ? saved.revision : 0;
     this.tag = typeof saved.tag === "string" ? saved.tag : "";
     if (this.status === "running") {
       this.tick();
@@ -230,6 +233,7 @@ export class TimerEngine {
   }
 
   snapshot(): TimerSnapshot {
+    this.revision += 1;
     const running = this.status === "running";
     return {
       status: this.status,
@@ -241,6 +245,7 @@ export class TimerEngine {
       goal: this.ports.goal(),
       date: this.date,
       lastUpdatedTime: this.lastAction,
+      revision: this.revision,
       tag: this.tag,
       version: TIMER_STATE_VERSION,
     };

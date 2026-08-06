@@ -115,7 +115,7 @@ function commit(block: CompletedBlock): void {
       );
       const inserted = new Set(insertedStarts);
       for (const segment of segments) {
-        if (segment.completed && inserted.has(segment.start)) {
+        if (segment.type === "work" && segment.completed && inserted.has(segment.start)) {
           earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + 1);
         }
       }
@@ -178,10 +178,12 @@ function applyBadge(state: TimerSnapshot): void {
 }
 
 /** Serialized state sync: snapshots are persisted in call order so an older
- * write can never overwrite a newer one. The badge is applied from the same
- * snapshot that was persisted. */
+ * write can never overwrite a newer one. A tick runs first so an expired
+ * running session is never persisted as still running (tick is idempotent).
+ * The badge is applied from the same snapshot that was persisted. */
 function sync(): Promise<void> {
   const operation = syncPromise.then(async () => {
+    engine.tick();
     const state = engine.snapshot();
     await chrome.storage.local.set({ [ENGINE_KEY]: state });
     await chrome.storage.session.set({ [STATE_KEY]: state });

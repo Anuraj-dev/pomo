@@ -12,12 +12,13 @@ export function requiredElement<T extends HTMLElement = HTMLElement>(id: string)
 
 /** State subscription that tolerates a stale initial query: a storage event can
  * land after the query response (or vice versa), so each candidate is applied
- * only if it is at least as new as the last applied snapshot. */
+ * only if it is strictly newer (by monotonic publish revision) than the last
+ * applied snapshot. */
 export function subscribeState(onState: (state: TimerSnapshot) => void): void {
-  let lastAppliedActionTime = -Infinity;
+  let lastAppliedRevision = -Infinity;
   const apply = (state: TimerSnapshot): void => {
-    if (state.lastUpdatedTime < lastAppliedActionTime) return;
-    lastAppliedActionTime = state.lastUpdatedTime;
+    if (state.revision <= lastAppliedRevision) return;
+    lastAppliedRevision = state.revision;
     onState(state);
   };
   chrome.storage.onChanged.addListener((changes, area) => {

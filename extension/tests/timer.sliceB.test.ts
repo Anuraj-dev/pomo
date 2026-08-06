@@ -175,6 +175,7 @@ describe("TimerEngine — restore from saved state", () => {
       goal: 8,
       date: dateStringOf(NOW, OFFSET),
       lastUpdatedTime: NOW - 1500,
+      revision: 0,
       tag: "Work",
       version: 2,
     };
@@ -230,6 +231,7 @@ describe("TimerEngine — restore from saved state", () => {
       goal: 8,
       date: dateStringOf(NOW, OFFSET),
       lastUpdatedTime: NOW,
+      revision: 0,
       tag: "Work",
       version: 2,
     };
@@ -249,6 +251,7 @@ describe("TimerEngine — restore from saved state", () => {
       goal: 8,
       date: "2026-99-99",
       lastUpdatedTime: NOW,
+      revision: 0,
       tag: "Work",
       version: 2,
     };
