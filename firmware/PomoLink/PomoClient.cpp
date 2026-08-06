@@ -29,7 +29,9 @@ const unsigned long kPollIntervalMs = 30000;
 const unsigned long kConnectingPollMs = 3000;    // faster REST while CONNECTING
 const unsigned long kOfflineProbeMs = 5000;      // REST reachability while OFFLINE
 const unsigned long kStaleAfterMs = 45000;       // SYNCED / CONNECTING → OFFLINE
-const unsigned long kBootProbeMs = 45000;        // WiFi wait + post-WiFi DISCOVERING
+// Each phase gets this budget separately: WiFi wait, then DISCOVERING restarts
+// the clock on association (see tickWifi). Worst case ~2 * kBootProbeMs.
+const unsigned long kBootProbeMs = 45000;
 const unsigned long kRediscoverMs = 90000;       // OFFLINE baseline after fast retries
 const unsigned long kProbeRetryMs = 1000;        // short retry inside probe
 const unsigned long kUnpairedRetryMs = 300000;   // 5 minutes

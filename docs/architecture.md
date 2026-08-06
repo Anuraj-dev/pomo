@@ -171,22 +171,37 @@ Remote clients are thin:
 
 The NodeMCU desk device (`firmware/PomoLink/`) is a **hybrid** client:
 
-- **SYNC:** phone is the sole live clock. Desk mirrors WebSocket (+ REST) state,
-  sends control commands, and buzzes on `phase_complete` from the phone.
+- **SYNC:** phone is the sole live clock. Desk mirrors WebSocket (+ REST) state
+  with lag projection and stale-frame rejection (apply snapshot before
+  re-anchoring epoch cache), sends control commands, and buzzes on
+  `phase_complete` from the phone. Config is fetched on enter-SYNC (retry) and
+  refreshed periodically while SYNCED; `daily_goal` may be `0`.
 - **OFFLINE:** desk owns countdown, buzzer, and buttons. Completed sessions are
-  queued locally (bounded). On reconnect the desk flushes history via
-  `POST /api/sessions/import` and may `POST /api/timer/adopt` if it still holds
-  a running/paused timer: always when the phone is stopped; when both are live,
-  only if desk remaining is strictly less than phone remaining (least-remaining);
-  same session is always allowed. HTTP 409 `timer_busy` (phone remaining ≤ desk
-  remaining on a different session) means the desk abandons its local live clock
-  and snaps to the phone.
+  queued on LittleFS (`/pomo_sessions.json`, crash-safer temp+rename, validated
+  load). A live running/paused timer is snapshotted to `/pomo_timer.json` so it
+  survives reboot. Boot without WiFi (or after the boot probe: WiFi wait ~45 s,
+  then a fresh DISCOVERING window ~45 s after association)
+  becomes offline-usable (`~`), not stuck on “Starting up”.
+- **Reconnect:** progressive rediscover (fast retries then ~90 s) plus REST
+  reachability probes on a known host. Enter-SYNC starts from the first healthy
+  WS `state` **or** `GET /api/status` while CONNECTING, then
+  `POST /api/sessions/import`, then optional `POST /api/timer/adopt` under
+  least-remaining (phone stopped always; same session always; both live only
+  when desk remaining is strictly less). Live adopt requires `start_time > 0`.
+  HTTP 409 `timer_busy` means the desk snaps to the phone. After adopt,
+  **Room** is the source of truth for today's `completed` count on the phone.
 
 There is never dual live ownership after merge: one winner under least
 remaining; once SYNCED the phone owns the sole live clock.
 
-While serving, the service advertises `_pomo._tcp` over mDNS so LAN clients
-resolve the phone by name. Registration failures retry with bounded backoff;
-desk discovery token-probes multiple responders rather than taking the first.
+LCD connection markers: space = SYNCED, `~` = OFFLINE, `.` = probe/reconnect
+pipeline, `?` = unpaired (token rejected; local timer still usable).
 
-See [protocol.md](protocol.md) for endpoint details.
+While serving, the service advertises `_pomo._tcp` over mDNS so LAN clients
+resolve the phone by name. Async registration failures retry with bounded
+exponential backoff (phone advertiser). Desk discovery token-probes multiple
+responders and selects the first HTTP 200; a configured host/port fallback wins
+outright and skips mDNS.
+
+See [protocol.md](protocol.md) for endpoint details and
+[firmware/README.md](../firmware/README.md) for desk timings and wiring.

@@ -239,29 +239,37 @@ becomes a millis-driven toggle with a step counter.
 
 ```text
 BOOT ─▶ WIFI ─▶ DISCOVERING ─▶ CONNECTING ─▶ SYNCED
-                  ▲     │            │            │
-                  │     │            │            ├─▶ OFFLINE (~) ──▶ (90s) ──▶ DISCOVERING
-                  │     │            │            └─▶ UNPAIRED (?) ──▶ (5 min) ──▶ DISCOVERING
-                  │     └─ boot probe ~45s (DISCOVERING only) ─▶ OFFLINE
-                  └──────── rediscover / unpaired cooldown ──────────┘
+  │       │         ▲     │            │            │
+  │       │         │     │            │            ├─▶ OFFLINE (~) ──▶ progressive rediscover
+  │       │         │     │            │            │                 + REST known-host probe
+  │       │         │     │            │            └─▶ UNPAIRED (?) ──▶ (5 min) ──▶ DISCOVERING
+  │       │         │     └─ boot probe (WiFi wait ~45s; DISCOVERING restarts ~45s) ─▶ OFFLINE
+  └───────┴─────────┴──────── rediscover / unpaired cooldown ──────────┘
 ```
 
 - `DISCOVERING` queries `MDNS.queryService("pomo", "tcp")` unless
-  `POMO_HOST_FALLBACK` is set (configured host skips mDNS entirely). Boot
-  probe (~45 s after WiFi) hard-cuts only while still `DISCOVERING`.
+  `POMO_HOST_FALLBACK` is set (configured host skips mDNS entirely) or a
+  known host was just REST-proven while OFFLINE. Multi-responder: token-probe
+  each candidate; select first HTTP 200. Boot probe is two sequential ~45 s
+  windows: WiFi wait up to ~45 s, then on association the probe clock restarts
+  for a fresh DISCOVERING ~45 s (worst case ~90 s to offline-usable). Hard-cuts
+  only while still `DISCOVERING` / WiFi wait — not while `CONNECTING`.
 - `CONNECTING` opens `/ws` and sends `{"type":"hello","token":"..."}` as the
   first frame. The boot probe watchdog does **not** hard-cut `CONNECTING`;
   handshake/hello wait is owned by the ~45 s socket-stale window (and
-  enter-SYNC is not aborted mid-pipeline). First good `state` frame runs the
-  enter-SYNC pipeline (import → adopt → config cache). Immediate close after
-  hello is probed via REST; HTTP 401 becomes `UNPAIRED` (`?`) rather than
-  silent reconnect loops.
-- Offline rediscover is a fixed ~90 s cadence (not exponential hammering).
-  Unpaired cooldown is ~5 minutes.
-- **Heartbeat (while SYNCED/CONNECTING):** poll `GET /api/status` every 30 s to
-  correct drift and detect half-open sockets. REST snapshots only apply while
-  already SYNCED so a poll cannot clobber a live offline timer. Socket stale
-  ~45 s or WS disconnect leaves SYNC for OFFLINE.
+  enter-SYNC is not aborted mid-pipeline). First good WS `state` **or**
+  healthy `GET /api/status` while CONNECTING runs the enter-SYNC pipeline
+  (import → adopt → config cache). Immediate close after hello is probed via
+  REST; HTTP 200 enters SYNC, HTTP 401 becomes `UNPAIRED` (`?`).
+- Offline rediscover is progressive (~3 s → ~8 s → ~20 s → ~90 s baseline),
+  not a fixed 90 s only. Unpaired cooldown is ~5 minutes. While OFFLINE with a
+  known host, REST reachability ~every 5 s can force rediscover early.
+- **Heartbeat (while SYNCED/CONNECTING):** poll `GET /api/status` every 30 s
+  while SYNCED (~3 s while CONNECTING). While SYNCED, REST applies with lag
+  projection + stale rejection (same as WS). While CONNECTING, healthy status
+  completes enter-SYNC. While OFFLINE, status is reachability only (does not
+  clobber the desk timer). Socket stale ~45 s or WS disconnect leaves SYNC for
+  OFFLINE.
 
 ### 2.6 Time model
 
@@ -375,17 +383,18 @@ direction is **hybrid offline mode**:
 | Topic | Behaviour |
 | --- | --- |
 | Ownership | SYNC → phone sole live clock. OFFLINE / UNPAIRED → desk sole live clock. Never both. |
-| Boot | After WiFi, probe phone ≤45 s while DISCOVERING (marker `.`). Boot watchdog does not hard-cut CONNECTING (handshake uses ~45 s socket stale) or abort enter-SYNC mid-pipeline. On DISCOVERING timeout, become offline-usable immediately (`~`), not stuck on “Starting up”. |
-| Rediscover | While OFFLINE, try phone every ~90 s (marker `.` only while probing). |
+| Boot | Two sequential ~45 s windows (marker `.`): WiFi wait up to ~45 s; after association, DISCOVERING restarts for another ~45 s (worst case ~90 s). Boot watchdog does not hard-cut CONNECTING (handshake uses ~45 s socket stale) or abort enter-SYNC mid-pipeline. Missing SSID / either timeout → offline-usable (`~`), not stuck on “Starting up”. |
+| Rediscover | Progressive: ~3 s → ~8 s → ~20 s → ~90 s baseline while OFFLINE. REST reachability probe of known host ~every 5 s can skip mDNS. Marker `.` only while actively probing / CONNECTING. |
 | Stale / leave SYNC | No socket contact for ~45 s, WS disconnect, or WiFi loss → local takeover from last remaining (`~`). |
-| Local engine | Full Pomodoro: start/pause/resume, skip, reset, extend +300 s; natural complete buzzes and advances phase. |
-| History queue | Up to 32 completed sessions on LittleFS; drop oldest when full. |
-| Enter SYNC order | (1) first WS `state` (2) `POST /api/sessions/import` (3) drop accepted ids (4) if desk live: adopt when phone stopped, or when both live and desk remaining < phone remaining (strict least-remaining); same session always (5) on 409 (phone rem ≤ desk rem) or phone wins by remaining → snap to phone (6) cache `server_time` + `GET /api/config`. |
+| Local engine | Full Pomodoro: start/pause/resume, skip, reset, extend +300 s; natural complete buzzes and advances phase. Live timer snapshot `/pomo_timer.json` survives reboot. |
+| History queue | Up to 32 completed sessions on LittleFS (`/pomo_sessions.json`); temp+rename + validation; drop oldest when full; real `start_time` when known. |
+| Enter SYNC order | (1) first WS `state` **or** healthy `GET /api/status` while CONNECTING (2) `POST /api/sessions/import` (3) drop accepted ids (4) if desk live: adopt when phone stopped, or when both live and desk remaining < phone remaining (strict least-remaining); same session always; live adopt needs `start_time > 0` (5) on 409 (phone rem ≤ desk rem) or phone wins by remaining → snap to phone (6) cache `server_time` + `GET /api/config` (retry; periodic refresh while SYNCED). |
 | Unpaired | Bad token → marker `?`, 5 min cooldown, **local controls still work**. |
 | Sync trigger | Opening Pomo on the LAN is enough; no desk-side “sync now” gesture. |
 
 Phone API additives (see `docs/protocol.md`): `server_time` on status/state,
-`POST /api/sessions/import`, `POST /api/timer/adopt`.
+`POST /api/sessions/import`, `POST /api/timer/adopt` (Room owns `completed`
+after adopt).
 
 ## Addendum — Hybrid offline mode (2026-08-06)
 
@@ -394,17 +403,43 @@ approval and the “no standalone timer” non-goal:
 
 1. **Phone optional at the desk.** Desk runs full Pomodoro offline; phone is
    not required for countdown, buzzer, or buttons.
-2. **Ping cadence.** Desk probes the phone every ~90 s while offline (45 s
-   DISCOVERING boot probe first; CONNECTING uses ~45 s socket stale, not the
-   boot-probe hard-cut).
-3. **On connect.** Flush offline history; optionally adopt a live desk timer
-   under least remaining (phone stopped always; both live only if desk
-   remaining is strictly less; same session always); otherwise 409 / snap to
-   phone.
-4. **SYNC.** Phone is sole live clock; desk mirrors WS + REST as in the original
-   design.
-5. **Defaults.** Boot probe 45 s (DISCOVERING only), rediscover 90 s, stale
-   45 s, markers space / `~` / `.` / `?`, queue 32, durations 25/5/15 (cached).
+2. **Ping cadence.** Progressive rediscover while offline (fast first retries,
+   then ~90 s baseline) plus REST reachability on a known host (~5 s). Boot
+   probe: WiFi wait ~45 s then fresh DISCOVERING ~45 s after association;
+   CONNECTING uses ~45 s socket stale, not the boot-probe hard-cut.
+3. **On connect.** Enter-SYNC from WS `state` **or** REST `/api/status` while
+   CONNECTING. Flush offline history; optionally adopt a live desk timer under
+   least remaining (phone stopped always; both live only if desk remaining is
+   strictly less; same session always; live `start_time > 0`); otherwise 409 /
+   snap to phone. Phone sets `completed` from Room after adopt.
+4. **SYNC.** Phone is sole live clock; desk mirrors WS + REST with apply-before-
+   cache lag projection and stale/out-of-order remaining rejection. Config
+   retries and refreshes while SYNCED; `daily_goal` 0 accepted.
+5. **Defaults.** Boot probe two × ~45 s (WiFi wait, then DISCOVERING after
+   association), rediscover progressive then 90 s, stale 45 s, markers space /
+   `~` / `.` / `?`, queue 32, timer snapshot `/pomo_timer.json`, durations
+   25/5/15 (cached).
+6. **mDNS.** Multi-responder token probe selects first HTTP 200; configured host
+   fallback wins; phone `PomoServiceAdvertiser` retries async registration
+   failures with bounded backoff.
+
+## Addendum — Hybrid bugfix contract (code truth, 2026-08-06)
+
+Short lock-in of behaviours implemented on `feat/nodemcu-hardware-timer` (see
+firmware headers and `docs/protocol.md` / `firmware/README.md`):
+
+| # | Behaviour |
+| --- | --- |
+| 1 | CONNECTING + healthy `GET /api/status` completes enter-SYNC (not WS-only). |
+| 2 | Offline boot without WiFi becomes offline-usable (`~`), not stuck Starting up. |
+| 3 | Progressive rediscover (fast then 90 s) + offline REST reachability probe. |
+| 4 | SYNC countdown: apply-before-cache, lag projection, reject stale/out-of-order remaining inflation. |
+| 5 | Config fetch retry + periodic refresh while SYNCED; `daily_goal` 0 accepted. |
+| 6 | Offline timer snapshot survives reboot (`/pomo_timer.json`); real `start_time` for history. |
+| 7 | SessionQueue crash-safer temp+rename + validation on load. |
+| 8 | Adopt: Room is completed source of truth; live adopt requires `start_time > 0`; least-remaining. |
+| 9 | mDNS: multi-responder token probe selects first 200; host fallback wins; phone advertiser retries async failures. |
+| 10 | Markers: space SYNC, `~` OFFLINE, `.` probe, `?` unpaired. |
 
 Firmware user docs: `firmware/README.md`. Client contract: `docs/protocol.md`.
 

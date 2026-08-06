@@ -35,11 +35,13 @@
 // changes land; steady-state state frames use force=false apply (lag project
 // + stale reject). Leave SYNC: local takeover; marker ~; completions enqueue.
 //
-// Boot: WiFi wait and post-WiFi DISCOVERING share the boot-probe budget so a
-// missing SSID cannot strand the UI on "Starting up". Once CONN_CONNECTING,
-// the handshake/hello wait uses the full ~45s socket-stale window instead of
-// the probe cutoff. REST /api/status while CONNECTING can complete enter-SYNC
-// if the socket never delivers a state frame.
+// Boot: WiFi wait and post-WiFi DISCOVERING each get a ~45s probe window; the
+// DISCOVERING clock restarts when WiFi associates so a late join still has a
+// full discovery budget (worst case ~90s). Missing SSID cannot strand the UI
+// on "Starting up". Once CONN_CONNECTING, the handshake/hello wait uses the
+// full ~45s socket-stale window instead of the probe cutoff. REST /api/status
+// while CONNECTING can complete enter-SYNC if the socket never delivers a
+// state frame.
 class PomoClient {
  public:
   void begin(TimerModel* model, SessionQueue* queue, ConfigStore* config);

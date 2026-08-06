@@ -121,10 +121,12 @@ legacy display-only clients.
 Desk / offline-capable clients SHOULD use `server_time` with `remaining` to
 project the live countdown onto wall-clock now (end ≈ `server_time` +
 `remaining` while running) so delayed or out-of-order state frames cannot
-rebase the display to an older remaining. For the same running session
-(`start_time` + `phase`), clients SHOULD ignore snapshots with an older
-`server_time`, and SHOULD treat remaining as monotonic non-increasing unless
-`server_time` advances or `duration` grows (e.g. extend).
+rebase the display to an older remaining. When both a prior epoch basis and a
+new snapshot exist, apply the snapshot (with lag projection) **before**
+re-anchoring the cached epoch so projection uses the previous basis. For the
+same running session (`start_time` + `phase`), clients SHOULD ignore snapshots
+with an older `server_time`, and SHOULD reject remaining inflation that is not
+explained by a larger `duration` (e.g. extend).
 
 ## REST Endpoints
 
@@ -472,20 +474,29 @@ cache writes are best-effort and local-only.
 
 **NodeMCU desk (hybrid) may append history and adopt a live timer.** This is the
 exception to “clients never author state.” While the phone is reachable (SYNC),
-the phone is the sole live clock and the desk mirrors WebSocket state and sends
-REST commands. While the phone is unreachable (OFFLINE), the desk may run a
-local Pomodoro (buzzer, buttons, countdown) and queue completed sessions. On
-reconnect it:
+the phone is the sole live clock and the desk mirrors WebSocket (+ REST) state
+and sends REST commands. While the phone is unreachable (OFFLINE), the desk may
+run a local Pomodoro (buzzer, buttons, countdown), persist a live timer snapshot
+across reboot, and queue completed sessions (LittleFS temp+rename; real phase
+`start_time` when known). On reconnect it:
 
-1. Flushes completed offline sessions with `POST /api/sessions/import` (append-only;
+1. Completes enter-SYNC from the first healthy phone snapshot while CONNECTING:
+   a WebSocket `state` frame **or** authenticated `GET /api/status` HTTP 200
+   (not WS-only). Marker stays `.` until the pipeline finishes.
+2. Flushes completed offline sessions with `POST /api/sessions/import` (append-only;
    phone Room remains canonical after accept).
-2. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
+3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
    when the phone is stopped, or when both are live and desk remaining is
    strictly less than phone remaining (least-remaining). Same session is always
-   allowed.
-3. On adopt `409` (phone remaining ≤ desk remaining on a different session) or
+   allowed. Live payloads require `start_time > 0`; after adopt the phone sets
+   `completed` from Room (desk completed is not authoritative).
+4. On adopt `409` (phone remaining ≤ desk remaining on a different session) or
    when the desk does not try adopt, snaps to phone state.
+5. Caches `server_time` and `GET /api/config` (retry on failure; periodic refresh
+   while SYNCED). `daily_goal` may be `0`.
 
 Never run two live clocks after merge: least remaining wins; once SYNCED the
 phone owns the sole live clock. Opening the Pomo app on the LAN is enough for
-the desk to rediscover and sync; there is no separate desk “push sync” command.
+the desk to rediscover (progressive backoff after leave-SYNC, plus REST
+reachability on a known host) and sync; there is no separate desk “push sync”
+command.
