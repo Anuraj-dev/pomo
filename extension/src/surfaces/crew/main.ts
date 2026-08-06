@@ -811,7 +811,14 @@ function backupSection(): HTMLElement {
             setStatus(portableImportStatus, response.error ?? "import failed", "error");
             return;
           }
-          setStatus(portableImportStatus, "Imported history and Crew data", "ok");
+          const backupSummary = response.backupImport;
+          setStatus(
+            portableImportStatus,
+            backupSummary === undefined
+              ? "Imported history and Crew data"
+              : `Imported ${backupSummary.sessionsAdded} sessions over ${backupSummary.daysAffected} days (${backupSummary.conflicts} conflicts)`,
+            "ok",
+          );
           await loadCrews();
         } catch {
           setStatus(portableImportStatus, "import failed", "error");

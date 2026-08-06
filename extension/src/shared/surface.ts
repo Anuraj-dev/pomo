@@ -1,8 +1,7 @@
+import { isValidTheme } from "../engine/settings";
 import type { PomoSettings } from "../engine/settings";
 import type { TimerSnapshot } from "../engine/timer";
 import { SETTINGS_KEY, STATE_KEY, type PomoCommand, type PomoRequest, type PomoResponse } from "./messages";
-
-const THEMES: ReadonlySet<string> = new Set(["system", "light", "dark"]);
 
 /** Non-null DOM lookup with a descriptive failure for markup/script drift. */
 export function requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -17,8 +16,8 @@ export function requiredElement<T extends HTMLElement = HTMLElement>(id: string)
 export function subscribeState(onState: (state: TimerSnapshot) => void): void {
   let lastAppliedActionTime = -Infinity;
   const apply = (state: TimerSnapshot): void => {
-    if (state.lastActionTime < lastAppliedActionTime) return;
-    lastAppliedActionTime = state.lastActionTime;
+    if (state.lastUpdatedTime < lastAppliedActionTime) return;
+    lastAppliedActionTime = state.lastUpdatedTime;
     onState(state);
   };
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -57,22 +56,17 @@ function setTheme(theme: PomoSettings["theme"]): void {
   }
 }
 
-function validTheme(value: unknown): PomoSettings["theme"] | null {
-  return typeof value === "string" && THEMES.has(value) ? (value as PomoSettings["theme"]) : null;
-}
-
 /** Apply the saved theme. Pass an already-known theme to avoid a flash before
  * the async storage read resolves; invalid stored values fall back to system. */
 export function applyTheme(initial?: PomoSettings["theme"]): void {
-  const boot = validTheme(initial);
-  if (boot !== null) setTheme(boot);
+  if (isValidTheme(initial)) setTheme(initial);
   else setTheme("system");
   void chrome.storage.local
     .get(SETTINGS_KEY)
     .then((stored) => {
       const settings = stored[SETTINGS_KEY] as Partial<PomoSettings> | undefined;
-      const theme = validTheme(settings?.theme);
-      if (theme !== null) setTheme(theme);
+      const theme = settings?.theme;
+      if (isValidTheme(theme)) setTheme(theme);
     })
     .catch(() => {
       // Theme application is best-effort; keep the boot/default theme.
@@ -84,8 +78,8 @@ export function subscribeTheme(onChange: (theme: PomoSettings["theme"]) => void)
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local") return;
     const settings = changes[SETTINGS_KEY]?.newValue as Partial<PomoSettings> | undefined;
-    const theme = validTheme(settings?.theme);
-    if (theme !== null) {
+    const theme = settings?.theme;
+    if (isValidTheme(theme)) {
       setTheme(theme);
       onChange(theme);
     }

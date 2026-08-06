@@ -291,7 +291,10 @@ async function exportPortableBackup(): Promise<string> {
   });
 }
 
-async function importPortableBackup(payloadJson: string, confirmIdentityReplacement: boolean): Promise<PomoResponse> {
+async function importPortableBackup(
+  payloadJson: string,
+  confirmIdentityReplacement: boolean,
+): Promise<PomoResponse & { backupImport?: { sessionsAdded: number; daysAffected: number; conflicts: number } }> {
   const backup = decodePortableBackup(payloadJson);
   if (backup.crew.memberships.some((membership) => membership.protocolVersion !== 2)) {
     return { ok: false, error: "backup contains an unsupported Crew protocol version" };
@@ -333,6 +336,9 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
     backup.history.sessions.map((session) => ({ ...session })),
   );
+  if (historySummary.conflicts > 0) {
+    console.warn(`backup import found ${historySummary.conflicts} session conflicts; local history wins`);
+  }
   await loadEarnedCount();
   engine.refreshCompletedCount();
   for (const snapshot of backup.crew.snapshots) {
@@ -340,7 +346,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
     );
-    await crewDao.upsertLatest(snapshot, daily);
+    await crewDao.upsertLatest(snapshot, daily, nowSeconds());
   }
   for (const hidden of backup.crew.hiddenMembers) {
     if (!mergedCrewIds.has(hidden.crewId)) continue;
@@ -373,6 +379,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   return {
     ok: true,
     crews: await crewSummaries(),
+    backupImport: historySummary,
     restoreSummary: {
       ...historySummary,
       membershipsAdded: Math.max(0, mergedMemberships.length - previousMembershipCount),

@@ -183,6 +183,7 @@ export interface PomoResponse {
   recovery?: string;
   backup?: string;
   restoreSummary?: { sessionsAdded: number; daysAffected: number; membershipsAdded: number; identityRestored: boolean };
+  backupImport?: { sessionsAdded: number; daysAffected: number; conflicts: number };
   needsIdentityConfirmation?: boolean;
   stats?: SurfaceStats;
   history?: HistoryPayload;

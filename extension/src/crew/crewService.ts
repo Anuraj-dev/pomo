@@ -10,7 +10,7 @@ import { SNAPSHOT_EVENT_KIND } from "./types";
 import type { CrewMembership, DailyAggregate, SnapshotPlain } from "./types";
 
 export interface CrewStore {
-  upsertLatest(snapshot: CrewSnapshotRowLike, daily: CrewDailyRowLike[]): Promise<boolean>;
+  upsertLatest(snapshot: CrewSnapshotRowLike, daily: CrewDailyRowLike[], now?: number): Promise<boolean>;
   updateRelayState(
     crewId: string,
     relayUrl: string,
@@ -156,7 +156,7 @@ export async function refreshMembership(
     if (snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) continue;
     if (snapshot.publishedAtEpochSeconds > event.created_at + MAX_CREATED_AT_SKEW_SECONDS) continue;
     const daily = dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates);
-    if (await dao.upsertLatest(snapshotToRow(snapshot), daily)) {
+    if (await dao.upsertLatest(snapshotToRow(snapshot), daily, now)) {
       accepted++;
     }
   }
@@ -197,6 +197,7 @@ export async function publishOwnSnapshot(
   await dao.upsertLatest(
     snapshotToRow(snapshot),
     dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates),
+    now,
   );
   const event = await signEvent(
     {
