@@ -16,7 +16,7 @@ const URI_PREFIX = "pomo://crew/join/v2/";
 export const RAW_PREFIX = "pomo-crew.v2.";
 const LEGACY_PREFIX = "pomo-crew.";
 const MAX_ENCODED_LENGTH = 16 * 1024;
-const MAX_RELAYS = 8;
+export const MAX_RELAYS = 8;
 
 function randomHex(byteCount: number): string {
   const bytes = new Uint8Array(byteCount);
@@ -65,6 +65,16 @@ export function isValidRelayUrl(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Canonical form used for dedup: lowercases the hostname and normalizes the
+ * URL, so textual variants of the same relay compare equal. Returns null when
+ * the value is not a valid public relay URL. */
+export function canonicalRelayUrl(value: string): string | null {
+  if (!isValidRelayUrl(value)) return null;
+  const url = new URL(value);
+  url.hostname = url.hostname.toLowerCase();
+  return url.href;
 }
 
 export function encodePayload(p: CrewJoinPayload): string {
@@ -132,17 +142,25 @@ export function decodePayload(input: string): CrewJoinPayload {
   if (crewName === null) throw new Error("join code payload has an invalid crew name");
 
   const relays: string[] = [];
+  const canonicalRelays: string[] = [];
   if (data.relays !== undefined) {
     if (!Array.isArray(data.relays)) throw new Error("join code payload has an invalid relays field");
     for (const relay of data.relays) {
-      if (typeof relay !== "string" || !isValidRelayUrl(relay)) {
+      if (typeof relay !== "string") {
         throw new Error(`join code payload has an invalid relay url: ${String(relay)}`);
       }
+      const canonical = canonicalRelayUrl(relay);
+      if (canonical === null) {
+        throw new Error(`join code payload has an invalid relay url: ${relay}`);
+      }
+      if (canonicalRelays.includes(canonical)) {
+        throw new Error("join code payload has duplicate relay urls");
+      }
+      canonicalRelays.push(canonical);
       relays.push(relay);
     }
   }
   if (relays.length > MAX_RELAYS) throw new Error("join code payload has too many relays: at most 8 allowed");
-  if (new Set(relays).size !== relays.length) throw new Error("join code payload has duplicate relay urls");
   const finalRelays = relays.length === 0 ? [...DEFAULT_RELAYS] : relays;
 
   return {

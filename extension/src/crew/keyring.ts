@@ -1,6 +1,6 @@
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { isLowerHex } from "../shared/hex";
-import { DEFAULT_RELAYS, decodePayload, encodePrefixedPayload, isValidRelayUrl } from "./joinCode";
+import { canonicalRelayUrl, DEFAULT_RELAYS, decodePayload, encodePrefixedPayload, isValidRelayUrl, MAX_RELAYS } from "./joinCode";
 import { publicKeyOf } from "./identity";
 import { normalizeCrewName, normalizeDisplayName } from "./validation";
 import type { CrewMembership, StoredMembership } from "./types";
@@ -143,12 +143,15 @@ export async function encodeRecovery(
   const normalizedMemberships = memberships.map((membership) => {
     const crewName = normalizeCrewName(membership.crewName);
     const displayName = normalizeDisplayName("displayName" in membership ? membership.displayName : membership.crewName);
-    const relays = membership.relays.length === 0 ? [...DEFAULT_RELAYS] : [...membership.relays];
+    // Canonicalize, dedupe, and cap relays so the recovery file is always
+    // accepted by our own join-code decoder (which enforces MAX_RELAYS).
+    const relays = [...new Set((membership.relays.length === 0 ? [...DEFAULT_RELAYS] : membership.relays).map((relay) => canonicalRelayUrl(relay) ?? "").filter((relay) => relay !== ""))].slice(0, MAX_RELAYS);
     if (
       crewName === null ||
       displayName === null ||
       !isLowerHex(membership.crewId, 32) ||
       !isLowerHex(membership.key, 64) ||
+      relays.length === 0 ||
       !relays.every(isValidRelayUrl)
     ) {
       throw new Error("encodeRecovery received an invalid Crew membership");
@@ -278,6 +281,7 @@ function isSupported(envelope: RecoveryEnvelope): boolean {
   return (
     envelope.version === RECOVERY_VERSION &&
     envelope.kdf === PBKDF2_NAME &&
+    Number.isInteger(envelope.iterations) &&
     envelope.iterations >= MIN_PBKDF2_ITERATIONS &&
     envelope.iterations <= MAX_PBKDF2_ITERATIONS &&
     envelope.cipher === CIPHER_NAME &&

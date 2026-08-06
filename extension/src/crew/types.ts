@@ -35,7 +35,9 @@ export interface SnapshotPlain {
   currentStreak: number;
   lastFocusedAtEpochSeconds: number;
   version: number;
-  stats: CrewStatsExtras | null;
+  /** Optional extended stats; the shape is defined by what peers publish, so
+   * every field must be treated as optional by consumers. */
+  stats: Partial<CrewStatsExtras> | null;
 }
 
 export interface NostrEvent {

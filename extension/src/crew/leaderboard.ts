@@ -15,6 +15,7 @@ export interface BoardMember {
   active: boolean;
   stale: boolean;
   inactive: boolean;
+  neverFocused: boolean;
   lastFocusedAtEpochSeconds: number;
 }
 
@@ -46,6 +47,7 @@ interface Row {
   dailyTrend: (number | null)[];
   active: boolean;
   inactive: boolean;
+  neverFocused: boolean;
   stale: boolean;
   rank: number | null;
 }
@@ -87,8 +89,13 @@ export function aggregateBoard(
       }
       dailyTrend.push(byDate.get(date) ?? null);
     }
-    const hasFocused = s.lastFocusedAtEpochSeconds > 0;
-    const inactive = hasFocused && s.lastFocusedAtEpochSeconds < opts.now - 30 * DAY;
+    // A lastFocusedAt newer than the snapshot's own publication time is a lie
+    // (or clock skew); clamp so it cannot mark a member perpetually active.
+    const publishedAt = s.publishedAtEpochSeconds;
+    const rawLastFocused = s.lastFocusedAtEpochSeconds;
+    const lastFocused = rawLastFocused > 0 && rawLastFocused <= publishedAt ? rawLastFocused : 0;
+    const neverFocused = lastFocused === 0;
+    const inactive = !neverFocused && lastFocused < opts.now - 30 * DAY;
     const active = !inactive;
     return {
       snapshot: s,
@@ -96,7 +103,8 @@ export function aggregateBoard(
       dailyTrend,
       active,
       inactive,
-      stale: hasFocused && !inactive && s.lastFocusedAtEpochSeconds < opts.now - 7 * DAY,
+      neverFocused,
+      stale: !neverFocused && !inactive && lastFocused < opts.now - 7 * DAY,
       rank: null,
     };
   });
@@ -141,11 +149,16 @@ export function aggregateBoard(
       active: r.active,
       stale: r.stale,
       inactive: r.inactive,
+      neverFocused: r.neverFocused,
       lastFocusedAtEpochSeconds: s.lastFocusedAtEpochSeconds,
     };
   });
 
-  const totalFocusMinutes = rows.reduce((sum, r) => sum + r.focusMinutes, 0);
+  // Keep total consistent with ranked/median: only current (non-inactive)
+  // members count toward the crew total.
+  const totalFocusMinutes = rows
+    .filter((r) => !r.inactive)
+    .reduce((sum, r) => sum + r.focusMinutes, 0);
   const positive = ranked
     .map((r) => r.focusMinutes)
     .sort((a, b) => a - b);

@@ -41,7 +41,7 @@ export function buildOwnSnapshot(input: OwnSnapshotInput): SnapshotPlain {
   const allTimeFocusMinutes = entries.reduce((sum, entry) => sum + entry.workMinutes, 0);
   const dailyAggregates = entries
     .slice()
-    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .sort((a, b) => b.date.localeCompare(a.date))
     .slice(0, MAX_DAILY_AGGREGATES)
     .map((entry) => ({
       localDate: entry.date,

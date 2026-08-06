@@ -40,6 +40,8 @@ export async function verifySchnorr(
   }
 }
 
+/** 8 trailing hex chars (32 bits). This is a display disambiguation aid only —
+ * it is NOT an authenticator and collisions are plausible at crew scale. */
 export function fingerprint(publicKeyHex64: string): string {
   return publicKeyHex64.slice(-8);
 }
