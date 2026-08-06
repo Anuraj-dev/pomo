@@ -261,7 +261,7 @@ describe("CrewDao", () => {
     });
   });
 
-  test("updateRelayState overwrites with new non-null values", async () => {
+  test("updateRelayState overwrites with new non-null values and a success clears the error", async () => {
     await crew.updateRelayState("crew-a", "wss://relay1", 100, 1000, "old");
     await crew.updateRelayState("crew-a", "wss://relay1", 200, 2000, null);
     const rows = await crew.relayStates("crew-a");
@@ -270,7 +270,7 @@ describe("CrewDao", () => {
       relayUrl: "wss://relay1",
       lastAttemptEpochSeconds: 200,
       lastSuccessEpochSeconds: 2000,
-      lastError: "old",
+      lastError: null,
     });
   });
 

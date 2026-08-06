@@ -1,3 +1,5 @@
+import { isValidDateString } from "../engine/dateLogic";
+import { MAX_CREATED_AT_SKEW_SECONDS } from "../crew/nostrEvent";
 import type { DayStatRow, SessionRow } from "./types";
 
 export interface CrewSnapshotRow {
@@ -83,32 +85,65 @@ export function tx<T>(
 export class HistoryDao {
   constructor(private readonly db: IDBDatabase) {}
 
-  insertSessionWithDayStats(
+  /**
+   * Persists a whole session block (all of its calendar-day segments) in one
+   * transaction. Idempotent: a segment whose `start` key already exists is
+   * treated as a replay and its daily delta is not applied again, so a
+   * duplicated completion can never double-count stats. Day stats are
+   * accumulated once per date, regardless of how many segments share it.
+   * Resolves with the `start` keys of segments that were newly inserted.
+   */
+  insertBlock(
+    segments: Array<{ row: SessionRow; delta: { earnedBlocks: number; focusMinutes: number; breakMinutes: number } }>,
+  ): Promise<number[]> {
+    return tx(this.db, ["sessions", "dayStats"], "readwrite", async (transaction) => {
+      const sessionsStore = transaction.objectStore("sessions");
+      const dayStatsStore = transaction.objectStore("dayStats");
+      const deltasByDate = new Map<string, { earnedBlocks: number; focusMinutes: number; breakMinutes: number }>();
+      const insertedStarts: number[] = [];
+      for (const { row, delta } of segments) {
+        if (!Number.isFinite(row.start) || !isValidDateString(row.date) || !Number.isFinite(row.duration) || row.duration < 0) {
+          throw new Error(`invalid session row: ${String(row.start)} ${String(row.date)}`);
+        }
+        const existing = await req<SessionRow | undefined>(sessionsStore.get(row.start));
+        if (existing !== undefined) continue;
+        await req(sessionsStore.put(row));
+        insertedStarts.push(row.start);
+        const accumulated = deltasByDate.get(row.date) ?? { earnedBlocks: 0, focusMinutes: 0, breakMinutes: 0 };
+        accumulated.earnedBlocks += Math.max(0, delta.earnedBlocks);
+        accumulated.focusMinutes += Math.max(0, delta.focusMinutes);
+        accumulated.breakMinutes += Math.max(0, delta.breakMinutes);
+        deltasByDate.set(row.date, accumulated);
+      }
+      for (const [date, delta] of deltasByDate) {
+        const existing = await req<DayStatRow | undefined>(dayStatsStore.get(date));
+        const merged: DayStatRow =
+          existing === undefined
+            ? {
+                date,
+                earnedBlocks: delta.earnedBlocks,
+                focusMinutes: delta.focusMinutes,
+                breakMinutes: delta.breakMinutes,
+                lastUpdated: Date.now(),
+              }
+            : {
+                date,
+                earnedBlocks: existing.earnedBlocks + delta.earnedBlocks,
+                focusMinutes: existing.focusMinutes + delta.focusMinutes,
+                breakMinutes: existing.breakMinutes + delta.breakMinutes,
+                lastUpdated: Date.now(),
+              };
+        await req(dayStatsStore.put(merged));
+      }
+      return insertedStarts;
+    });
+  }
+
+  async insertSessionWithDayStats(
     row: SessionRow,
     delta: { earnedBlocks: number; focusMinutes: number; breakMinutes: number },
   ): Promise<void> {
-    return tx(this.db, ["sessions", "dayStats"], "readwrite", async (transaction) => {
-      await req(transaction.objectStore("sessions").put(row));
-      const store = transaction.objectStore("dayStats");
-      const existing = await req<DayStatRow | undefined>(store.get(row.date));
-      const merged: DayStatRow =
-        existing === undefined
-          ? {
-              date: row.date,
-              earnedBlocks: delta.earnedBlocks,
-              focusMinutes: delta.focusMinutes,
-              breakMinutes: delta.breakMinutes,
-              lastUpdated: Date.now(),
-            }
-          : {
-              date: row.date,
-              earnedBlocks: existing.earnedBlocks + delta.earnedBlocks,
-              focusMinutes: existing.focusMinutes + delta.focusMinutes,
-              breakMinutes: existing.breakMinutes + delta.breakMinutes,
-              lastUpdated: Date.now(),
-            };
-      await req(store.put(merged));
-    });
+    await this.insertBlock([{ row, delta }]);
   }
 
   insertSession(row: SessionRow): Promise<void> {
@@ -120,17 +155,28 @@ export class HistoryDao {
   mergeBackup(
     backupDayStats: DayStatRow[],
     backupSessions: SessionRow[],
-  ): Promise<{ sessionsAdded: number; daysAffected: number }> {
+  ): Promise<{ sessionsAdded: number; daysAffected: number; conflicts: number }> {
     return tx(this.db, ["sessions", "dayStats"], "readwrite", async (transaction) => {
       const sessionsStore = transaction.objectStore("sessions");
       const dayStatsStore = transaction.objectStore("dayStats");
       const existingSessions = await req<SessionRow[]>(sessionsStore.getAll());
       const existingDayStats = await req<DayStatRow[]>(dayStatsStore.getAll());
       const byStart = new Map(existingSessions.map((row) => [row.start, row]));
+      const addedSessions: SessionRow[] = [];
       let sessionsAdded = 0;
+      let conflicts = 0;
       for (const row of backupSessions) {
-        if (byStart.has(row.start)) continue;
+        const existing = byStart.get(row.start);
+        if (existing !== undefined) {
+          // Same start key with different content: the local row wins, but the
+          // conflict is surfaced so callers can report it.
+          if (existing.type !== row.type || existing.completed !== row.completed || existing.duration !== row.duration) {
+            conflicts++;
+          }
+          continue;
+        }
         byStart.set(row.start, row);
+        addedSessions.push(row);
         sessionsAdded++;
       }
 
@@ -156,6 +202,9 @@ export class HistoryDao {
       const oldByDate = new Map(existingDayStats.map((row) => [row.date, row]));
       const backupByDate = new Map(backupDayStats.map((row) => [row.date, row]));
       const dates = new Set([...derived.keys(), ...oldByDate.keys(), ...backupByDate.keys()]);
+      // Merge policy: take the max of each metric across session-derived, local,
+      // and backup totals. This never decreases recorded totals, but a row may
+      // combine fields that no single source produced (documented tradeoff).
       const mergedDays = [...dates].map((date) => {
         const fromSessions = derived.get(date);
         const fromDevice = oldByDate.get(date);
@@ -169,13 +218,18 @@ export class HistoryDao {
         };
       });
 
-      for (const row of byStart.values()) await req(sessionsStore.put(row));
-      for (const row of mergedDays) await req(dayStatsStore.put(row));
-      const daysAffected = mergedDays.filter((row) => {
+      for (const row of addedSessions) await req(sessionsStore.put(row));
+      const changedDays = mergedDays.filter((row) => {
         const old = oldByDate.get(row.date);
-        return old === undefined || old.earnedBlocks !== row.earnedBlocks || old.focusMinutes !== row.focusMinutes || old.breakMinutes !== row.breakMinutes;
-      }).length;
-      return { sessionsAdded, daysAffected };
+        return (
+          old === undefined ||
+          old.earnedBlocks !== row.earnedBlocks ||
+          old.focusMinutes !== row.focusMinutes ||
+          old.breakMinutes !== row.breakMinutes
+        );
+      });
+      for (const row of changedDays) await req(dayStatsStore.put(row));
+      return { sessionsAdded, daysAffected: changedDays.length, conflicts };
     });
   }
 
@@ -221,13 +275,16 @@ export class HistoryDao {
 export class CrewDao {
   constructor(private readonly db: IDBDatabase) {}
 
-  upsertLatest(snapshot: CrewSnapshotRow, daily: CrewDailyRow[]): Promise<boolean> {
+  upsertLatest(snapshot: CrewSnapshotRow, daily: CrewDailyRow[], now?: number): Promise<boolean> {
     return tx(this.db, ["crewSnapshots", "crewDailyAggregates"], "readwrite", async (transaction) => {
       const snapshots = transaction.objectStore("crewSnapshots");
       const aggregates = transaction.objectStore("crewDailyAggregates");
       const key = [snapshot.crewId, snapshot.identityPublicKey];
       const existing = await req<CrewSnapshotRow | undefined>(snapshots.get(key));
       if (existing !== undefined && existing.publishedAtEpochSeconds >= snapshot.publishedAtEpochSeconds) {
+        return false;
+      }
+      if (now !== undefined && Number.isFinite(now) && snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) {
         return false;
       }
       await req(snapshots.put(snapshot));
@@ -253,6 +310,13 @@ export class CrewDao {
       req<CrewDailyRow[]>(
         transaction.objectStore("crewDailyAggregates").index("crewId_key").getAll([crewId, identityPublicKey]),
       ),
+    );
+  }
+
+  /** All daily aggregates for a crew in one query, for building boards. */
+  dailyForCrew(crewId: string): Promise<CrewDailyRow[]> {
+    return tx(this.db, ["crewDailyAggregates"], "readonly", (transaction) =>
+      req<CrewDailyRow[]>(transaction.objectStore("crewDailyAggregates").index("crewId").getAll(crewId)),
     );
   }
 
@@ -292,7 +356,8 @@ export class CrewDao {
         relayUrl,
         lastAttemptEpochSeconds: attempt,
         lastSuccessEpochSeconds: success !== null ? success : (existing?.lastSuccessEpochSeconds ?? null),
-        lastError: error !== null ? error : (existing?.lastError ?? null),
+        // A successful attempt clears any stale error; null error preserves it.
+        lastError: error !== null ? error : success !== null ? null : (existing?.lastError ?? null),
       };
       await req(store.put(merged));
     });

@@ -1,39 +1,58 @@
 export const DB_NAME = "pomo";
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
+
+type IndexDef = readonly [name: string, keyPath: string | string[]];
+
+function ensureStore(
+  db: IDBDatabase,
+  transaction: IDBTransaction,
+  name: string,
+  options: IDBObjectStoreParameters,
+  indexes: readonly IndexDef[],
+): void {
+  let store: IDBObjectStore;
+  if (!db.objectStoreNames.contains(name)) {
+    store = db.createObjectStore(name, options);
+  } else {
+    store = transaction.objectStore(name);
+  }
+  for (const [indexName, keyPath] of indexes) {
+    if (!store.indexNames.contains(indexName)) store.createIndex(indexName, keyPath);
+  }
+}
 
 export function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, SCHEMA_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      if (db.objectStoreNames.contains("settings")) db.deleteObjectStore("settings");
-      if (!db.objectStoreNames.contains("sessions")) {
-        const sessions = db.createObjectStore("sessions", { keyPath: "start" });
-        sessions.createIndex("date", "date");
+      const transaction = request.transaction!;
+      if (event.oldVersion < 2) {
+        // v1 → v2: settings moved to chrome.storage.local; drop the legacy store.
+        if (db.objectStoreNames.contains("settings")) db.deleteObjectStore("settings");
       }
-      if (!db.objectStoreNames.contains("dayStats")) {
-        db.createObjectStore("dayStats", { keyPath: "date" });
-      }
-      if (!db.objectStoreNames.contains("crewSnapshots")) {
-        const crewSnapshots = db.createObjectStore("crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] });
-        crewSnapshots.createIndex("crewId", "crewId");
-      }
-      if (!db.objectStoreNames.contains("crewDailyAggregates")) {
-        const crewDailyAggregates = db.createObjectStore("crewDailyAggregates", {
-          keyPath: ["crewId", "identityPublicKey", "localDate"],
-        });
-        crewDailyAggregates.createIndex("crewId_key", ["crewId", "identityPublicKey"]);
-      }
-      if (!db.objectStoreNames.contains("crewHiddenMembers")) {
-        const crewHiddenMembers = db.createObjectStore("crewHiddenMembers", { keyPath: ["crewId", "identityPublicKey"] });
-        crewHiddenMembers.createIndex("crewId", "crewId");
-      }
-      if (!db.objectStoreNames.contains("crewRelayState")) {
-        db.createObjectStore("crewRelayState", { keyPath: ["crewId", "relayUrl"] });
-      }
+      ensureStore(db, transaction, "sessions", { keyPath: "start" }, [["date", "date"]]);
+      ensureStore(db, transaction, "dayStats", { keyPath: "date" }, []);
+      ensureStore(db, transaction, "crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] }, [["crewId", "crewId"]]);
+      ensureStore(
+        db,
+        transaction,
+        "crewDailyAggregates",
+        { keyPath: ["crewId", "identityPublicKey", "localDate"] },
+        [
+          ["crewId_key", ["crewId", "identityPublicKey"]],
+          ["crewId", "crewId"],
+        ],
+      );
+      ensureStore(db, transaction, "crewHiddenMembers", { keyPath: ["crewId", "identityPublicKey"] }, [["crewId", "crewId"]]);
+      ensureStore(db, transaction, "crewRelayState", { keyPath: ["crewId", "relayUrl"] }, []);
     };
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error("indexedDB open blocked"));
   });
