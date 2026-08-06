@@ -25,11 +25,13 @@ let crews: CrewSummary[] = [];
 let activeCrewId: string | null = null;
 let windowKey: WindowKey = "today";
 let boardResult: CrewBoardResult | null = null;
+let boardResultWindow: WindowKey | null = null;
 let syncing = false;
 let lastFocus: HTMLElement | null = null;
 let chipIndex = 0;
 let searchQuery = "";
 let boardRequestSequence = 0;
+let manageGeneration = 0;
 const statusTimers = new Map<HTMLElement, ReturnType<typeof setTimeout>>();
 
 buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
@@ -39,6 +41,7 @@ function nowSeconds(): number {
 }
 
 function formatAge(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "just now";
   if (seconds < 60) return "just now";
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
@@ -49,10 +52,9 @@ function freshnessOf(relayStates: CrewRelayStateRow[]): { label: string; kind: s
   if (relayStates.length === 0) return { label: "not yet synced", kind: "offline" };
   const now = nowSeconds();
   const lastSuccess = relayStates.reduce((max, state) => Math.max(max, state.lastSuccessEpochSeconds ?? 0), 0);
-  const lastAttempt = relayStates.reduce((max, state) => Math.max(max, state.lastAttemptEpochSeconds), 0);
-  const successCount = relayStates.filter(
-    (state) => state.lastSuccessEpochSeconds !== null && state.lastSuccessEpochSeconds === state.lastAttemptEpochSeconds,
-  ).length;
+  // A relay counts as reachable once it has any recorded success; exact
+  // equality of lastSuccess/lastAttempt is brittle across rewrites.
+  const successCount = relayStates.filter((state) => state.lastSuccessEpochSeconds !== null).length;
   if (syncing) return { label: "syncing…", kind: "syncing" };
   if (lastSuccess === 0) return { label: "never synced", kind: "offline" };
   const ageSeconds = now - lastSuccess;
@@ -82,11 +84,12 @@ function renderChips(): void {
 }
 
 async function selectCrew(crew: CrewSummary): Promise<void> {
+  const response = await request({ type: "pomo:crew:select", crewId: crew.crewId });
+  if (!response.ok) return;
   activeCrewId = crew.crewId;
   chipIndex = crews.findIndex((candidate) => candidate.crewId === crew.crewId);
   resetSearch();
-  const response = await request({ type: "pomo:crew:select", crewId: crew.crewId });
-  if (!response.ok) return;
+  renderChips();
   await loadBoard(true);
 }
 
@@ -200,12 +203,13 @@ function renderMember(member: BoardMember, selfKey: string): DocumentFragment {
     hide.addEventListener("click", () => {
       void (async (): Promise<void> => {
         try {
-          await request({
+          const response = await request({
             type: "pomo:crew:hide",
             crewId: activeCrewId!,
             identityPublicKey: member.identityPublicKey,
             hidden: true,
           });
+          if (!response.ok) throw new Error(response.error ?? "hide failed");
           await loadBoard();
         } catch {
           renderBoardError("Could not update member visibility.");
@@ -234,7 +238,7 @@ function renderMember(member: BoardMember, selfKey: string): DocumentFragment {
     detail.append(
       detailSpan(`key ${member.fingerprint}`),
       detailSpan(`last focused ${lastFocused}`),
-      detailSpan(`${member.dailyTrend.filter((v): v is number => v !== null).length}/7 days active`),
+      detailSpan(`${member.dailyTrend.filter((v): v is number => v !== null && v > 0).length}/7 days active`),
     );
     row.after(detail);
     details.setAttribute("aria-expanded", "true");
@@ -350,6 +354,7 @@ async function loadBoard(forceRefresh = false): Promise<void> {
   if (activeCrewId === null) {
     boardRequestSequence++;
     boardResult = null;
+    boardResultWindow = null;
     syncing = false;
     renderSummary();
     renderStanding();
@@ -360,7 +365,15 @@ async function loadBoard(forceRefresh = false): Promise<void> {
   const requestId = ++boardRequestSequence;
   const requestedCrewId = activeCrewId;
   const requestedWindow = windowKey;
-  if (boardResult !== null && boardResult.crew.crewId !== activeCrewId) boardResult = null;
+  // The cache is per crew *and* per window; switching tabs must not show the
+  // previous tab's standings labeled under the new window.
+  if (
+    boardResult !== null &&
+    (boardResult.crew.crewId !== activeCrewId || boardResultWindow !== windowKey)
+  ) {
+    boardResult = null;
+    boardResultWindow = null;
+  }
   syncing = true;
   renderFreshness(boardResult?.relayStates ?? []);
   try {
@@ -372,6 +385,7 @@ async function loadBoard(forceRefresh = false): Promise<void> {
     if (requestId !== boardRequestSequence || activeCrewId !== requestedCrewId || windowKey !== requestedWindow) return;
     if (response.ok && response.board !== undefined) {
       boardResult = response.board;
+      boardResultWindow = windowKey;
       renderSummary();
       renderStanding();
       renderBoard();
@@ -400,8 +414,12 @@ async function loadCrews(): Promise<void> {
   const response = await request({ type: "pomo:crew:list" });
   if (response.ok) {
     crews = response.crews ?? [];
+  } else if (crews.length === 0) {
+    renderBoardError(response.error ?? "Could not load crews.");
   } else {
-    crews = [];
+    // Keep the last known crews so a transient failure doesn't wipe the UI
+    // into a misleading "no crews yet" state.
+    renderBoardError(response.error ?? "Could not refresh crews.");
   }
   if (response.activeCrewId !== undefined) {
     activeCrewId = response.activeCrewId;
@@ -416,6 +434,7 @@ async function loadCrews(): Promise<void> {
 }
 
 function openManage(title: string, body: HTMLElement): void {
+  manageGeneration++;
   manageBodyEl.textContent = "";
   const heading = document.createElement("h3");
   heading.textContent = title;
@@ -423,6 +442,12 @@ function openManage(title: string, body: HTMLElement): void {
   manageEl.hidden = false;
   lastFocus = document.activeElement as HTMLElement | null;
   focusFirst(manageBodyEl);
+}
+
+/** True when the given async op is still attached to the current manage view;
+ * detached ops must not touch the shared dialog/global error surface. */
+function manageIsCurrent(generation: number): boolean {
+  return generation === manageGeneration;
 }
 
 function closeManage(): void {
@@ -452,8 +477,9 @@ function trapFocus(event: KeyboardEvent): void {
   ).filter(
     (el) =>
       !el.disabled &&
-      !el.hidden &&
-      !(el instanceof HTMLInputElement && el.type === "hidden"),
+      // getClientRects() is empty when the element or an ancestor is hidden,
+      // so controls under collapsed sections are excluded from the trap.
+      el.getClientRects().length > 0,
   );
   if (focusable.length === 0) return;
   const first = focusable[0]!;
@@ -511,8 +537,10 @@ function openManageHome(): void {
     nameField.input.value = activeCrew.displayName;
     const save = button("Save name", () => {
       void (async (): Promise<void> => {
+        const gen = manageGeneration;
         try {
-          const response = await request({ type: "pomo:crew:rename", crewId: activeCrew.crewId, displayName: nameField.input.value });
+          const response = await request({ type: "pomo:crew:rename", crewId: activeCrew.crewId, displayName: nameField.input.value.trim() });
+          if (!manageIsCurrent(gen)) return;
           if (!response.ok) {
             showError(response.error ?? "rename failed");
             return;
@@ -522,7 +550,7 @@ function openManageHome(): void {
           renderChips();
           void loadBoard();
         } catch {
-          showError("Could not reach the crew service.");
+          if (manageIsCurrent(gen)) showError("Could not reach the crew service.");
         }
       })();
     }, "primary");
@@ -531,22 +559,24 @@ function openManageHome(): void {
     body.append(button("Share invite / QR", () => openShare()));
     body.append(button("Leave crew", () => {
       void (async (): Promise<void> => {
+        const gen = manageGeneration;
         try {
           const response = await request({ type: "pomo:crew:leave", crewId: activeCrew.crewId });
-        if (!response.ok) {
-          showError(response.error ?? "leave failed");
-          return;
-        }
-        crews = response.crews ?? crews;
-        closeManage();
-        if (activeCrewId === activeCrew.crewId) {
-          activeCrewId = crews[0]?.crewId ?? null;
-        }
-        resetSearch();
-        renderChips();
-        void loadBoard();
+          if (!manageIsCurrent(gen)) return;
+          if (!response.ok) {
+            showError(response.error ?? "leave failed");
+            return;
+          }
+          crews = response.crews ?? crews;
+          closeManage();
+          if (activeCrewId === activeCrew.crewId) {
+            activeCrewId = crews[0]?.crewId ?? null;
+          }
+          resetSearch();
+          renderChips();
+          void loadBoard();
         } catch {
-          showError("Could not reach the crew service.");
+          if (manageIsCurrent(gen)) showError("Could not reach the crew service.");
         }
       })();
     }, "danger"));
@@ -558,14 +588,18 @@ function openManageHome(): void {
     hiddenTitle.textContent = "Hidden members";
     hiddenSection.appendChild(hiddenTitle);
     void (async (): Promise<void> => {
+      const gen = manageGeneration;
       try {
         const response = await request({ type: "pomo:crew:hidden", crewId: activeCrew.crewId });
+        if (!manageIsCurrent(gen)) return;
         if (!response.ok || response.hiddenMembers === undefined || response.hiddenMembers.length === 0) return;
         for (const identityPublicKey of response.hiddenMembers) {
           const unhide = button(`Unhide ${identityPublicKey.slice(0, 8)}`, () => {
             void (async (): Promise<void> => {
+              const unhideGen = manageGeneration;
               try {
                 const result = await request({ type: "pomo:crew:hide", crewId: activeCrew.crewId, identityPublicKey, hidden: false });
+                if (!manageIsCurrent(unhideGen)) return;
                 if (!result.ok) {
                   showError(result.error ?? "could not unhide member");
                   return;
@@ -574,7 +608,7 @@ function openManageHome(): void {
                 if (hiddenSection.querySelector("button") === null) hiddenSection.remove();
                 await loadBoard();
               } catch {
-                showError("Could not reach the crew service.");
+                if (manageIsCurrent(unhideGen)) showError("Could not reach the crew service.");
               }
             })();
           });
@@ -582,7 +616,7 @@ function openManageHome(): void {
         }
         body.appendChild(hiddenSection);
       } catch {
-        showError("Could not load hidden members.");
+        if (manageIsCurrent(gen)) showError("Could not load hidden members.");
       }
     })();
   }
@@ -647,10 +681,14 @@ function settingsSection(): HTMLElement {
   const status = statusEl();
 
   const sound = toggleRow("Sound alerts", (checked) => {
-    void saveSetting({ soundEnabled: checked }, status);
+    void saveSetting({ soundEnabled: checked }, status).then((ok) => {
+      if (!ok) sound.input.checked = !checked;
+    });
   });
   const newtab = toggleRow("New Tab shows the timer", (checked) => {
-    void saveSetting({ newtabInstrument: checked }, status);
+    void saveSetting({ newtabInstrument: checked }, status).then((ok) => {
+      if (!ok) newtab.input.checked = !checked;
+    });
   });
   const tagField = field("Work tag", "Work");
   tagField.input.maxLength = 24;
@@ -683,17 +721,18 @@ function settingsSection(): HTMLElement {
   return section;
 }
 
-async function saveSetting(patch: Partial<PomoSettings>, status: HTMLElement): Promise<void> {
+async function saveSetting(patch: Partial<PomoSettings>, status: HTMLElement): Promise<boolean> {
   try {
     const response = await request({ type: "pomo:settings:set", settings: patch });
     if (response.ok) {
       setStatus(status, "Saved", "ok");
-    } else {
-      setStatus(status, response.error ?? "save failed", "error");
+      return true;
     }
+    setStatus(status, response.error ?? "save failed", "error");
   } catch {
     setStatus(status, "save failed", "error");
   }
+  return false;
 }
 
 function backupSection(): HTMLElement {
@@ -905,31 +944,39 @@ function openJoin(): void {
   const preview = document.createElement("section");
   preview.className = "join-preview";
   preview.hidden = true;
+  // The confirm handler must act on the exact invite that was reviewed, not a
+  // re-read of the inputs, which the user could have edited since.
+  let reviewed: { payload: string; displayName: string } | null = null;
   const confirm = button("Confirm and join", () => {
-    const payload = joinField.input.value.trim();
-    const displayName = nameField.input.value;
+    if (reviewed === null) return;
+    const { payload, displayName } = reviewed;
+    reviewed = null;
+    confirm.disabled = true;
     void (async (): Promise<void> => {
+      const gen = manageGeneration;
       try {
         const response = await request({ type: "pomo:crew:join", payload, displayName });
+        if (!manageIsCurrent(gen)) return;
         if (!response.ok) {
           showError(response.error ?? "join failed");
           return;
         }
         crews = response.crews ?? crews;
-        activeCrewId = crews[crews.length - 1]?.crewId ?? null;
-        if (activeCrewId !== null) await request({ type: "pomo:crew:select", crewId: activeCrewId });
+        // addMembership already made the new crew active; prefer the explicit id.
+        activeCrewId = response.crewId ?? response.activeCrewId ?? null;
         closeManage();
         resetSearch();
         renderChips();
         await loadBoard(true);
       } catch {
-        showError("Could not reach the crew service.");
+        if (manageIsCurrent(gen)) showError("Could not reach the crew service.");
       }
     })();
   }, "primary");
   const submit = button("Review invite", () => {
     const payload = joinField.input.value.trim();
-    if (payload.length === 0 || nameField.input.value.trim().length === 0) {
+    const displayName = nameField.input.value.trim();
+    if (payload.length === 0 || displayName.length === 0) {
       showError("Invite and display name are required.");
       return;
     }
@@ -942,6 +989,9 @@ function openJoin(): void {
       relays.textContent = `Relays: ${decoded.relays.map((relay) => new URL(relay).hostname).join(", ")}`;
       const warning = document.createElement("span");
       warning.textContent = "Anyone holding this link can read aggregate Crew stats and publish self-reported scores.";
+      reviewed = { payload, displayName };
+      joinField.input.disabled = true;
+      nameField.input.disabled = true;
       preview.append(heading, relays, warning, confirm);
       preview.hidden = false;
       confirm.focus();
@@ -966,21 +1016,23 @@ function openCreate(): void {
     const displayName = displayField.input.value.trim();
     if (crewName.length === 0 || displayName.length === 0) return;
     void (async (): Promise<void> => {
+      const gen = manageGeneration;
       try {
         const response = await request({ type: "pomo:crew:create", crewName, displayName });
+        if (!manageIsCurrent(gen)) return;
         if (!response.ok) {
           showError(response.error ?? "create failed");
           return;
         }
         crews = response.crews ?? crews;
-        activeCrewId = crews[crews.length - 1]?.crewId ?? null;
-        if (activeCrewId !== null) await request({ type: "pomo:crew:select", crewId: activeCrewId });
+        // createMembership already made the new crew active; prefer the explicit id.
+        activeCrewId = response.crewId ?? response.activeCrewId ?? null;
         closeManage();
         resetSearch();
         renderChips();
         await loadBoard(true);
       } catch {
-        showError("Could not reach the crew service.");
+        if (manageIsCurrent(gen)) showError("Could not reach the crew service.");
       }
     })();
   }, "primary");
@@ -996,8 +1048,10 @@ function openShare(): void {
   const bodyEl = body as HTMLDivElement;
   bodyEl.className = "qr manage-menu";
   void (async (): Promise<void> => {
+    const gen = manageGeneration;
     try {
       const response = await request({ type: "pomo:crew:joinCode", crewId: activeCrewId! });
+      if (!manageIsCurrent(gen)) return;
       if (!response.ok || response.joinCode === undefined) {
         showError(response.error ?? "could not build join code");
         return;
