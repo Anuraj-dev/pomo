@@ -48,7 +48,55 @@ public class PhoneServer(
                 routing {
                     get("/api/status") {
                         if (!call.isAuthorized()) return@get call.rejectUnauthorized()
-                        call.respondJson(service.stateSnapshot())
+                        val state = service.stateSnapshot()
+                        val serverTime = System.currentTimeMillis() / 1000L
+                        call.respondText(
+                            PhoneMessages.statusJson(gson, state, serverTime),
+                            ContentType.Application.Json,
+                        )
+                    }
+
+                    post("/api/sessions/import") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        val body = call.receiveText()
+                        val result =
+                            try {
+                                service.importSessions(body)
+                            } catch (_: IllegalArgumentException) {
+                                return@post call.respondBadRequest("invalid import body")
+                            } catch (_: Exception) {
+                                return@post call.respondBadRequest("invalid import body")
+                            }
+                        call.respondJson(result)
+                    }
+
+                    post("/api/timer/adopt") {
+                        if (!call.isAuthorized()) return@post call.rejectUnauthorized()
+                        val body = call.receiveText()
+                        val outcome =
+                            try {
+                                service.adoptTimer(body)
+                            } catch (_: IllegalArgumentException) {
+                                return@post call.respondBadRequest("invalid adopt body")
+                            } catch (_: Exception) {
+                                return@post call.respondBadRequest("invalid adopt body")
+                            }
+                        when (outcome) {
+                            is PomodoroService.AdoptResult.Success ->
+                                call.respondJson(success(outcome.state))
+                            is PomodoroService.AdoptResult.Conflict ->
+                                call.respondText(
+                                    gson.toJson(
+                                        mapOf(
+                                            "success" to false,
+                                            "error" to "timer_busy",
+                                            "state" to outcome.state,
+                                        ),
+                                    ),
+                                    ContentType.Application.Json,
+                                    HttpStatusCode.Conflict,
+                                )
+                        }
                     }
 
                     post("/api/toggle") {
@@ -181,7 +229,11 @@ public class PhoneServer(
         }
     }
 
-    private suspend fun stateMessage(): String = PhoneMessages.state(gson, service.stateSnapshot())
+    private suspend fun stateMessage(): String {
+        val state = service.stateSnapshot()
+        val serverTime = System.currentTimeMillis() / 1000L
+        return PhoneMessages.state(gson, state, serverTime)
+    }
 
     private fun success(state: Any): Map<String, Any> = mapOf("success" to true, "state" to state)
 
