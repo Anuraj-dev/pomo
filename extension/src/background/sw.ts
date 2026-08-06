@@ -1,7 +1,7 @@
 import { CrewDao, HistoryDao } from "../db/dao";
 import { openDb } from "../db/schema";
 import type { SessionRow } from "../db/types";
-import { splitBlockByCalendarDay } from "../engine/blocks";
+import { deltaForSegment, splitBlockByCalendarDay } from "../engine/blocks";
 import { dateStringOf, prevDate, utcOffsetMinutesAt } from "../engine/dateLogic";
 import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine/settings";
 import { currentStreak, totals } from "../engine/stats";
@@ -99,10 +99,7 @@ function commit(block: CompletedBlock): void {
     .then(async () => {
       const insertedStarts = await dao.insertBlock(
         segments.map((segment) => {
-          const delta =
-            segment.type === "work"
-              ? { earnedBlocks: segment.completed ? 1 : 0, focusMinutes: segment.duration / 60, breakMinutes: 0 }
-              : { earnedBlocks: 0, focusMinutes: 0, breakMinutes: block.completed ? segment.duration / 60 : 0 };
+          const delta = deltaForSegment(segment, block.completed);
           return {
             row: {
               start: segment.start,

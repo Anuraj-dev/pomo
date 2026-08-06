@@ -2,6 +2,13 @@ import type { DayStatRow, SessionRow } from "../../db/types";
 import { lastNDays } from "../../engine/stats";
 import { dateStringOf, utcOffsetMinutesAt } from "../../engine/dateLogic";
 import type { PomoSettings } from "../../engine/settings";
+import {
+  MAX_DAILY_GOAL,
+  MAX_LONG_BREAK_AFTER,
+  MAX_LONG_MINUTES,
+  MAX_SHORT_MINUTES,
+  MAX_WORK_MINUTES,
+} from "../../engine/settings";
 import type { TimerSnapshot } from "../../engine/timer";
 import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
@@ -163,11 +170,11 @@ settingsFormEl.addEventListener("submit", (event) => {
  * the SW would silently clamp. Returns an error message or null. */
 function validateSettingsForm(): string | null {
   const fields: Array<[HTMLInputElement, number, number, string]> = [
-    [settingWorkEl, 1, 360, "Work duration"],
-    [settingShortEl, 1, 120, "Short break"],
-    [settingLongEl, 1, 240, "Long break"],
-    [settingAfterEl, 1, 12, "Long break cadence"],
-    [settingGoalEl, 0, 100, "Daily goal"],
+    [settingWorkEl, 1, MAX_WORK_MINUTES, "Work duration"],
+    [settingShortEl, 1, MAX_SHORT_MINUTES, "Short break"],
+    [settingLongEl, 1, MAX_LONG_MINUTES, "Long break"],
+    [settingAfterEl, 1, MAX_LONG_BREAK_AFTER, "Long break cadence"],
+    [settingGoalEl, 0, MAX_DAILY_GOAL, "Daily goal"],
   ];
   for (const [el, min, max, label] of fields) {
     const value = Number(el.value);

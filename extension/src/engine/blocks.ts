@@ -84,6 +84,21 @@ export function splitBlockByCalendarDay(opts: {
     });
 }
 
+export interface BlockDelta {
+  earnedBlocks: number;
+  focusMinutes: number;
+  breakMinutes: number;
+}
+
+/** Delta contributed by one calendar-day segment of a session. Work earns a
+ * block only when the segment is completed; break minutes count only when the
+ * whole session completed. */
+export function deltaForSegment(segment: BlockSegment, blockCompleted: boolean): BlockDelta {
+  return segment.type === "work"
+    ? { earnedBlocks: segment.completed ? 1 : 0, focusMinutes: segment.duration / 60, breakMinutes: 0 }
+    : { earnedBlocks: 0, focusMinutes: 0, breakMinutes: blockCompleted ? segment.duration / 60 : 0 };
+}
+
 export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinutes): DayStat[] {
   const segments = splitBlockByCalendarDay({
     start: block.start,
@@ -95,19 +110,17 @@ export function deltasForBlock(block: CompletedBlock, offsetMinutes: OffsetMinut
   });
   const byDate = new Map<string, DayStat>();
   for (const segment of segments) {
-    const delta = byDate.get(segment.date) ?? {
+    const delta = deltaForSegment(segment, block.completed);
+    const dayStat = byDate.get(segment.date) ?? {
       date: segment.date,
       earnedBlocks: 0,
       focusMinutes: 0,
       breakMinutes: 0,
     };
-    if (segment.type === "work") {
-      if (segment.completed) delta.earnedBlocks += 1;
-      delta.focusMinutes += segment.duration / 60;
-    } else if (block.completed) {
-      delta.breakMinutes += segment.duration / 60;
-    }
-    byDate.set(segment.date, delta);
+    dayStat.earnedBlocks += delta.earnedBlocks;
+    dayStat.focusMinutes += delta.focusMinutes;
+    dayStat.breakMinutes += delta.breakMinutes;
+    byDate.set(segment.date, dayStat);
   }
   return [...byDate.values()];
 }

@@ -24,11 +24,11 @@ export const DEFAULT_SETTINGS: PomoSettings = {
 
 const THEMES: readonly PomoSettings["theme"][] = ["system", "light", "dark"];
 
-const MAX_WORK_MINUTES = 360;
-const MAX_SHORT_MINUTES = 120;
-const MAX_LONG_MINUTES = 240;
-const MAX_LONG_BREAK_AFTER = 12;
-const MAX_DAILY_GOAL = 100;
+export const MAX_WORK_MINUTES = 360;
+export const MAX_SHORT_MINUTES = 120;
+export const MAX_LONG_MINUTES = 240;
+export const MAX_LONG_BREAK_AFTER = 12;
+export const MAX_DAILY_GOAL = 100;
 const MAX_TAG_LENGTH = 40;
 
 /** Floor a number and clamp into [min, max]; fall back when not finite or <= 0. */
