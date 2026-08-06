@@ -1,4 +1,4 @@
-import { dateStringOf } from "./dateLogic";
+import { dateStringOf, isValidDateString } from "./dateLogic";
 
 export type Phase = "work" | "short" | "long";
 export type Status = "stopped" | "running" | "paused";
@@ -34,7 +34,7 @@ export interface TimerSnapshot {
   completed: number;
   goal: number;
   date: string;
-  lastActionTime: number;
+  lastUpdatedTime: number;
   tag: string;
   version: number;
 }
@@ -218,7 +218,7 @@ export class TimerEngine {
     this.remaining = finiteAtLeast(saved.remaining, 0, "remaining");
     this.completed = finiteAtLeast(saved.completed, 0, "completed");
     this.date = sanitizeDate(saved.date);
-    this.lastAction = Number.isFinite(saved.lastActionTime) ? saved.lastActionTime : now;
+    this.lastAction = Number.isFinite(saved.lastUpdatedTime) ? saved.lastUpdatedTime : now;
     this.tag = typeof saved.tag === "string" ? saved.tag : "";
     if (this.status === "running") {
       this.tick();
@@ -240,7 +240,7 @@ export class TimerEngine {
       completed: this.completed,
       goal: this.ports.goal(),
       date: this.date,
-      lastActionTime: this.lastAction,
+      lastUpdatedTime: this.lastAction,
       tag: this.tag,
       version: TIMER_STATE_VERSION,
     };
@@ -249,7 +249,6 @@ export class TimerEngine {
 
 const VALID_STATUSES: ReadonlySet<string> = new Set(["stopped", "running", "paused"]);
 const VALID_PHASES: ReadonlySet<string> = new Set(["work", "short", "long"]);
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function sanitizeStatus(value: Status): Status {
   if (!VALID_STATUSES.has(value)) throw new Error(`invalid saved status: ${String(value)}`);
@@ -269,7 +268,7 @@ function finiteAtLeast(value: number, min: number, field: string): number {
 }
 
 function sanitizeDate(value: string): string {
-  if (typeof value !== "string" || !DATE_PATTERN.test(value)) {
+  if (typeof value !== "string" || !isValidDateString(value)) {
     throw new Error(`invalid saved date: ${String(value)}`);
   }
   return value;

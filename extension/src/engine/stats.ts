@@ -1,4 +1,4 @@
-import { isValidDateString, prevDate } from "./dateLogic";
+import { isValidDateString, prevDate, type OffsetMinutes } from "./dateLogic";
 import type { Phase } from "./timer";
 
 export function currentStreak(dates: Iterable<string>, todayKey: string, offsetMinutes: number): number {
@@ -104,8 +104,6 @@ function sundayWeekStart(date: string): string {
   const dayOfWeek = new Date(Date.UTC(y!, m! - 1, d!)).getUTCDay();
   return new Date(Date.UTC(y!, m! - 1, d! - dayOfWeek)).toISOString().slice(0, 10);
 }
-
-export type OffsetMinutes = number | ((epochSeconds: number) => number);
 
 function resolveOffset(offsetMinutes: OffsetMinutes, epochSeconds: number): number {
   return typeof offsetMinutes === "function" ? offsetMinutes(epochSeconds) : offsetMinutes;

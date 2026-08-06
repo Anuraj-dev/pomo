@@ -1,9 +1,6 @@
-import { dateStringOf, nextLocalMidnight, nextLocalMidnightAtOffset } from "./dateLogic";
+import { dateStringOf, nextLocalMidnight, nextLocalMidnightAtOffset, type OffsetMinutes } from "./dateLogic";
 import type { DayStat } from "./stats";
 import type { CompletedBlock, Phase } from "./timer";
-
-/** A fixed UTC offset in minutes, or a callback resolving the offset at a given epoch. */
-export type OffsetMinutes = number | ((epochSeconds: number) => number);
 
 function dateAt(epochSeconds: number, offsetMinutes: OffsetMinutes): string {
   return typeof offsetMinutes === "function"

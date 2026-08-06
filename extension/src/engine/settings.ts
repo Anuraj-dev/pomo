@@ -43,8 +43,12 @@ function clampCount(value: unknown, max: number, fallback: number): number {
   return Math.min(max, Math.max(0, Math.floor(value)));
 }
 
+export function isValidTheme(value: unknown): value is PomoSettings["theme"] {
+  return THEMES.includes(value as PomoSettings["theme"]);
+}
+
 function validTheme(value: unknown): PomoSettings["theme"] {
-  return THEMES.includes(value as PomoSettings["theme"]) ? (value as PomoSettings["theme"]) : "system";
+  return isValidTheme(value) ? value : "system";
 }
 
 function validBoolean(value: unknown, fallback: boolean): boolean {
