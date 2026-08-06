@@ -102,7 +102,7 @@ export class HistoryDao {
       const deltasByDate = new Map<string, { earnedBlocks: number; focusMinutes: number; breakMinutes: number }>();
       const insertedStarts: number[] = [];
       for (const { row, delta } of segments) {
-        if (!Number.isFinite(row.start) || !isValidDateString(row.date) || !Number.isFinite(row.duration) || row.duration < 0) {
+        if (!Number.isSafeInteger(row.start) || row.start <= 0 || !isValidDateString(row.date) || !Number.isFinite(row.duration) || row.duration < 0) {
           throw new Error(`invalid session row: ${String(row.start)} ${String(row.date)}`);
         }
         const existing = await req<SessionRow | undefined>(sessionsStore.get(row.start));
@@ -287,8 +287,11 @@ export class CrewDao {
       if (now !== undefined && Number.isFinite(now) && snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) {
         return false;
       }
-      await req(snapshots.put(snapshot));
       const oldDaily = await req<CrewDailyRow[]>(aggregates.index("crewId_key").getAll(key));
+      if (daily.length === 0 && oldDaily.length > 0) {
+        return false;
+      }
+      await req(snapshots.put(snapshot));
       for (const row of oldDaily) {
         await req(aggregates.delete([row.crewId, row.identityPublicKey, row.localDate]));
       }
