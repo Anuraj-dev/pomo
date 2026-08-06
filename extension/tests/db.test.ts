@@ -234,6 +234,56 @@ describe("HistoryDao", () => {
     expect(rows[0]!.completed).toBe(true);
   });
 
+  test("mergeBackup counts a conflict when only the date differs on a colliding start", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup([], [session(100, "2026-08-02", "work", 1500)]);
+    expect(result).toEqual({ sessionsAdded: 0, daysAffected: 0, conflicts: 1 });
+    const rows = await history.sessionsForDate("2026-08-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.date).toBe("2026-08-01");
+  });
+
+  test("mergeBackup counts a conflict when only the tag differs on a colliding start", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500, true, "local"),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup([], [session(100, "2026-08-01", "work", 1500, true, "backup")]);
+    expect(result).toEqual({ sessionsAdded: 0, daysAffected: 0, conflicts: 1 });
+    const rows = await history.sessionsForDate("2026-08-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tag).toBe("local");
+  });
+
+  test("mergeBackup rejects a duplicate start within the backup payload and counts a conflict", async () => {
+    const result = await history.mergeBackup(
+      [],
+      [session(100, "2026-08-01", "work", 1500), session(100, "2026-08-01", "work", 900, false)],
+    );
+    expect(result).toEqual({ sessionsAdded: 1, daysAffected: 1, conflicts: 1 });
+    const rows = await history.allSessions();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.duration).toBe(1500);
+    expect(rows[0]!.completed).toBe(true);
+  });
+
+  test("mergeBackup counts identical duplicate starts in the payload as conflicts too", async () => {
+    const result = await history.mergeBackup(
+      [],
+      [session(100, "2026-08-01", "work", 1500), session(100, "2026-08-01", "work", 1500)],
+    );
+    expect(result).toEqual({ sessionsAdded: 1, daysAffected: 1, conflicts: 1 });
+    const rows = await history.allSessions();
+    expect(rows).toHaveLength(1);
+  });
+
   test("mergeBackup max-merges dayStats per field across derived, local, and backup totals", async () => {
     await history.insertBlock([
       {

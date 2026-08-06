@@ -165,17 +165,30 @@ export class HistoryDao {
       const addedSessions: SessionRow[] = [];
       let sessionsAdded = 0;
       let conflicts = 0;
+      const payloadStarts = new Set<number>();
       for (const row of backupSessions) {
+        if (payloadStarts.has(row.start)) {
+          // Duplicate start within the backup payload: the first occurrence
+          // wins and every later one is rejected and surfaced as a conflict.
+          conflicts++;
+          continue;
+        }
         const existing = byStart.get(row.start);
         if (existing !== undefined) {
-          // Same start key with different content: the local row wins, but the
-          // conflict is surfaced so callers can report it.
-          if (existing.type !== row.type || existing.completed !== row.completed || existing.duration !== row.duration) {
+          // The local row wins; any difference across the full row is surfaced.
+          if (
+            existing.date !== row.date ||
+            existing.type !== row.type ||
+            existing.duration !== row.duration ||
+            existing.completed !== row.completed ||
+            existing.tag !== row.tag
+          ) {
             conflicts++;
           }
           continue;
         }
         byStart.set(row.start, row);
+        payloadStarts.add(row.start);
         addedSessions.push(row);
         sessionsAdded++;
       }
