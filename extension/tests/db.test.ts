@@ -348,16 +348,6 @@ describe("CrewDao", () => {
     expect((await crew.snapshotsForCrew("crew-a"))[0]!.publishedAtEpochSeconds).toBe(now + MAX_CREATED_AT_SKEW_SECONDS);
   });
 
-  test("upsertLatest refuses to truncate existing daily aggregates with an empty list", async () => {
-    const row = daily("crew-a", "key-1", "2026-08-01", 25, 1);
-    expect(await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [row])).toBe(true);
-    expect(await crew.upsertLatest(snapshot("crew-a", "key-1", 200), [])).toBe(false);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([row]);
-    const rows = await crew.snapshotsForCrew("crew-a");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.publishedAtEpochSeconds).toBe(100);
-  });
-
   test("snapshotsForCrew returns every member of the crew", async () => {
     await crew.upsertLatest(snapshot("crew-a", "key-1", 100), []);
     await crew.upsertLatest(snapshot("crew-a", "key-2", 100), []);

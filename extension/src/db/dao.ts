@@ -288,9 +288,6 @@ export class CrewDao {
         return false;
       }
       const oldDaily = await req<CrewDailyRow[]>(aggregates.index("crewId_key").getAll(key));
-      if (daily.length === 0 && oldDaily.length > 0) {
-        return false;
-      }
       await req(snapshots.put(snapshot));
       for (const row of oldDaily) {
         await req(aggregates.delete([row.crewId, row.identityPublicKey, row.localDate]));
