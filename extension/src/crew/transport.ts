@@ -50,11 +50,14 @@ function defaultSocket(url: string): WebSocket {
   return new WebSocket(url);
 }
 
-/** Structural well-formedness used before any factory runs. */
+/** Structural well-formedness used before any factory runs. The strict
+ * public-relay policy (wss: only, no private hosts) is enforced in
+ * defaultSocket; loopback ws: URLs remain reachable through a caller's
+ * explicit factory so tests can stand up local relays. */
 function isWellFormedRelayUrl(value: string): boolean {
   try {
     const url = new URL(value);
-    return url.protocol === "wss:" && url.hostname.length > 0;
+    return (url.protocol === "wss:" || url.protocol === "ws:") && url.hostname.length > 0;
   } catch {
     return false;
   }
