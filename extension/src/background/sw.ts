@@ -44,9 +44,9 @@ const ALARM_PERIOD_MINUTES = 0.5;
 const PHASE_COMPLETE_NOTIFICATION = "pomo-phase-complete";
 const CREW_PUBLISH_MIN_INTERVAL = 24 * 60 * 60;
 
-let db: IDBDatabase;
-let dao: HistoryDao;
-let crewDao: CrewDao;
+let db: IDBDatabase | null = null;
+let dao: HistoryDao | null = null;
+let crewDao: CrewDao | null = null;
 let settings: PomoSettings = { ...DEFAULT_SETTINGS };
 let engine: TimerEngine;
 let earnedByDate = new Map<string, number>();
@@ -97,7 +97,7 @@ function commit(block: CompletedBlock): void {
       console.error("session commit failed", error);
     })
     .then(async () => {
-      const insertedStarts = await dao.insertBlock(
+      const insertedStarts = await dao!.insertBlock(
         segments.map((segment) => {
           const delta = deltaForSegment(segment, block.completed);
           return {
@@ -222,7 +222,7 @@ async function loadEarnedCount(extraDate?: string): Promise<void> {
   // bounded work session is at most one day back.
   const dates = new Set([today, prevDate(today, offset)]);
   if (extraDate !== undefined) dates.add(extraDate);
-  await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao.earnedBlocksForDate(date))));
+  await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao!.earnedBlocksForDate(date))));
 }
 
 async function initIdentity(): Promise<void> {
@@ -264,17 +264,17 @@ async function exportPortableBackup(): Promise<string> {
   if (identityRecoveryRequired && crewMemberships.length > 0) {
     throw new Error("identity recovery required before exporting Crew memberships");
   }
-  const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
+  const [dayStats, sessions] = await Promise.all([dao!.dayStats(), dao!.allSessions()]);
   const snapshots = [];
   const dailyAggregates = [];
   const hiddenMembers: Array<{ crewId: string; identityPublicKey: string; hiddenAtEpochSeconds: number }> = [];
   for (const membership of crewMemberships) {
-    const rows = await crewDao.snapshotsForCrew(membership.crewId);
+    const rows = await crewDao!.snapshotsForCrew(membership.crewId);
     snapshots.push(...rows);
     for (const row of rows) {
-      dailyAggregates.push(...(await crewDao.dailyFor(membership.crewId, row.identityPublicKey)));
+      dailyAggregates.push(...(await crewDao!.dailyFor(membership.crewId, row.identityPublicKey)));
     }
-    for (const identityPublicKey of await crewDao.hiddenKeys(membership.crewId)) {
+    for (const identityPublicKey of await crewDao!.hiddenKeys(membership.crewId)) {
       hiddenMembers.push({ crewId: membership.crewId, identityPublicKey, hiddenAtEpochSeconds: nowSeconds() });
     }
   }
@@ -331,7 +331,7 @@ async function importPortableBackup(
   }
   const mergedMemberships = [...byCrew.values()];
   const mergedCrewIds = new Set(mergedMemberships.map((membership) => membership.crewId));
-  const historySummary = await dao.mergeBackup(
+  const historySummary = await dao!.mergeBackup(
     backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
     backup.history.sessions.map((session) => ({ ...session })),
   );
@@ -345,11 +345,11 @@ async function importPortableBackup(
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
     );
-    await crewDao.upsertLatest(snapshot, daily, nowSeconds());
+    await crewDao!.upsertLatest(snapshot, daily, nowSeconds());
   }
   for (const hidden of backup.crew.hiddenMembers) {
     if (!mergedCrewIds.has(hidden.crewId)) continue;
-    await crewDao.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
+    await crewDao!.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
   }
   let identityRestored = false;
   if (identityDiffers && importedIdentity !== "") {
@@ -417,7 +417,7 @@ async function setActiveCrewId(crewId: string | null): Promise<void> {
 async function publishSelf(membership: StoredMembership, now: number): Promise<boolean> {
   if (identityPrivateKey === null) return false;
   try {
-    const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
+    const [dayStats, sessions] = await Promise.all([dao!.dayStats(), dao!.allSessions()]);
     const result = await publishOwnSnapshot(
       {
         membership,
@@ -429,7 +429,7 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<b
         now,
         offsetMinutes: timezoneOffsetMinutes(),
       },
-      crewDao,
+      crewDao!,
     );
     return result.ok;
   } catch (error) {
@@ -474,7 +474,7 @@ async function refreshCrewsAndPublishIfDue(crewId: string): Promise<void> {
     if (crewSyncPromise !== null) await crewSyncPromise;
     const now = nowSeconds();
     try {
-      await refreshMembership(membership, crewDao, now);
+      await refreshMembership(membership, crewDao!, now);
     } catch (error) {
       console.error(`crew refresh failed for ${membership.crewId}`, error);
     }
@@ -491,7 +491,7 @@ async function refreshCrewsAndPublishIfDue(crewId: string): Promise<void> {
 async function crewSummaries(): Promise<CrewSummary[]> {
   const summaries: CrewSummary[] = [];
   for (const membership of crewMemberships) {
-    const states = await crewDao.relayStates(membership.crewId);
+    const states = await crewDao!.relayStates(membership.crewId);
     summaries.push({
       crewId: membership.crewId,
       crewName: membership.crewName,
@@ -533,7 +533,7 @@ async function addMembership(
 
 async function buildBoardResponse(crewId: string, window: WindowKey, now: number): Promise<CrewBoardResult> {
   const membership = crewMemberships.find((m) => m.crewId === crewId)!;
-  const { board, relayStates } = await loadCrewBoard(crewDao, crewId, window, now);
+  const { board, relayStates } = await loadCrewBoard(crewDao!, crewId, window, now);
   const selfKey = identityPrivateKey === null ? "" : publicKeyOf(identityPrivateKey);
   const crew = (await crewSummaries()).find((c) => c.crewId === crewId) ?? {
     crewId: membership.crewId,
@@ -546,8 +546,26 @@ async function buildBoardResponse(crewId: string, window: WindowKey, now: number
   return { crew, board, relayStates, standing: standingFor(board, selfKey), selfPublicKey: selfKey };
 }
 
+async function openDbCached(): Promise<IDBDatabase> {
+  const connection = await openDb();
+  connection.onversionchange = () => {
+    connection.close();
+    db = null;
+    dao = null;
+    crewDao = null;
+  };
+  return connection;
+}
+
+async function ensureDb(): Promise<void> {
+  if (dao !== null) return;
+  db = await openDbCached();
+  dao = new HistoryDao(db);
+  crewDao = new CrewDao(db);
+}
+
 async function init(): Promise<void> {
-  db = await openDb();
+  db = await openDbCached();
   dao = new HistoryDao(db);
   crewDao = new CrewDao(db);
   await loadSettings();
@@ -585,6 +603,7 @@ function reconcileEngine(): boolean {
 }
 
 async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
+  await ensureDb();
   switch (request.type) {
     case "pomo:command":
       switch (request.command) {
@@ -618,7 +637,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return { ok: true, state: engine.snapshot() };
     case "pomo:stats": {
       await awaitHistoryWrites();
-      const days = await dao.dayStats();
+      const days = await dao!.dayStats();
       const now = nowSeconds();
       const offset = timezoneOffsetMinutes(now);
       const today = dateStringOf(now, offset);
@@ -638,7 +657,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
     }
     case "pomo:history": {
       await awaitHistoryWrites();
-      const [sessions, dayStats] = await Promise.all([dao.allSessions(), dao.dayStats()]);
+      const [sessions, dayStats] = await Promise.all([dao!.allSessions(), dao!.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);
       dayStats.sort((a, b) => b.date.localeCompare(a.date));
       return {
@@ -682,21 +701,21 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       crewMemberships = crewMemberships.filter((m) => m.crewId !== request.crewId);
       await saveMemberships();
       await setActiveCrewId(previousActiveCrewId === request.crewId ? crewMemberships[0]?.crewId ?? null : previousActiveCrewId);
-      await crewDao.deleteCrew(request.crewId);
+      await crewDao!.deleteCrew(request.crewId);
       return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
       }
     case "pomo:crew:hide":
       if (request.hidden) {
-        await crewDao.setHidden(request.crewId, request.identityPublicKey, nowSeconds());
+        await crewDao!.setHidden(request.crewId, request.identityPublicKey, nowSeconds());
       } else {
-        await crewDao.unhide(request.crewId, request.identityPublicKey);
+        await crewDao!.unhide(request.crewId, request.identityPublicKey);
       }
       return { ok: true };
     case "pomo:crew:hidden":
       if (!crewMemberships.some((membership) => membership.crewId === request.crewId)) {
         return { ok: false, error: "crew not found" };
       }
-      return { ok: true, hiddenMembers: await crewDao.hiddenKeys(request.crewId) };
+      return { ok: true, hiddenMembers: await crewDao!.hiddenKeys(request.crewId) };
     case "pomo:crew:rename": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
@@ -765,7 +784,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
         identityRecoveryRequired = false;
         const importedCrewIds = new Set(memberships.map((membership) => membership.crewId));
         for (const membership of crewMemberships) {
-          if (!importedCrewIds.has(membership.crewId)) await crewDao.deleteCrew(membership.crewId);
+          if (!importedCrewIds.has(membership.crewId)) await crewDao!.deleteCrew(membership.crewId);
         }
         const previousActiveCrewId = await activeCrewIdForMemberships();
         crewMemberships = memberships;
@@ -809,7 +828,8 @@ chrome.runtime.onStartup.addListener(() => {
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return;
   void initOnce()
-    .then(() => {
+    .then(async () => {
+      await ensureDb();
       engine.tick();
       return syncAfterWrites();
     })

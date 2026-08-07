@@ -101,10 +101,12 @@ export class HistoryDao {
       const dayStatsStore = transaction.objectStore("dayStats");
       const deltasByDate = new Map<string, { earnedBlocks: number; focusMinutes: number; breakMinutes: number }>();
       const insertedStarts: number[] = [];
-      for (const { row, delta } of segments) {
+      for (const { row } of segments) {
         if (!Number.isSafeInteger(row.start) || row.start <= 0 || !isValidDateString(row.date) || !Number.isFinite(row.duration) || row.duration < 0) {
           throw new Error(`invalid session row: ${String(row.start)} ${String(row.date)}`);
         }
+      }
+      for (const { row, delta } of segments) {
         const existing = await req<SessionRow | undefined>(sessionsStore.get(row.start));
         if (existing !== undefined) continue;
         await req(sessionsStore.put(row));

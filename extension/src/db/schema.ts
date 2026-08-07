@@ -49,9 +49,7 @@ export function openDb(): Promise<IDBDatabase> {
       ensureStore(db, transaction, "crewRelayState", { keyPath: ["crewId", "relayUrl"] }, []);
     };
     request.onsuccess = () => {
-      const db = request.result;
-      db.onversionchange = () => db.close();
-      resolve(db);
+      resolve(request.result);
     };
     request.onerror = () => reject(request.error);
     request.onblocked = () => reject(new Error("indexedDB open blocked"));
