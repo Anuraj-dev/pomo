@@ -217,10 +217,13 @@ export class TimerEngine {
     this.phase = sanitizePhase(saved.phase);
     this.startTime = finiteAtLeast(saved.startTime, 0, "startTime");
     this.duration = finiteAtLeast(saved.duration, 0, "duration");
-    this.remaining = finiteAtLeast(saved.remaining, 0, "remaining");
+    this.remaining = Math.min(finiteAtLeast(saved.remaining, 0, "remaining"), this.duration);
     this.completed = finiteAtLeast(saved.completed, 0, "completed");
+    if (!Number.isInteger(this.completed)) {
+      throw new Error(`invalid saved completed: ${String(this.completed)}`);
+    }
     this.date = sanitizeDate(saved.date);
-    this.lastAction = Number.isFinite(saved.lastUpdatedTime) ? saved.lastUpdatedTime : now;
+    this.lastAction = Number.isFinite(saved.lastUpdatedTime) && saved.lastUpdatedTime >= 0 ? saved.lastUpdatedTime : now;
     this.revision = Number.isFinite(saved.revision) && saved.revision >= 0 ? saved.revision : 0;
     this.tag = typeof saved.tag === "string" ? saved.tag : "";
     if (this.status === "running") {

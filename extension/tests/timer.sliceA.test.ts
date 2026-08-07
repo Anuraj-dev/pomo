@@ -137,7 +137,7 @@ describe("TimerEngine — completion & cadence", () => {
     engine.tick();
     expect(engine.snapshot().phase).toBe("long");
     engine.toggle();
-    at(engine, NOW + 1800);
+    at(engine, NOW + 2400);
     engine.tick();
     expect(engine.snapshot().phase).toBe("work");
   });

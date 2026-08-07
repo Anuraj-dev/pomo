@@ -1,7 +1,7 @@
 import type { TimerSnapshot } from "../engine/timer";
 import { formatMilliseconds, phaseLabel, statusLabel } from "./format";
 import { readSurfaceStats } from "./statsReader";
-import { applyTheme, sendCommand, subscribeState } from "./surface";
+import { applyTheme, sendCommand, subscribeState, subscribeTheme } from "./surface";
 
 export function remainingOf(state: TimerSnapshot): number {
   if (state.status === "running") {
@@ -72,6 +72,8 @@ export function attachTicker(
       // Static states only need one render; constant ticking is wasted work.
       if (lastStatus === latest.status) return;
       lastStatus = latest.status;
+    } else {
+      lastStatus = null;
     }
     render(latest);
   }, intervalMs);
@@ -123,6 +125,7 @@ export interface InstrumentBootstrap {
 export function bootInstrument(bodyEl: HTMLElement, config: InstrumentBootstrap): void {
   let latest: TimerSnapshot | null = null;
   applyTheme();
+  subscribeTheme(() => {});
   subscribeState((state) => {
     latest = state;
     applyInstrument(bodyEl, config.phaseEl, config.statusEl, state, {
