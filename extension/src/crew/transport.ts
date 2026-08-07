@@ -6,6 +6,7 @@ export const MAX_EVENTS_PER_BURST = 1_000;
 const MAX_FRAME_BYTES = 128 * 1024;
 
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const textEncoder = new TextEncoder();
 
 export type RelayCompletion =
   | { relayUrl: string; status: "completed"; note?: string }
@@ -62,8 +63,10 @@ function isWellFormedRelayUrl(value: string): boolean {
 function parseFrame(raw: unknown): Frame | null {
   let text: string;
   if (typeof raw === "string") {
+    if (textEncoder.encode(raw).length > MAX_FRAME_BYTES) return null;
     text = raw;
   } else if (raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
+    if (raw.byteLength > MAX_FRAME_BYTES) return null;
     try {
       text = textDecoder.decode(raw instanceof ArrayBuffer ? raw : raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
     } catch {
@@ -75,7 +78,6 @@ function parseFrame(raw: unknown): Frame | null {
   } else {
     return null;
   }
-  if (text.length > MAX_FRAME_BYTES) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(text);

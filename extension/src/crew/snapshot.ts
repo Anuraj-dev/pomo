@@ -148,9 +148,15 @@ export function validateStats(stats: unknown): void {
       throw new Error(`invalid snapshot: malformed ${name}`);
     }
   };
-  for (const name of ["allTimeWorkBlocks", "allTimeActiveDays", "bestStreak", "bestDayFocusMinutes", "bestDayWorkBlocks", "bestWeekFocusMinutes", "bestWeekWorkBlocks"]) {
+  for (const name of ["allTimeActiveDays", "bestStreak", "bestDayFocusMinutes", "bestWeekFocusMinutes"]) {
     const value = record[name];
     if (value !== undefined && value !== null && !isNonNegativeNumber(value)) {
+      throw new Error(`invalid snapshot: malformed ${name}`);
+    }
+  }
+  for (const name of ["allTimeWorkBlocks", "bestDayWorkBlocks", "bestWeekWorkBlocks"]) {
+    const value = record[name];
+    if (value !== undefined && value !== null && !isNonNegativeInteger(value)) {
       throw new Error(`invalid snapshot: malformed ${name}`);
     }
   }
@@ -228,7 +234,15 @@ function validateSnapshot(snapshot: unknown, envelope: Envelope): SnapshotPlain 
 export function validateSnapshotPlain(snapshot: unknown): SnapshotPlain {
   if (typeof snapshot !== "object" || snapshot === null) throw new Error("invalid snapshot: not an object");
   const s = snapshot as Record<string, unknown>;
-  const envelope = { crewId: s.crewId, identityPublicKey: s.identityPublicKey } as unknown as Envelope;
+  const crewId = s.crewId;
+  if (typeof crewId !== "string" || !isLowerHex(crewId, 32)) {
+    throw new Error("invalid snapshot: malformed crewId");
+  }
+  const identityPublicKey = s.identityPublicKey;
+  if (typeof identityPublicKey !== "string" || !isLowerHex(identityPublicKey, 64)) {
+    throw new Error("invalid snapshot: malformed identityPublicKey");
+  }
+  const envelope = { crewId, identityPublicKey } as unknown as Envelope;
   return validateSnapshot(snapshot, envelope);
 }
 

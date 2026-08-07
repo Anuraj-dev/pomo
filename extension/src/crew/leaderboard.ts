@@ -98,7 +98,7 @@ export function aggregateBoard(
     const inactive = !neverFocused && lastFocused < opts.now - 30 * DAY;
     const active = !inactive;
     return {
-      snapshot: s,
+      snapshot: { ...s, lastFocusedAtEpochSeconds: lastFocused },
       focusMinutes,
       dailyTrend,
       active,

@@ -58,6 +58,7 @@ export function isValidRelayUrl(value: string): boolean {
     return (
       url.protocol === "wss:" &&
       url.hostname.length > 0 &&
+      url.hash.length === 0 &&
       !isPrivateOrLocalHost(url.hostname) &&
       url.username.length === 0 &&
       url.password.length === 0
