@@ -177,7 +177,11 @@ function validateSettingsForm(): string | null {
     [settingGoalEl, 0, MAX_DAILY_GOAL, "Daily goal"],
   ];
   for (const [el, min, max, label] of fields) {
-    const value = Number(el.value);
+    const raw = el.value.trim();
+    if (raw.length === 0) {
+      return `${label} must be between ${min} and ${max}.`;
+    }
+    const value = Number(raw);
     if (!Number.isFinite(value) || value < min || value > max) {
       return `${label} must be between ${min} and ${max}.`;
     }

@@ -239,7 +239,7 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
         (record.command === "toggle" || record.command === "skip" || record.command === "reset") &&
         record.seconds === undefined
       );
-    case "pomo:settings:set":
+    case "pomo:settings:set": {
       if (typeof record.settings !== "object" || record.settings === null || Array.isArray(record.settings)) return false;
       const settingsRecord = record.settings as Record<string, unknown>;
       for (const [name, rule] of Object.entries({
@@ -256,8 +256,9 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
         if (settingsRecord[name] !== undefined && !rule(settingsRecord[name])) return false;
       }
       return true;
+    }
     case "pomo:crew:board":
-      return stringField("crewId") && windowField("window") && record.window !== undefined;
+      return hexField("crewId", 32) && windowField("window") && record.window !== undefined;
     case "pomo:crew:join":
       return nonEmptyStringField("payload") && nonEmptyStringField("displayName");
     case "pomo:crew:create":

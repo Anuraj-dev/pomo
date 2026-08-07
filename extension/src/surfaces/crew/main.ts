@@ -965,6 +965,8 @@ function openJoin(): void {
         const response = await request({ type: "pomo:crew:join", payload, displayName });
         if (!manageIsCurrent(gen)) return;
         if (!response.ok) {
+          reviewed = { payload, displayName };
+          confirm.disabled = false;
           showError(response.error ?? "join failed");
           return;
         }
@@ -976,7 +978,11 @@ function openJoin(): void {
         renderChips();
         await loadBoard(true);
       } catch {
-        if (manageIsCurrent(gen)) showError("Could not reach the crew service.");
+        if (manageIsCurrent(gen)) {
+          reviewed = { payload, displayName };
+          confirm.disabled = false;
+          showError("Could not reach the crew service.");
+        }
       }
     })();
   }, "primary");
@@ -1054,6 +1060,7 @@ function openShare(): void {
   body.style.gap = "0.9rem";
   const bodyEl = body as HTMLDivElement;
   bodyEl.className = "qr manage-menu";
+  openManage("Share invite", body);
   void (async (): Promise<void> => {
     const gen = manageGeneration;
     try {
@@ -1091,7 +1098,6 @@ function openShare(): void {
       showError("Could not build join code.");
     }
   })();
-  openManage("Share invite", body);
 }
 
 manageBtn.addEventListener("click", () => openManageHome());
