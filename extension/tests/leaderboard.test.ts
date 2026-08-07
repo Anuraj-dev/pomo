@@ -177,13 +177,11 @@ describe("aggregateBoard", () => {
   test("summary totals and median over 500-member fixture", () => {
     const snapshots = makeSnapshots(500, 42, NOW);
     const board = aggregateBoard(snapshots, { window: "30d", now: NOW, hiddenKeys: new Set() });
-    const focus = snapshots.map((s) => s.dailyAggregates.reduce((sum, a) => sum + a.focusMinutes, 0));
-    const total = focus.reduce((sum, f) => sum + f, 0);
-    const positive = snapshots
+    const activeFocus = snapshots
       .filter((s) => s.lastFocusedAtEpochSeconds >= NOW - 30 * DAY)
-      .map((s) => s.dailyAggregates.reduce((sum, a) => sum + a.focusMinutes, 0))
-      .filter((f) => f > 0)
-      .sort((a, b) => a - b);
+      .map((s) => s.dailyAggregates.reduce((sum, a) => sum + a.focusMinutes, 0));
+    const total = activeFocus.reduce((sum, f) => sum + f, 0);
+    const positive = activeFocus.filter((f) => f > 0).sort((a, b) => a - b);
     const mid = Math.floor(positive.length / 2);
     const median = positive.length % 2 === 1 ? positive[mid]! : (positive[mid - 1]! + positive[mid]!) / 2;
     expect(board.members.length).toBe(500);
