@@ -218,8 +218,9 @@ public class UtilPreferenceManager(context: Context) {
     }
 
     private fun readOrderedImportedClientIds(): LinkedHashSet<String>? {
-        val json = runCatching { prefs.getString(IMPORTED_CLIENT_IDS_ORDERED_KEY, null) }.getOrNull()
-            ?: return null
+        val json =
+            runCatching { prefs.getString(IMPORTED_CLIENT_IDS_ORDERED_KEY, null) }.getOrNull()
+                ?: return null
         return runCatching {
             gson.fromJson(json, Array<String>::class.java)
                 ?.asSequence()
