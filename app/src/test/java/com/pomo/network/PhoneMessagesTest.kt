@@ -16,11 +16,27 @@ public class PhoneMessagesTest {
         state.phase = TimerState.PHASE_WORK
         state.remaining = 1432.0
 
-        val parsed = JsonParser.parseString(PhoneMessages.state(gson, state)).asJsonObject
+        val parsed = JsonParser.parseString(PhoneMessages.state(gson, state, serverTimeSeconds = 99L)).asJsonObject
 
         assertEquals("state", parsed.get("type").asString)
         assertEquals("running", parsed.getAsJsonObject("data").get("status").asString)
         assertEquals(1432.0, parsed.getAsJsonObject("data").get("remaining").asDouble, 0.0)
+        assertEquals(99L, parsed.getAsJsonObject("data").get("server_time").asLong)
+    }
+
+    @Test
+    public fun statusJson_addsServerTimeAlongsideTimerFields() {
+        val state = TimerState()
+        state.status = TimerState.STATUS_PAUSED
+        state.phase = TimerState.PHASE_SHORT
+        state.remaining = 120.0
+
+        val parsed = JsonParser.parseString(PhoneMessages.statusJson(gson, state, 1_700_000_000L)).asJsonObject
+
+        assertEquals("paused", parsed.get("status").asString)
+        assertEquals("short", parsed.get("phase").asString)
+        assertEquals(120.0, parsed.get("remaining").asDouble, 0.0)
+        assertEquals(1_700_000_000L, parsed.get("server_time").asLong)
     }
 
     @Test

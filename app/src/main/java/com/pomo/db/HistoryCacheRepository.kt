@@ -62,6 +62,13 @@ public class HistoryCacheRepository(context: Context) {
 
     public suspend fun getSessionsForDate(date: String): List<SessionEntity> = dao.getSessionsForDate(date)
 
+    public suspend fun getSessionByStart(start: Long): SessionEntity? = dao.getSessionByStart(start)
+
+    public suspend fun getAllSessionStarts(): Set<Long> =
+        withContext(Dispatchers.IO) {
+            dao.getAllSessionStarts().toSet()
+        }
+
     public fun observeSessionsForDate(date: String): Flow<List<SessionEntity>> = dao.getSessionsForDateFlow(date)
 
     public fun observeAllSessions(): Flow<List<SessionEntity>> = dao.getAllSessionsFlow()

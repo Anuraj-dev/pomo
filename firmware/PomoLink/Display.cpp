@@ -23,10 +23,11 @@ const char* phaseLabel(const TimerModel& model) {
   return "Pomo";
 }
 
+// Markers: space=SYNCED, ~=OFFLINE, ?=token rejected, .=probe/reconnect.
 char connMarker(ConnState conn) {
   switch (conn) {
     case CONN_SYNCED: return ' ';
-    case CONN_OFFLINE: return '!';
+    case CONN_OFFLINE: return '~';
     case CONN_UNPAIRED: return '?';
     default: return '.';
   }
@@ -66,13 +67,16 @@ void Display::render(const TimerModel& model, ConnState conn) {
   }
 
   // Row 1: progress left, connection marker at column 15.
+  // daily_goal 0 is valid (no goal) — avoid "3/0 today".
   char left[16];
   if (!model.hasState()) {
     snprintf(left, sizeof(left), "Starting up");
   } else if (strcmp(model.status(), "stopped") == 0) {
     snprintf(left, sizeof(left), "Press to start");
-  } else {
+  } else if (model.goal() > 0) {
     snprintf(left, sizeof(left), "%d/%d today", model.completed(), model.goal());
+  } else {
+    snprintf(left, sizeof(left), "%d today", model.completed());
   }
   snprintf(row1, sizeof(row1), "%-15s%c", left, connMarker(conn));
 

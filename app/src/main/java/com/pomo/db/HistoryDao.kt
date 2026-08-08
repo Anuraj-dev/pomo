@@ -36,6 +36,12 @@ public interface HistoryDao {
     @Query("SELECT * FROM sessions WHERE date = :date ORDER BY start ASC")
     public suspend fun getSessionsForDate(date: String): List<SessionEntity>
 
+    @Query("SELECT * FROM sessions WHERE start = :start LIMIT 1")
+    public suspend fun getSessionByStart(start: Long): SessionEntity?
+
+    @Query("SELECT start FROM sessions")
+    public suspend fun getAllSessionStarts(): List<Long>
+
     @Query("SELECT * FROM sessions WHERE date IN (:dates) ORDER BY date DESC, start ASC")
     public suspend fun getSessionsForDates(dates: List<String>): List<SessionEntity>
 
