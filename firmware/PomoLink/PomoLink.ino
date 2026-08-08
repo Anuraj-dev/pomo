@@ -186,8 +186,13 @@ void setup() {
   model.setConfig(configStore.workMinutes(), configStore.shortMinutes(),
                   configStore.longMinutes(), configStore.longAfter(),
                   configStore.goal());
+  // Both paths share onPhaseComplete: local rundown (OFFLINE) and phone
+  // phase_complete WebSocket events (SYNCED). The hybrid refactor wired only
+  // the model; without the client registration the desk stays silent while
+  // SYNCED because TimerModel::tick() no-ops when the phone owns the clock.
   model.setPhaseCompleteHandler(onPhaseComplete);
   model.setSessionCompleteHandler(onSessionComplete);
+  client.setPhaseCompleteHandler(onPhaseComplete);
 
   // Survive reboot for an offline running/paused timer (before client probe).
   restoreLiveTimerFromFlash();
