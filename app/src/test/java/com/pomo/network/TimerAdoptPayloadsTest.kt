@@ -205,7 +205,10 @@ public class TimerAdoptPayloadsTest {
             }
         val payload =
             TimerAdoptPayloads.parse(
-                """{"status":"paused","phase":"long","remaining":60,"duration":900,"start_time":5.0,"completed":3,"daily_goal":10,"tag":"x"}""",
+                """
+                {"status":"paused","phase":"long","remaining":60,"duration":900,
+                  "start_time":5.0,"completed":3,"daily_goal":10,"tag":"x"}
+                """.trimIndent(),
             )
         val next = TimerAdoptPayloads.applyTo(base, payload, nowSeconds = 99L)
         assertEquals(TimerState.STATUS_PAUSED, next.status)
