@@ -87,12 +87,18 @@ void ConfigStore::load() {
   }
   fsReady_ = true;
 
-  if (!LittleFS.exists(kPath)) {
+  const char* path = nullptr;
+  if (LittleFS.exists(kPath)) {
+    path = kPath;
+  } else if (LittleFS.exists(kTmpPath)) {
+    Serial.println("[ConfigStore] committed file missing, trying temp");
+    path = kTmpPath;
+  } else {
     Serial.println("[ConfigStore] no file, using defaults");
     return;
   }
 
-  File f = LittleFS.open(kPath, "r");
+  File f = LittleFS.open(path, "r");
   if (!f) {
     Serial.println("[ConfigStore] open failed");
     return;
@@ -104,6 +110,11 @@ void ConfigStore::load() {
   if (err) {
     Serial.printf("[ConfigStore] parse failed: %s\n", err.c_str());
     return;
+  }
+  if (path == kTmpPath) {
+    if (LittleFS.rename(kTmpPath, kPath)) {
+      Serial.println("[ConfigStore] promoted temp to committed");
+    }
   }
 
   const int work = doc["work"] | workMinutes_;
