@@ -66,7 +66,7 @@ public interface NsdRegistrar {
  * holds whether or not the framework accepts a teardown of a pending registration —
  * which is not something this code can observe.
  *
- * Async registration failures schedule a bounded exponential backoff retry via
+ * Async registration failures schedule an indefinite fixed-interval retry via
  * [mainHandler] (null in unit tests = no auto-retry; callers may still call
  * [advertise] again). [stop] cancels pending retries.
  *
@@ -93,14 +93,12 @@ public class PomoServiceAdvertiser(
     /** Last port [advertise] was asked to publish; used by async failure retries. */
     private var desiredPort: Int? = null
 
-    private var retryAttempt: Int = 0
-
     private val retryRunnable: Runnable =
         Runnable {
             val port = desiredPort
             if (port == null) return@Runnable
             if (live != null) return@Runnable
-            Log.d(TAG, "mDNS registration retry attempt $retryAttempt on port $port")
+            Log.d(TAG, "mDNS registration retry on port $port")
             advertiseInternal(port)
         }
 
@@ -112,7 +110,6 @@ public class PomoServiceAdvertiser(
         desiredPort = port
         if (live?.port == port) return
         cancelRetry()
-        retryAttempt = 0
         // Do not call [stop] — it clears [desiredPort]. Tear down prior live only.
         stopKeepingDesired()
         advertiseInternal(port)
@@ -121,7 +118,6 @@ public class PomoServiceAdvertiser(
     public fun stop() {
         desiredPort = null
         cancelRetry()
-        retryAttempt = 0
         stopKeepingDesired()
     }
 
@@ -148,9 +144,6 @@ public class PomoServiceAdvertiser(
                             Log.d(TAG, "Tearing down a superseded registration on port $port")
                             tearDown(registered)
                         } else {
-                            // Successful publish — reset backoff so a later failure gets
-                            // a full retry budget again.
-                            retryAttempt = 0
                             cancelRetry()
                         }
                     },
@@ -180,23 +173,10 @@ public class PomoServiceAdvertiser(
 
     private fun scheduleRetry() {
         val handler = mainHandler ?: return
-        val port = desiredPort ?: return
-        if (retryAttempt >= MAX_REGISTRATION_RETRIES) {
-            Log.w(
-                TAG,
-                "mDNS registration giving up after $MAX_REGISTRATION_RETRIES retries on port $port",
-            )
-            return
-        }
-        val delayMs =
-            minOf(
-                RETRY_BASE_MS * (1L shl retryAttempt.coerceAtMost(6)),
-                RETRY_MAX_MS,
-            )
-        retryAttempt += 1
+        if (desiredPort == null) return
         handler.removeCallbacks(retryRunnable)
-        handler.postDelayed(retryRunnable, delayMs)
-        Log.d(TAG, "mDNS registration scheduled retry #$retryAttempt in ${delayMs}ms")
+        handler.postDelayed(retryRunnable, RETRY_INTERVAL_MS)
+        Log.d(TAG, "mDNS registration scheduled retry in ${RETRY_INTERVAL_MS}ms")
     }
 
     private fun cancelRetry() {
@@ -283,10 +263,8 @@ public class PomoServiceAdvertiser(
         public const val SERVICE_NAME: String = "Pomo"
         private const val TAG: String = "PomoAdvertiser"
 
-        /** Bounded async-failure retries so a transient NsdManager glitch is not permanent. */
-        private const val MAX_REGISTRATION_RETRIES: Int = 5
-        private const val RETRY_BASE_MS: Long = 2_000L
-        private const val RETRY_MAX_MS: Long = 60_000L
+        /** Keep retrying while the foreground service wants this port advertised. */
+        private const val RETRY_INTERVAL_MS: Long = 5_000L
 
         /** Builds an advertiser backed by the system NsdManager. */
         public fun forContext(context: Context): PomoServiceAdvertiser {

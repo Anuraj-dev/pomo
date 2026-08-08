@@ -182,14 +182,18 @@ The NodeMCU desk device (`firmware/PomoLink/`) is a **hybrid** client:
   survives reboot. Boot without WiFi (or after the boot probe: WiFi wait ~45 s,
   then a fresh DISCOVERING window ~45 s after association)
   becomes offline-usable (`~`), not stuck on “Starting up”.
-- **Reconnect:** progressive rediscover (fast retries then ~90 s) plus REST
-  reachability probes on a known host. Enter-SYNC starts from the first healthy
-  WS `state` **or** `GET /api/status` while CONNECTING, then
-  `POST /api/sessions/import`, then optional `POST /api/timer/adopt` under
-  least-remaining (phone stopped always; same session always; both live only
-  when desk remaining is strictly less). Live adopt requires `start_time > 0`.
-  HTTP 409 `timer_busy` means the desk snaps to the phone. After adopt,
-  **Room** is the source of truth for today's `completed` count on the phone.
+- **Reconnect:** rediscovery and reconnect use one fixed ~5 s interval, plus a
+  known-host REST reachability probe every ~5 s. Enter-SYNC starts from the
+  first healthy WebSocket `state` frame; `GET /api/status` while CONNECTING is
+  only a reachability/token check and never promotes the desk to SYNCED. It
+  then posts `POST /api/sessions/import`, dropping only accepted client IDs.
+  Rejected, unaccepted, or failed imports remain queued and retry on the same
+  fixed interval; the desk stays CONNECTING until the queue is empty. It then
+  optionally calls `POST /api/timer/adopt` under least-remaining (phone stopped
+  always; same session always; both live only when desk remaining is strictly
+  less). Live adopt requires `start_time > 0`. HTTP 409 `timer_busy` means the
+  desk snaps to the phone. After adopt, **Room** is the source of truth for
+  today's `completed` count on the phone.
 
 There is never dual live ownership after merge: one winner under least
 remaining; once SYNCED the phone owns the sole live clock.
@@ -198,10 +202,10 @@ LCD connection markers: space = SYNCED, `~` = OFFLINE, `.` = probe/reconnect
 pipeline, `?` = unpaired (token rejected; local timer still usable).
 
 While serving, the service advertises `_pomo._tcp` over mDNS so LAN clients
-resolve the phone by name. Async registration failures retry with bounded
-exponential backoff (phone advertiser). Desk discovery token-probes multiple
-responders and selects the first HTTP 200; a configured host/port fallback wins
-outright and skips mDNS.
+resolve the phone by name. Async registration failures retry indefinitely every
+5 s while the service wants the port advertised. Desk discovery token-probes
+multiple responders and selects the first HTTP 200; a configured host/port
+fallback wins outright and skips mDNS.
 
 See [protocol.md](protocol.md) for endpoint details and
 [firmware/README.md](../firmware/README.md) for desk timings and wiring.

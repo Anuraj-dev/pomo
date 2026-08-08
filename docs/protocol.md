@@ -41,7 +41,8 @@ IP, which changes whenever the router issues a new DHCP lease. Discovery does
 not carry the pairing token — clients still need the token from the pairing
 payload. Advertising follows the phone API's own settings: it stops when the
 API is disabled and when wifi-only mode has no active LAN network. Async mDNS
-registration failures on the phone retry with bounded exponential backoff.
+registration failures on the phone retry indefinitely every 5 seconds while
+the service still wants the port advertised.
 
 When multiple `_pomo._tcp` responders exist (e.g. dev + release packages, or
 two phones), clients must not trust the first mDNS answer alone. The desk
@@ -480,11 +481,13 @@ run a local Pomodoro (buzzer, buttons, countdown), persist a live timer snapshot
 across reboot, and queue completed sessions (LittleFS temp+rename; real phase
 `start_time` when known). On reconnect it:
 
-1. Completes enter-SYNC from the first healthy phone snapshot while CONNECTING:
-   a WebSocket `state` frame **or** authenticated `GET /api/status` HTTP 200
-   (not WS-only). Marker stays `.` until the pipeline finishes.
+1. Completes enter-SYNC from the first authenticated WebSocket `state` frame
+   while CONNECTING. Authenticated `GET /api/status` probes only check
+   reachability/token and never promote the desk to SYNCED. Marker stays `.`
+   until the pipeline finishes.
 2. Flushes completed offline sessions with `POST /api/sessions/import` (append-only;
-   phone Room remains canonical after accept).
+   only accepted client IDs are dropped; rejected, unaccepted, or failed rows
+   remain queued and retry on the fixed ~5-second interval).
 3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
    when the phone is stopped, or when both are live and desk remaining is
    strictly less than phone remaining (least-remaining). Same session is always
@@ -492,11 +495,14 @@ across reboot, and queue completed sessions (LittleFS temp+rename; real phase
    `completed` from Room (desk completed is not authoritative).
 4. On adopt `409` (phone remaining ≤ desk remaining on a different session) or
    when the desk does not try adopt, snaps to phone state.
-5. Caches `server_time` and `GET /api/config` (retry on failure; periodic refresh
-   while SYNCED). `daily_goal` may be `0`.
+5. Caches `server_time` and defers `GET /api/config` until SYNC is stable;
+   healthy refresh is ~5 minutes and failed refreshes retry after ~1 minute.
+   `daily_goal` may be `0`.
 
 Never run two live clocks after merge: least remaining wins; once SYNCED the
 phone owns the sole live clock. Opening the Pomo app on the LAN is enough for
-the desk to rediscover (progressive backoff after leave-SYNC, plus REST
+the desk to rediscover (fixed ~5-second retries after leave-SYNC, plus REST
 reachability on a known host) and sync; there is no separate desk “push sync”
-command.
+command. A stale WebSocket is detected after ~20 seconds and gets bounded soft
+resync while phone ownership is retained; unreachable recovery eventually
+returns to OFFLINE.

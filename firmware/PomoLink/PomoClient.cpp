@@ -25,27 +25,32 @@
 
 namespace {
 
-const unsigned long kPollIntervalMs = 30000;
-const unsigned long kConnectingPollMs = 3000;    // faster REST while CONNECTING
+// REST while SYNCED/CONNECTING is dangerous on ESP8266: blocking HTTP starves
+// webSocket.loop() and drops the live socket. Prefer WS for liveness.
 const unsigned long kOfflineProbeMs = 5000;      // REST reachability while OFFLINE
-const unsigned long kStaleAfterMs = 45000;       // SYNCED / CONNECTING → OFFLINE
+const unsigned long kStaleAfterMs = 20000;       // no WS frame → soft resync / offline
 // Each phase gets this budget separately: WiFi wait, then DISCOVERING restarts
 // the clock on association (see tickWifi). Worst case ~2 * kBootProbeMs.
 const unsigned long kBootProbeMs = 45000;
-const unsigned long kRediscoverMs = 90000;       // OFFLINE baseline after fast retries
+const unsigned long kReconnectIntervalMs = 5000; // fixed rediscover/retry interval
 const unsigned long kProbeRetryMs = 1000;        // short retry inside probe
 const unsigned long kUnpairedRetryMs = 300000;   // 5 minutes
-// Config: periodic refresh with heartbeat; faster retry after a failed fetch.
-const unsigned long kConfigRefreshMs = 30000;
-const unsigned long kConfigRetryMs = 5000;
-// Short first rediscover attempts after leave-SYNC / connect fail, then baseline.
-const unsigned long kRediscoverFastMs[] = {3000UL, 8000UL, 20000UL};
-const uint8_t kRediscoverFastCount =
-    sizeof(kRediscoverFastMs) / sizeof(kRediscoverFastMs[0]);
+// Config: rare while SYNCED (not on the hot path with the socket).
+const unsigned long kConfigRefreshMs = 300000;   // 5 min when healthy
+const unsigned long kConfigRetryMs = 60000;      // 1 min after a failed fetch
+// Soft WS reopens while phone still answers REST before true OFFLINE.
+const uint8_t kSoftResyncMax = 8;
 // Short on purpose — see the blocking note above.
-const uint16_t kHttpTimeoutMs = 1500;
+const uint16_t kHttpTimeoutMs = 1200;
 // Import/adopt can be a larger body; still bounded.
 const uint16_t kHttpFlushTimeoutMs = 4000;
+// arduinoWebSockets (v2.7.2) loop() refuses TCP connect while
+//   (millis() - _lastConnectionFail) < _reconnectInterval
+// and begin() sets _lastConnectionFail = 0. A huge interval therefore blocks
+// the *first* connect for that many ms after boot (600000 = 10 min — proven
+// root cause of "never WS connected" with REST still healthy). Keep this
+// short so the first connect runs soon after discovery.
+const unsigned long kWsLibReconnectMs = kReconnectIntervalMs;
 
 WebSocketsClient webSocket;
 PomoClient* activeClient = nullptr;
@@ -95,39 +100,40 @@ void PomoClient::setState(ConnState next) {
   Serial.printf("[PomoClient] mode %s -> %s\n", connStateName(prev),
                 connStateName(next));
 
-  // Ownership: only OFFLINE / UNPAIRED run the local engine. SYNCED releases
-  // the desk clock. CONNECTING / DISCOVERING keep whatever ownership they had
-  // so a mid-session rediscover does not freeze buttons or dual-own.
+  // Ownership: ONLY OFFLINE / UNPAIRED take the local clock.
+  // Soft resync is SYNCED → CONNECTING without local takeover (phone still
+  // owns the countdown; buttons still hit the phone API).
   if (model_ == nullptr) return;
   if (next == CONN_OFFLINE || next == CONN_UNPAIRED) {
     model_->setLocalOwner(true);
   } else if (next == CONN_SYNCED) {
     model_->setLocalOwner(false);
-    // Phone is sole live clock — drop offline reboot snapshot so a later
-    // power cycle does not resurrect a desk session after successful sync.
     if (config_ != nullptr) {
       config_->clearTimerSnapshot();
     }
-  } else if (prev == CONN_SYNCED &&
-             (next == CONN_DISCOVERING || next == CONN_CONNECTING ||
-              next == CONN_WIFI)) {
-    // Explicit leave-SYNC path that did not go through enterOffline.
-    model_->setLocalOwner(true);
   }
+  // CONNECTING / DISCOVERING / WIFI: leave ownership as-is.
+}
+
+bool PomoClient::phoneCommandsActive() const {
+  if (host_.length() == 0) return false;
+  if (state_ == CONN_SYNCED) return true;
+  // Soft resync / reconnect after a prior SYNC: phone still owns the clock.
+  if (everSynced_ && model_ != nullptr && !model_->isLocalOwner()) {
+    return state_ == CONN_CONNECTING || state_ == CONN_DISCOVERING;
+  }
+  return false;
 }
 
 void PomoClient::enterOffline(const char* reason) {
   if (state_ == CONN_OFFLINE) return;
   Serial.printf("[PomoClient] leave SYNC/probe → OFFLINE: %s\n", reason);
-  // Progressive rediscover backoff continues only across rediscover misses.
-  // Fresh leave from SYNC / CONNECTING / boot starts with a short first retry
-  // so reopening the phone app reconnects within seconds, not a fixed 90s.
-  const bool continueBackoff = (state_ == CONN_DISCOVERING && !inBootProbe());
-  if (!continueBackoff) {
-    retryCount_ = 0;
-  }
   probeActive_ = false;
   enteringSync_ = false;
+  wsDroppedDuringEnter_ = false;
+  softResyncCount_ = 0;
+  queueFlushPending_ = false;
+  pendingSyncStateJson_.clear();
   preferKnownHost_ = false;
   // Allow an immediate OFFLINE reachability probe on the next tick.
   lastPollAt_ = 0;
@@ -136,7 +142,9 @@ void PomoClient::enterOffline(const char* reason) {
   scheduleRediscover();
   // Flip mode before disconnect so a nested DISCONNECTED callback is a no-op.
   setState(CONN_OFFLINE);
+  ignoreDisconnect_ = true;
   webSocket.disconnect();
+  ignoreDisconnect_ = false;
 }
 
 void PomoClient::enterUnpaired(const char* reason) {
@@ -145,33 +153,31 @@ void PomoClient::enterUnpaired(const char* reason) {
                 reason);
   probeActive_ = false;
   enteringSync_ = false;
+  wsDroppedDuringEnter_ = false;
+  softResyncCount_ = 0;
+  queueFlushPending_ = false;
+  pendingSyncStateJson_.clear();
   if (config_ != nullptr) config_->save();
   retryStartedAt_ = millis();
   retryDelayMs_ = kUnpairedRetryMs;
   // Local owner on: unpaired is still offline-capable (marker '?').
   // Mode first so nested DISCONNECTED from disconnect() does not re-enter.
   setState(CONN_UNPAIRED);
+  ignoreDisconnect_ = true;
   webSocket.disconnect();
+  ignoreDisconnect_ = false;
 }
 
 void PomoClient::scheduleProbeRetry() {
   retryStartedAt_ = millis();
   retryDelayMs_ = kProbeRetryMs;
-  if (retryCount_ < 5) retryCount_++;
 }
 
 void PomoClient::scheduleRediscover() {
   retryStartedAt_ = millis();
-  // 3s → 8s → 20s → 90s baseline. retryCount_ advances on each schedule;
-  // enterOffline resets it except after a rediscover miss.
-  if (retryCount_ < kRediscoverFastCount) {
-    retryDelayMs_ = kRediscoverFastMs[retryCount_];
-  } else {
-    retryDelayMs_ = kRediscoverMs;
-  }
-  if (retryCount_ < 250) retryCount_++;
-  Serial.printf("[PomoClient] schedule rediscover in %lu ms (n=%u)\n",
-                retryDelayMs_, (unsigned)retryCount_);
+  retryDelayMs_ = kReconnectIntervalMs;
+  Serial.printf("[PomoClient] schedule rediscover in %lu ms\n",
+                retryDelayMs_);
 }
 
 void PomoClient::tick() {
@@ -194,10 +200,9 @@ void PomoClient::tick() {
       tickDiscovery();
       break;
     case CONN_OFFLINE:
-      // Progressive rediscover (fast first retries, then 90s baseline). Stay
-      // OFFLINE (marker ~) between attempts. Reconnect marker (.) only while
-      // actively probing. Wait for WiFi first so we do not thrash discovery
-      // while STA is still down.
+      // Fixed-interval rediscover. Stay OFFLINE (marker ~) between attempts;
+      // reconnect marker (.) is shown only while actively probing. Wait for
+      // WiFi first so we do not thrash discovery while STA is still down.
       if (WiFi.status() != WL_CONNECTED) break;
       // Known host: probe REST so the phone reappearing triggers rediscover
       // within a few seconds without waiting out the full backoff.
@@ -209,7 +214,6 @@ void PomoClient::tick() {
             Serial.println(
                 "[PomoClient] phone reachable while OFFLINE → reconnect known host");
             retryDelayMs_ = 0;
-            retryCount_ = 0;
             // REST already reached this host — skip mDNS so a multicast miss
             // cannot throw away a working address.
             preferKnownHost_ = true;
@@ -220,7 +224,6 @@ void PomoClient::tick() {
       }
       if (retryDelayMs_ != 0 && millis() - retryStartedAt_ >= retryDelayMs_) {
         retryDelayMs_ = 0;
-        // Keep retryCount_ so the next miss continues progressive backoff.
         Serial.println("[PomoClient] rediscover timer elapsed → DISCOVERING");
         setState(CONN_DISCOVERING);
       }
@@ -234,7 +237,6 @@ void PomoClient::tick() {
       // Not terminal, but deliberately slow. Local timer stays usable (marker ?).
       if (millis() - retryStartedAt_ >= retryDelayMs_) {
         Serial.println("[PomoClient] unpaired cooldown over, re-discovering");
-        retryCount_ = 0;
         retryDelayMs_ = 0;
         setState(CONN_DISCOVERING);
       }
@@ -287,7 +289,6 @@ void PomoClient::tickWifi() {
   if (!MDNS.begin("pomolink")) {
     Serial.println("[PomoClient] mDNS responder failed to start");
   }
-  retryCount_ = 0;
   retryDelayMs_ = 0;
   // Fresh post-WiFi DISCOVERING window (boot probe budget restarts here).
   probeStartedAt_ = millis();
@@ -334,8 +335,8 @@ void PomoClient::tickDiscovery() {
         // OFFLINE only while still DISCOVERING (not during CONNECTING).
         scheduleProbeRetry();
       } else {
-        // Rediscover miss — back to OFFLINE; progressive backoff keeps local
-        // ownership (fast first retries, then 90s baseline).
+        // Rediscover miss — back to OFFLINE; the next fixed interval keeps
+        // local ownership while waiting for the phone.
         enterOffline("mDNS miss on rediscover");
       }
       return;
@@ -385,33 +386,105 @@ void PomoClient::tickDiscovery() {
     }
   }
 
-  webSocket.begin(host_, port_, "/ws");
+  beginWebSocket("discovery");
+}
+
+void PomoClient::beginWebSocket(const char* reason) {
+  Serial.printf("[PomoClient] begin WebSocket %s:%u (%s)\n", host_.c_str(),
+                port_, reason == nullptr ? "" : reason);
+
+  // Drop any prior socket cleanly before reopen (soft resync path).
+  // Intentional disconnect must not re-enter softResync via the callback.
+  ignoreDisconnect_ = true;
+  webSocket.disconnect();
+  ignoreDisconnect_ = false;
+
+  // Event handler before begin so we cannot miss the first CONNECTED.
   webSocket.onEvent([](WStype_t type, uint8_t* payload, size_t length) {
     if (activeClient == nullptr) return;
     if (type == WStype_CONNECTED) {
-      // Refresh so the hello / first-state wait starts now, not at begin().
       activeClient->onWebSocketConnected();
       char hello[160];
-      snprintf(hello, sizeof(hello), "{\"type\":\"hello\",\"token\":\"%s\"}", POMO_TOKEN);
+      snprintf(hello, sizeof(hello), "{\"type\":\"hello\",\"token\":\"%s\"}",
+               POMO_TOKEN);
       webSocket.sendTXT(hello);
       Serial.println("[PomoClient] WS connected, hello sent");
     } else if (type == WStype_TEXT) {
       activeClient->onWebSocketText((const char*)payload, length);
     } else if (type == WStype_DISCONNECTED) {
+      Serial.println("[PomoClient] WS event DISCONNECTED");
       activeClient->onWebSocketDisconnected();
+    } else if (type == WStype_ERROR) {
+      Serial.printf("[PomoClient] WS event ERROR len=%u\n", (unsigned)length);
+    } else {
+      Serial.printf("[PomoClient] WS event type=%d len=%u\n", (int)type,
+                    (unsigned)length);
     }
   });
-  // Do not auto-reconnect under us: the state machine owns rediscover cadence
-  // (fast retries → 90s baseline / 5min unpaired) so the LCD marker stays honest.
-  webSocket.setReconnectInterval(kRediscoverMs);
+
+  // Plain ws (not wss). Empty path protocol is fine; default "arduino" also
+  // works against our phone (proven 101 from PC). Keep library default.
+  webSocket.begin(host_.c_str(), port_, "/ws");
+  // See kWsLibReconnectMs comment — must stay small or first connect is delayed
+  // by that full interval after boot.
+  webSocket.setReconnectInterval(kWsLibReconnectMs);
+  Serial.printf("[PomoClient] WS lib reconnectInterval=%lu ms\n",
+                kWsLibReconnectMs);
 
   lastContactAt_ = millis();
-  // Seeded so CONNECTING has a full kStaleAfterMs window to open the socket
-  // (boot watchdog does not hard-cut CONN_CONNECTING).
+  // Seeded so CONNECTING has a full kStaleAfterMs window to open the socket.
   lastSocketContactAt_ = lastContactAt_;
-  lastPollAt_ = 0;
+  // Do not REST-poll on the CONNECTING hot path (starves the handshake).
+  lastPollAt_ = millis();
   retryDelayMs_ = 0;
   setState(CONN_CONNECTING);
+}
+
+bool PomoClient::softResync(const char* reason) {
+  if (softResyncing_) return false;
+  if (host_.length() == 0 || port_ == 0) {
+    enterOffline(reason == nullptr ? "soft resync no host" : reason);
+    return false;
+  }
+  if (softResyncCount_ >= kSoftResyncMax) {
+    Serial.printf("[PomoClient] soft resync budget exhausted (%u) → OFFLINE\n",
+                  (unsigned)softResyncCount_);
+    enterOffline("soft resync budget");
+    return false;
+  }
+
+  softResyncing_ = true;
+
+  // One cheap REST probe: if the phone is gone, take the local clock.
+  // If it answers, keep phone ownership and only reopen WS.
+  String ignored;
+  const int code =
+      httpRequest("GET", "/api/status", nullptr, &ignored, kHttpTimeoutMs);
+  if (code == 401) {
+    softResyncing_ = false;
+    enterUnpaired("soft resync 401");
+    return false;
+  }
+  if (code != 200) {
+    softResyncing_ = false;
+    Serial.printf("[PomoClient] soft resync REST code=%d → OFFLINE\n", code);
+    enterOffline(reason == nullptr ? "soft resync unreachable" : reason);
+    return false;
+  }
+
+  softResyncCount_++;
+  enteringSync_ = false;
+  wsDroppedDuringEnter_ = false;
+  // Phone still owns the clock: do not setLocalOwner(true).
+  if (model_ != nullptr) {
+    model_->setLocalOwner(false);
+  }
+  Serial.printf("[PomoClient] soft resync #%u: %s (phone still owns clock)\n",
+                (unsigned)softResyncCount_,
+                reason == nullptr ? "ws" : reason);
+  beginWebSocket("soft resync");
+  softResyncing_ = false;
+  return true;
 }
 
 void PomoClient::tickWebSocket() {
@@ -425,45 +498,62 @@ void PomoClient::tickWebSocket() {
 void PomoClient::tickHeartbeat() {
   const unsigned long now = millis();
 
-  // Poll REST: every 30s while SYNCED (drift + half-open detect); faster while
-  // CONNECTING so a healthy phone can complete enter-SYNC via /api/status when
-  // the first WS state frame never arrives (reconnect dead-end fix).
-  const unsigned long pollEvery =
-      (state_ == CONN_CONNECTING) ? kConnectingPollMs : kPollIntervalMs;
-  if (lastPollAt_ == 0 || now - lastPollAt_ >= pollEvery) {
-    lastPollAt_ = now;
-    if (fetchStatus()) {
-      lastContactAt_ = now;
-    }
+  // A failed/partial import must finish before the device can become SYNCED.
+  // Retry from the most recent WS snapshot on the same state-machine timer;
+  // webSocket.loop() was already pumped at the start of tick().
+  if (state_ == CONN_CONNECTING && queueFlushPending_) {
+    tickSessionQueueRetry();
+    if (queueFlushPending_ || enteringSync_) return;
   }
 
-  // Phone setting changes while SYNCED: refresh /api/config with the heartbeat
-  // (or sooner after a failed enter-SYNC / periodic fetch).
+  // CRITICAL: do not periodically REST-poll while CONNECTING or SYNCED.
+  // Blocking HTTPClient on ESP8266 starves webSocket.loop() and is the main
+  // cause of "REST works, socket stale, thrash" loops. Liveness is WS frames.
+  // OFFLINE probes live in tick() only.
+
+  // Rare config refresh while the socket is healthy (not every heartbeat).
   if (state_ == CONN_SYNCED && !enteringSync_) {
     tickConfigRefresh();
   }
 
-  // Socket stale uses kStaleAfterMs for both SYNCED and CONNECTING (boot or
-  // rediscover). DISCOVERING-phase boot misses are owned only by
-  // tickProbeWatchdog (kBootProbeMs). While enter-SYNC is in progress, do not
-  // tear down mid-import/adopt/config.
-  // REST contact must not refresh lastSocketContactAt_ (half-open sockets).
+  // Socket stale: prefer soft resync (phone still owns clock) over OFFLINE.
+  // REST must not refresh lastSocketContactAt_.
   if (!enteringSync_ && state_ != CONN_UNPAIRED &&
       (now - lastSocketContactAt_) >= kStaleAfterMs) {
     if (state_ == CONN_SYNCED) {
-      Serial.println("[PomoClient] heartbeat stale: SYNCED socket");
-      enterOffline("stale socket");
+      Serial.println("[PomoClient] heartbeat stale: SYNCED socket → soft resync");
+      softResync("stale socket");
     } else if (state_ == CONN_CONNECTING) {
-      // Handshake / first-state wait exceeded kStaleAfterMs.
-      if (inBootProbe()) {
-        Serial.println("[PomoClient] heartbeat stale: boot connect");
-        enterOffline("boot connect stale");
+      Serial.println(
+          "[PomoClient] heartbeat stale: CONNECTING socket → soft resync/offline");
+      if (inBootProbe() && softResyncCount_ == 0 && !everSynced_) {
+        // First boot: if WS never comes up, one soft try then offline.
+        if (!softResync("boot connect stale")) {
+          // softResync already entered OFFLINE/UNPAIRED on failure
+        }
       } else {
-        Serial.println("[PomoClient] heartbeat stale: reconnect connect");
-        enterOffline("reconnect stale");
+        softResync("reconnect connect stale");
       }
     }
   }
+}
+
+void PomoClient::tickSessionQueueRetry() {
+  if (!queueFlushPending_ || enteringSync_ || pendingSyncStateJson_.length() == 0) {
+    return;
+  }
+  if (retryDelayMs_ != 0 && millis() - retryStartedAt_ < retryDelayMs_) return;
+
+  JsonDocument doc;
+  if (deserializeJson(doc, pendingSyncStateJson_)) {
+    Serial.println("[PomoClient] queued sync snapshot parse failed; retrying");
+    retryStartedAt_ = millis();
+    retryDelayMs_ = kReconnectIntervalMs;
+    return;
+  }
+
+  Serial.println("[PomoClient] retrying pending session import");
+  enterSyncFromPhoneState(doc.as<JsonObject>());
 }
 
 void PomoClient::tickConfigRefresh() {
@@ -516,7 +606,23 @@ void PomoClient::onWebSocketText(const char* payload, size_t length) {
     }
 
     if (state_ == CONN_CONNECTING && !enteringSync_) {
-      // Ordered enter-SYNC pipeline; marker stays '.' until complete.
+      // Keep the newest phone snapshot for a timed import retry, but do not
+      // start a second synchronous pipeline from every broadcast frame.
+      pendingSyncStateJson_.clear();
+      serializeJson(data, pendingSyncStateJson_);
+      if (queueFlushPending_) return;
+      // Soft resync after a prior SYNC: do NOT re-run import/adopt/config.
+      // That blocking HTTP is what kills the socket and restarts the thrash.
+      if (everSynced_ && model_ != nullptr && !model_->isLocalOwner()) {
+        applyPhoneObject(data, /*force=*/true);
+        cacheServerTime(data);
+        softResyncCount_ = 0;
+        lastContactAt_ = millis();
+        setState(CONN_SYNCED);
+        Serial.println("[PomoClient] soft resync complete → SYNCED (light path)");
+        return;
+      }
+      // First enter-SYNC this boot (or after true OFFLINE local ownership).
       enterSyncFromPhoneState(data);
       return;
     }
@@ -538,25 +644,48 @@ void PomoClient::onWebSocketText(const char* payload, size_t length) {
 }
 
 void PomoClient::onWebSocketDisconnected() {
+  if (ignoreDisconnect_ || softResyncing_) return;
   if (state_ == CONN_UNPAIRED || state_ == CONN_OFFLINE) return;
   if (enteringSync_) {
-    // Mid flush/adopt: let the HTTP path surface 401 or transport fail.
-    Serial.println("[PomoClient] WS drop during enter-SYNC pipeline");
-    return;
-  }
-
-  if (state_ == CONN_CONNECTING) {
-    // Phone closes immediately after a bad hello without a REST 401 path.
-    // Probe /api/status: 401 → UNPAIRED (?); 200 → enter-SYNC via status JSON
-    // (reconnect dead-end fix — do not wait for socket stale + 90s rediscover).
-    Serial.println("[PomoClient] WS drop while CONNECTING — probing REST status");
-    fetchStatus();
+    // Mid flush/adopt: finish pipeline, then soft-resync if still socket-dead.
+    wsDroppedDuringEnter_ = true;
+    Serial.println("[PomoClient] WS drop during enter-SYNC pipeline (deferred)");
     return;
   }
 
   if (state_ == CONN_SYNCED) {
-    // Immediate leave-SYNC on socket loss (faster than waiting for 45s stale).
-    enterOffline("ws disconnected");
+    // Do not flip to OFFLINE / local timer — phone is likely still up.
+    Serial.println("[PomoClient] WS drop while SYNCED → soft resync");
+    softResync("ws disconnected");
+    return;
+  }
+
+  if (state_ == CONN_CONNECTING) {
+    // Bad token: phone closes after hello. Probe once for 401 → UNPAIRED.
+    // Do NOT REST-promote to SYNCED (that created the thrash loop).
+    Serial.println("[PomoClient] WS drop while CONNECTING — token/reachability probe");
+    String body;
+    const int code =
+        httpRequest("GET", "/api/status", nullptr, &body, kHttpTimeoutMs);
+    if (code == 401) {
+      enterUnpaired("ws drop 401");
+      return;
+    }
+    if (code == 200) {
+      // Phone is fine; WS just failed. Soft-reopen without local ownership if
+      // we already know the phone clock, else stay CONNECTING with a fresh WS.
+      if (everSynced_ && model_ != nullptr && !model_->isLocalOwner()) {
+        softResync("ws drop phone up");
+      } else if (softResyncCount_ < kSoftResyncMax) {
+        softResyncCount_++;
+        beginWebSocket("ws drop retry");
+      } else {
+        enterOffline("ws connect failed");
+      }
+      return;
+    }
+    // Transport fail — let stale timer / boot probe decide; do not thrash HTTP.
+    Serial.printf("[PomoClient] WS drop CONNECTING REST code=%d\n", code);
   }
 }
 
@@ -609,7 +738,7 @@ void PomoClient::enterSyncFromPhoneState(JsonObjectConst data) {
   enteringSync_ = true;
   Serial.println("[PomoClient] enter SYNC pipeline start");
 
-  // (1) Phone snapshot ok (WS state frame or REST /api/status while CONNECTING).
+  // (1) Phone snapshot ok — WS state frame only (never REST-promoted).
   cacheServerTime(data);
 
   // Snapshot phone status before any blocking HTTP so we can decide adopt.
@@ -632,6 +761,19 @@ void PomoClient::enterSyncFromPhoneState(JsonObjectConst data) {
     Serial.println("[PomoClient] enter SYNC aborted (unpaired during import)");
     return;
   }
+  if (!flushOk) {
+    // Keep the phone snapshot and remain CONNECTING. Rejected or transport-
+    // failed rows stay on LittleFS and are retried on the fixed interval.
+    queueFlushPending_ = true;
+    retryStartedAt_ = millis();
+    retryDelayMs_ = kReconnectIntervalMs;
+    enteringSync_ = false;
+    Serial.printf(
+        "[PomoClient] session import incomplete; staying CONNECTING, retry in %lu ms\n",
+        kReconnectIntervalMs);
+    return;
+  }
+  queueFlushPending_ = false;
 
   // (4)+(5) Least remaining wins when both are live; never dual clocks after merge.
   // tryAdopt: 1 = model phone-side (adopt ok or 409 body), 0 = snap, -1 = transport.
@@ -696,21 +838,12 @@ void PomoClient::enterSyncFromPhoneState(JsonObjectConst data) {
     applyPhoneObject(data);
   }
 
-  // (6) Cache GET /api/config + persist epoch basis to flash. Always attempt;
-  // on failure retry once immediately, then keep retrying while SYNCED.
-  if (!fetchAndCacheConfig()) {
-    Serial.println("[PomoClient] config fetch failed on enter-SYNC; retrying once");
-    if (!fetchAndCacheConfig()) {
-      Serial.println(
-          "[PomoClient] config fetch retry failed; will retry while SYNCED");
-      configFetchFailed_ = true;
-    } else {
-      configFetchFailed_ = false;
-    }
-  } else {
-    configFetchFailed_ = false;
-  }
+  // (6) Defer GET /api/config. Blocking HTTP here kills the WS we just opened
+  // and is a primary thrash trigger. Flash already has last-known durations;
+  // tickConfigRefresh pulls phone settings ~5 min after SYNC is stable.
+  configFetchFailed_ = false;
   lastConfigFetchAt_ = millis();
+  Serial.println("[PomoClient] config fetch deferred until SYNC is stable");
   if (state_ == CONN_UNPAIRED) {
     enteringSync_ = false;
     Serial.println("[PomoClient] enter SYNC aborted (unpaired during config)");
@@ -718,16 +851,24 @@ void PomoClient::enterSyncFromPhoneState(JsonObjectConst data) {
   }
   if (config_ != nullptr) config_->save();
 
-  retryCount_ = 0;
   probeActive_ = false;
   everSynced_ = true;
   enteringSync_ = false;
-  // Full stale window after enter-SYNC (WS- or REST-promoted). A REST-only
-  // promote must not be torn down immediately by a pre-pipeline socket seed.
+  softResyncCount_ = 0;
+  pendingSyncStateJson_.clear();
+  // Do NOT fake lastSocketContactAt_ here. Only real WS frames may refresh it.
+  // Faking it after a blocking import/config pipeline hid dead sockets for 45s
+  // and caused SYNCED→OFFLINE→REST-SYNC thrash.
   lastContactAt_ = millis();
-  lastSocketContactAt_ = lastContactAt_;
   setState(CONN_SYNCED);
   Serial.println("[PomoClient] enter SYNC pipeline done → SYNCED");
+
+  if (wsDroppedDuringEnter_) {
+    wsDroppedDuringEnter_ = false;
+    Serial.println(
+        "[PomoClient] WS died during enter-SYNC pipeline → soft resync");
+    softResync("ws drop during enter");
+  }
 }
 
 bool PomoClient::flushSessionQueue() {
@@ -788,7 +929,7 @@ bool PomoClient::flushSessionQueue() {
   JsonArray accepted = resp["accepted"].as<JsonArray>();
   if (accepted.isNull()) {
     Serial.println("[PomoClient] flush rejected: no accepted array");
-    return resp["success"] | false;
+    return false;
   }
 
   // Collect accepted client_ids for drop (bounded by queue capacity).
@@ -818,6 +959,11 @@ bool PomoClient::flushSessionQueue() {
 
   Serial.printf("[PomoClient] flush accepted=%d rejected=%d queue_remaining=%d\n",
                 n, rejectedCount, queue_->count());
+  if (!queue_->empty()) {
+    Serial.println(
+        "[PomoClient] flush incomplete; rejected/unaccepted rows remain queued");
+    return false;
+  }
   return true;
 }
 
@@ -1033,33 +1179,39 @@ bool PomoClient::fetchStatus() {
   if (code == 401) return false;
   if (code != 200) return false;
 
-  JsonDocument doc;
-  if (deserializeJson(doc, response)) return false;
-
-  // SYNCED: REST snaps the model (drift correction / missed broadcast) with
-  // the same lag projection + stale rejection as WS state frames.
-  // CONNECTING: successful status proves the phone is reachable + authed —
-  // run the same ordered enter-SYNC pipeline as the first WS state frame so
-  // a missing WS state cannot leave us stuck in CONNECTING until stale.
-  // OFFLINE / other: reachability only — never clobber a desk-owned timer
-  // before ordered enter-SYNC (import/adopt) runs.
+  // Never REST-promote to SYNCED. That path left us "SYNCED" with a dead
+  // WebSocket, then heartbeat stale → OFFLINE → REST SYNC forever.
+  // OFFLINE / CONNECTING: reachability only.
+  // SYNCED: optional snap if something still calls this (rare).
   if (state_ == CONN_SYNCED) {
-    // Apply first (lag project on existing basis), then re-anchor epoch.
-    applyPhoneObject(doc.as<JsonObject>(), /*force=*/false);
-    cacheServerTime(doc.as<JsonObject>());
-  } else if (state_ == CONN_CONNECTING && !enteringSync_) {
-    Serial.println(
-        "[PomoClient] REST /api/status while CONNECTING → enter SYNC pipeline");
-    enterSyncFromPhoneState(doc.as<JsonObject>());
+    JsonDocument doc;
+    if (!deserializeJson(doc, response)) {
+      applyPhoneObject(doc.as<JsonObject>(), /*force=*/false);
+      cacheServerTime(doc.as<JsonObject>());
+    }
   }
   return true;
 }
 
 bool PomoClient::postCommand(const char* path, const char* body) {
-  const int code =
-      httpRequest("POST", path, body == nullptr ? "" : body, nullptr,
-                  kHttpTimeoutMs);
-  if (code == 200) return true;
+  String response;
+  const int code = httpRequest("POST", path, body == nullptr ? "" : body,
+                               &response, kHttpTimeoutMs);
+  if (code == 200) {
+    // Apply phone state from the command response so the LCD does not wait
+    // for a WS frame (and still updates if WS is mid-soft-resync).
+    if (response.length() > 0 && model_ != nullptr) {
+      JsonDocument doc;
+      if (!deserializeJson(doc, response) && (doc["success"] | false)) {
+        JsonObject state = doc["state"];
+        if (!state.isNull()) {
+          applyPhoneObject(state, /*force=*/true);
+          cacheServerTime(state);
+        }
+      }
+    }
+    return true;
+  }
   if (code != 401 && code != 0) {
     Serial.printf("[PomoClient] %s failed, code %d\n", path, code);
   }
@@ -1069,7 +1221,9 @@ bool PomoClient::postCommand(const char* path, const char* body) {
 void PomoClient::sendGesture(Gesture gesture) {
   if (gesture == GESTURE_NONE) return;
 
-  if (state_ == CONN_SYNCED) {
+  // Phone is sole clock while SYNCED, and during soft-resync CONNECTING after
+  // a prior sync (localOwner false). Buttons must still hit the phone.
+  if (phoneCommandsActive()) {
     switch (gesture) {
       case GESTURE_SINGLE:
         postCommand("/api/toggle", "");
@@ -1089,8 +1243,7 @@ void PomoClient::sendGesture(Gesture gesture) {
     return;
   }
 
-  // Desk-owned clock: OFFLINE / UNPAIRED, and still owned during rediscover
-  // CONNECTING so a mid-session reconnect attempt does not freeze the button.
+  // Desk-owned clock: OFFLINE / UNPAIRED (and local rediscover with owner).
   // Boot probe (no local owner yet) ignores gestures.
   if (model_ == nullptr || !model_->isLocalOwner()) return;
 

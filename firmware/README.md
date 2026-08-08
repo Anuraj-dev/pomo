@@ -13,9 +13,9 @@ runs a full local Pomodoro when the phone is unreachable.
 
 **You do not need a special sync gesture.** Opening the Pomo app on the same
 Wi‑Fi (so the phone API and mDNS advertisement are up) is enough: while offline
-the desk does progressive rediscover (short first retries, then ~90 s baseline)
-plus REST reachability probes against a known host every few seconds, then
-reconnects, flushes history, and may adopt a live timer. Pairing token must
+the desk retries rediscovery every 5 s, plus REST reachability probes against a
+known host every 5 s, then reconnects, flushes history, and may adopt a live
+timer. Pairing token must
 already be in `secrets.h`.
 
 See `docs/protocol.md` for the API it speaks and `docs/architecture.md` for the
@@ -91,9 +91,9 @@ and adopt results (`[PomoClient] mode …`, `flush accepted=…`, `adopt result=
 | Timing | Default |
 | --- | --- |
 | Boot probe budget | Two sequential ~45 s windows: WiFi wait up to ~45 s, then after association a **fresh** DISCOVERING window of ~45 s (worst case ~90 s to offline-usable). Missing SSID / WiFi hard-fail or either timeout → OFFLINE (`~`), not stuck on `Starting up` |
-| CONNECTING handshake / hello wait | ~45 s socket-stale window (boot watchdog does not hard-cut CONNECTING or abort enter-SYNC) |
-| Rediscover while OFFLINE | progressive: ~3 s → ~8 s → ~20 s, then ~90 s baseline; plus REST reachability probe of known host every ~5 s (skips mDNS when REST proves the host) |
-| SYNCED socket stale / WS loss → OFFLINE | 45 s stale (WS drop leaves SYNC immediately) |
+| CONNECTING handshake / hello wait | ~20 s socket-stale window (boot watchdog does not hard-cut CONNECTING or abort enter-SYNC) |
+| Rediscover/reconnect interval | fixed ~5 s; plus REST reachability probe of known host every ~5 s (skips mDNS when REST proves the host) |
+| SYNCED socket stale / WS loss | ~20 s without a WS frame → soft resync; phone ownership is retained while REST is reachable, then fixed-interval OFFLINE recovery after the safety limit |
 | Unpaired token-reject cooldown | 5 min, then rediscover |
 | Local durations (work / short / long) | 25 / 5 / 15 min (cached from phone) |
 | Long break after N completed work blocks | 4 |
@@ -114,13 +114,14 @@ and adopt results (`[PomoClient] mode …`, `flush accepted=…`, `adopt result=
 
 While the reconnect marker (`.`) is shown, the desk:
 
-1. Accepts the first proof of a healthy phone: a WebSocket `state` frame **or** a
-   successful authenticated `GET /api/status` while `CONNECTING` (not WS-only).
-   WS drop while CONNECTING also probes REST; HTTP 200 runs the same pipeline,
-   HTTP 401 becomes UNPAIRED (`?`).
-2. Flushes the offline queue with `POST /api/sessions/import` and drops accepted
-   `client_id`s (rejected rows stay queued / logged on serial). Implausible
-   `start` values are stripped before flush so the phone can assign wall time.
+1. Accepts the first proof of a healthy phone from a WebSocket `state` frame.
+   REST probes while `CONNECTING` only check reachability/token; they never
+   promote the desk to SYNCED. HTTP 401 becomes UNPAIRED (`?`).
+2. Flushes the offline queue with `POST /api/sessions/import` and drops only
+   accepted `client_id`s. Rejected, unaccepted, transport-failed, or malformed
+   imports stay queued and keep the desk in `CONNECTING`; the same pipeline is
+   retried every 5 s. Implausible `start` values are stripped before flush so
+   the phone can assign wall time.
 3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
    under the **least-remaining** rule: always when the phone is stopped; when
    both are live, only if desk remaining is strictly less than phone remaining;
@@ -130,18 +131,21 @@ While the reconnect marker (`.`) is shown, the desk:
    when the desk does not try adopt (phone wins by remaining), snaps the
    display to phone state. Adopt transport fail keeps the local timer only if
    the phone was stopped; if the phone was already live, the desk snaps.
-5. Caches `server_time` and `GET /api/config` to LittleFS for the next offline
-   stretch. Config fetch retries once immediately on failure, then keeps
-   retrying while SYNCED (~5 s after fail, ~30 s periodic refresh) so phone
-   setting changes still land. `daily_goal` `0` is accepted.
+5. Caches `server_time` and refreshes `GET /api/config` only after SYNC is
+   stable, so the import/adopt pipeline does not starve the WebSocket loop.
+   Healthy config refresh is ~5 min; a failed refresh retries after ~1 min so
+   phone setting changes still land. `daily_goal` `0` is accepted.
 
 While SYNCED, state is applied **before** re-anchoring the epoch cache so lag
 projection can use the prior basis: running countdowns project `remaining` with
 `server_time` / wall-clock now, and reject older/out-of-order frames for the same
 `start_time`+`phase` that would inflate remaining (unless `duration` grew via
 extend). Leave SYNC (stale socket, WS disconnect, or WiFi loss) takes over the
-last remaining countdown locally (`~`). There is never dual live ownership after
-merge: one winner; once SYNCED the phone owns the sole live clock.
+last remaining countdown locally (`~`). A dropped or stale WebSocket first
+attempts soft resync without taking over the local clock; if the phone is
+unreachable or the soft-resync safety limit is reached, fixed-interval reconnect
+returns to OFFLINE. There is never dual live ownership after merge: one winner;
+once SYNCED the phone owns the sole live clock.
 
 After the boot probe budget times out (or WiFi hard-fails), the desk is
 immediately usable offline (idle shows `Pomo` + configured duration +
@@ -170,10 +174,10 @@ reflash) or the 5‑minute cooldown retries.
 
 | Symptom | What to do |
 | --- | --- |
-| Stuck on `.` during first boot | WiFi wait can take up to ~45 s; after association, DISCOVERING gets another ~45 s (probe clock restarts on WiFi up). After either window times out (or WiFi hard-fails), offline mode (`~`) starts. Once the desk is CONNECTING, the handshake/hello wait uses a separate ~45 s socket-stale window (so `.` can last longer than the probe alone). If mDNS never works, set `POMO_HOST_FALLBACK` to the phone IP from Pomo Settings and reflash. |
-| Always `~`, never space | Confirm Pomo is open (or the foreground service is running), phone API enabled, same Wi‑Fi, and the token in `secrets.h` matches Settings. Serial should show progressive rediscover (`schedule rediscover in … ms`) and, with a known host, REST probes while OFFLINE. |
+| Stuck on `.` during first boot | WiFi wait can take up to ~45 s; after association, DISCOVERING gets another ~45 s (probe clock restarts on WiFi up). After either window times out (or WiFi hard-fails), offline mode (`~`) starts. Once the desk is CONNECTING, the handshake/hello wait uses the socket-stale window. If mDNS never works, set `POMO_HOST_FALLBACK` to the phone IP from Pomo Settings and reflash. |
+| Always `~`, never space | Confirm Pomo is open (or the foreground service is running), phone API enabled, same Wi‑Fi, and the token in `secrets.h` matches Settings. Serial should show `schedule rediscover in 5000 ms` and, with a known host, REST probes while OFFLINE. |
 | LCD shows `?` | Pairing token rejected. Re-copy the token from Pomo Settings into `secrets.h` and reflash. Local timer still works under `?`. |
-| History missing after offline use | Open Pomo on the LAN; desk flushes on next successful enter-SYNC. Check Serial for `flush accepted=` / `flush row rejected`. Queue holds up to 32 sessions. |
+| History missing after offline use | Open Pomo on the LAN; desk retries the import every 5 s and enters SYNC only after all rows are accepted. Check Serial for `flush accepted=` / `flush row rejected`. Queue holds up to 32 sessions. |
 | Phone was idle but desk timer did not transfer | Adopt runs when desk is running/paused and the phone is stopped (or same session). If both are live, a **shorter** desk remaining can still win (least remaining); if phone remaining ≤ desk remaining, phone keeps the clock and desk snaps (HTTP 409 `timer_busy`). Not always “phone already has a session → always snap.” Serial: `adopt result=…`. |
 | Buzzer silent on skip | Expected — buzzer fires on natural phase complete only (phone event while SYNCED, local rundown while OFFLINE). |
 | `LiquidCrystal_I2C::begin()` compile error | Wrong LCD library fork — see Libraries above. |
@@ -182,5 +186,5 @@ reflash) or the 5‑minute cooldown retries.
 | Wrong phone / wrong token on multi-device LAN | Desk probes every `_pomo._tcp` responder with `GET /api/status` + token and picks the first HTTP 200 — not the first mDNS answer. Serial: `mDNS candidate` / `selected N of M`. If every responder returns 401, marker becomes `?`. Prefer `POMO_HOST_FALLBACK` when you always want one phone. |
 
 Serial at 115200 is the source of truth for connection debugging: look for
-`mode OFFLINE -> DISCOVERING`, `enter SYNC pipeline`, `flush accepted=`, and
-`adopt result=`.
+`mode OFFLINE -> DISCOVERING`, `enter SYNC pipeline`, `flush accepted=`,
+`session import incomplete`, and `adopt result=`.
