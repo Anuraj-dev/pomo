@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pomo · Crew</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="crew.css" />
+  </head>
+  <body>
+    <main class="stage crew-stage">
+      <nav class="tabs crew-nav" aria-label="Pomo views">
+        <div class="tabset">
+          <a class="tab tab-link" href="newtab.html">Instrument</a>
+          <a class="tab tab-link" href="newtab.html#history">History</a>
+          <a class="tab tab-link" href="newtab.html#stats">Stats</a>
+          <a class="tab tab-link" href="crew.html" aria-current="page">Crew</a>
+          <a class="tab tab-link" href="newtab.html#settings">Settings</a>
+        </div>
+        <span class="build num" id="buildVersion" aria-label="Extension version"></span>
+      </nav>
+
+      <div class="crew-wrap">
+        <header class="head">
+          <div class="head-left">
+            <span class="title">Crew</span>
+            <span class="fresh num" id="freshness" role="status">—</span>
+          </div>
+          <button class="manage-btn" id="manageBtn">Manage</button>
+        </header>
+
+        <section class="crews">
+          <div class="chips" id="chips" role="radiogroup" aria-label="Crews"></div>
+          <div class="crew-actions">
+            <button id="refreshBtn">Refresh</button>
+          </div>
+        </section>
+
+        <section class="window-tabs" id="windowTabs" role="tablist" aria-label="Time window">
+          <button class="tab" data-window="today" id="tab-today" role="tab" aria-selected="true">Today</button>
+          <button class="tab" data-window="7d" id="tab-7d" role="tab" aria-selected="false">7d</button>
+          <button class="tab" data-window="30d" id="tab-30d" role="tab" aria-selected="false">30d</button>
+          <button class="tab" data-window="all" id="tab-all" role="tab" aria-selected="false">All</button>
+        </section>
+
+        <div class="window-panel" id="windowPanel" role="tabpanel" aria-labelledby="tab-today">
+          <section class="summary" id="summary"></section>
+
+          <section class="standing" id="standing"></section>
+
+          <label class="field search-field" id="searchSection" hidden>
+            <span>Search members</span>
+            <input
+              type="search"
+              id="searchInput"
+              aria-label="Search members"
+              placeholder="Name or fingerprint"
+              autocomplete="off"
+              spellcheck="false"
+            />
+          </label>
+
+          <section class="board" id="board" data-empty="true" aria-live="polite"></section>
+        </div>
+
+        <section class="panel" id="manage" hidden role="dialog" aria-modal="true" aria-label="Manage crews">
+          <div class="panel-actions">
+            <button id="manageClose">Close</button>
+          </div>
+          <div class="panel-body" id="manageBody"></div>
+        </section>
+      </div>
+    </main>
+    <script type="module" src="crew.js"></script>
+  </body>
+</html>

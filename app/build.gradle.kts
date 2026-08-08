@@ -13,8 +13,8 @@ android {
         applicationId = "com.pomo"
         minSdk = 26
         targetSdk = 34
-        versionCode = 58
-        versionName = "2.11.1"
+        versionCode = 62
+        versionName = "2.12.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -43,11 +43,6 @@ android {
     productFlavors {
         create("dev") {
             dimension = "environment"
-            // Distinct id + label so dev builds install alongside the real app
-            // without touching its data. MainActivity's canonical-id check
-            // already disables the self-updater for non-"com.pomo" ids.
-            applicationIdSuffix = ".dev"
-            versionNameSuffix = "-dev"
         }
         create("prod") {
             dimension = "environment"

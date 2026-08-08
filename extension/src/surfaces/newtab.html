@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="color-scheme" content="dark light" />
+    <title>Pomo</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="newtab.css" />
+  </head>
+  <body data-empty="true">
+    <main class="stage">
+      <div class="tabs" id="tabs" aria-label="Pomo views">
+        <div class="tabset" role="tablist" aria-label="Pomo views">
+          <button type="button" role="tab" id="tab-instrument" class="tab" data-tab="instrument" aria-selected="true" aria-controls="page-instrument" tabindex="0">Instrument</button>
+          <button type="button" role="tab" id="tab-history" class="tab" data-tab="history" aria-selected="false" aria-controls="page-history" tabindex="-1">History</button>
+          <button type="button" role="tab" id="tab-stats" class="tab" data-tab="stats" aria-selected="false" aria-controls="page-stats" tabindex="-1">Stats</button>
+          <button type="button" role="tab" id="tab-settings" class="tab" data-tab="settings" aria-selected="false" aria-controls="page-settings" tabindex="-1">Settings</button>
+        </div>
+        <a class="tab tab-link" href="crew.html">Crew</a>
+        <span class="build num" id="buildVersion" aria-label="Extension version"></span>
+      </div>
+
+      <section class="view" id="page-instrument" role="tabpanel" aria-labelledby="tab-instrument">
+        <header class="band">
+          <span class="phase" id="phase">Focus</span>
+          <span class="status" id="status">Ready</span>
+        </header>
+
+        <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
+          <span class="time num" id="time">--:--</span><span class="fraction num" id="fraction">.000</span>
+          <span class="progress"><span class="fill" id="progress"></span></span>
+        </button>
+
+        <nav class="controls">
+          <button class="control" id="skip">Skip</button>
+          <button class="control" id="reset">Reset</button>
+        </nav>
+
+        <section class="stats">
+          <div class="stat">
+            <span class="num" id="todayCount">—</span>
+            <span class="caption">blocks today</span>
+          </div>
+          <div class="stat">
+            <span class="num" id="totalMinutes">—</span>
+            <span class="caption">total focus min</span>
+          </div>
+          <div class="stat">
+            <span class="num" id="streak">—</span>
+            <span class="caption">day streak</span>
+          </div>
+        </section>
+      </section>
+
+      <section class="view" id="page-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
+        <div class="column">
+          <header class="section-head">
+            <div>
+              <span class="eyebrow">Session log</span>
+              <h1>History</h1>
+            </div>
+            <span class="section-meta num" id="historySummary">—</span>
+          </header>
+          <div class="day-groups" id="dayGroups"></div>
+        </div>
+      </section>
+
+      <section class="view" id="page-stats" role="tabpanel" aria-labelledby="tab-stats" tabindex="0" hidden>
+        <div class="column">
+          <header class="section-head">
+            <div>
+              <span class="eyebrow">Performance report</span>
+              <h1>Stats</h1>
+            </div>
+            <span class="section-meta">Last 30 days</span>
+          </header>
+          <section class="metric-strip">
+            <div class="stat">
+              <span class="num" id="statsToday">—</span>
+              <span class="caption">blocks today</span>
+            </div>
+            <div class="stat">
+              <span class="num" id="statsTotal">—</span>
+              <span class="caption">total focus min</span>
+            </div>
+            <div class="stat">
+              <span class="num" id="statsStreak">—</span>
+              <span class="caption">day streak</span>
+            </div>
+            <div class="stat">
+              <span class="num" id="statsActiveDays">—</span>
+              <span class="caption">active days</span>
+            </div>
+          </section>
+          <section class="trend-section">
+            <div class="section-label-row">
+              <span>Focus minutes by day</span>
+              <span class="section-meta num" id="statsTrendMeta">—</span>
+            </div>
+          <div class="bars" id="statsBars"></div>
+          </section>
+          <section class="active-days">
+            <div class="section-label-row">
+              <span>Active days</span>
+              <span class="section-meta">Completed focus</span>
+            </div>
+            <table class="day-table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th class="num-head">Blocks</th>
+                <th class="num-head">Focus</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody"></tbody>
+            </table>
+          </section>
+          <div class="note" id="statsNote" hidden></div>
+        </div>
+      </section>
+
+      <section class="view" id="page-settings" role="tabpanel" aria-labelledby="tab-settings" hidden>
+        <div class="column settings-column">
+          <header class="section-head">
+            <div>
+              <span class="eyebrow">Configuration</span>
+              <h1>Settings</h1>
+            </div>
+            <span class="section-meta" id="settingsStatus" role="status"></span>
+          </header>
+          <form class="settings-form" id="settingsForm">
+            <section class="settings-group">
+              <div class="settings-group-head">
+                <h2>Timer</h2>
+                <p>Set the rhythm used by new focus blocks.</p>
+              </div>
+              <div class="settings-grid">
+                <label class="setting-field"><span>Focus minutes</span><input id="settingWork" type="number" min="1" step="1" required /></label>
+                <label class="setting-field"><span>Short break</span><input id="settingShort" type="number" min="1" step="1" required /></label>
+                <label class="setting-field"><span>Long break</span><input id="settingLong" type="number" min="1" step="1" required /></label>
+                <label class="setting-field"><span>Long break after</span><input id="settingAfter" type="number" min="1" step="1" required /></label>
+              </div>
+            </section>
+            <section class="settings-group">
+              <div class="settings-group-head">
+                <h2>Behavior</h2>
+                <p>Choose what Pomo shows and records.</p>
+              </div>
+              <div class="settings-grid">
+                <label class="setting-field"><span>Daily block goal</span><input id="settingGoal" type="number" min="0" step="1" required /></label>
+                <label class="setting-field"><span>Work tag</span><input id="settingTag" type="text" maxlength="24" required /></label>
+                <label class="setting-field"><span>Theme</span><select id="settingTheme"><option value="system">System</option><option value="dark">Dark</option><option value="light">Light</option></select></label>
+              </div>
+              <label class="setting-toggle"><input id="settingSound" type="checkbox" /><span><strong>Sound alerts</strong><small>Notify when a phase ends.</small></span></label>
+              <label class="setting-toggle"><input id="settingNewtab" type="checkbox" /><span><strong>Open on Instrument</strong><small>Start new tabs on the timer instead of History.</small></span></label>
+            </section>
+            <div class="settings-actions"><button type="submit" class="primary">Save settings</button></div>
+          </form>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="newtab.js"></script>
+  </body>
+</html>

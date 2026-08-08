@@ -14,11 +14,13 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.ComposeView
@@ -35,6 +37,7 @@ import com.google.zxing.MultiFormatWriter
 import com.pomo.BuildConfig
 import com.pomo.MainActivity
 import com.pomo.R
+import com.pomo.backup.BackupIdentityConflictException
 import com.pomo.backup.BackupRepository
 import com.pomo.backup.PomoBackup
 import com.pomo.cues.CompletionCueFamily
@@ -124,11 +127,13 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
     ): View {
         val ctx = requireContext()
         val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
-        val items = buildItems()
         return ComposeView(ctx).apply {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 var themeMode by remember { mutableStateOf(prefs.themeMode()) }
+                var showCuePreviews by rememberSaveable { mutableStateOf(false) }
+                val items = remember { buildItems(onCuePreviewsClick = { showCuePreviews = true }) }
+                val cuePreviewItems = remember { buildCuePreviewItems() }
                 DisposableEffect(prefs) {
                     val listener =
                         SharedPreferences.OnSharedPreferenceChangeListener { sp, key ->
@@ -138,11 +143,30 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                     onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
                 }
                 PomoTheme(mode = themeMode) {
+                    BackHandler(enabled = showCuePreviews) { showCuePreviews = false }
                     SettingsScreen(
                         sharedPreferences = prefs,
-                        items = items,
-                        showUpdateSection = BuildConfig.APPLICATION_ID == "com.pomo",
-                        onBack = { findNavController().popBackStack() },
+                        items = if (showCuePreviews) cuePreviewItems else items,
+                        title =
+                            if (showCuePreviews) {
+                                getString(R.string.state_cues_previews_title)
+                            } else {
+                                getString(R.string.settings_title)
+                            },
+                        backContentDescription =
+                            if (showCuePreviews) {
+                                getString(R.string.back_to_settings)
+                            } else {
+                                getString(R.string.back_to_profile)
+                            },
+                        showUpdateSection = !showCuePreviews && BuildConfig.APPLICATION_ID == "com.pomo",
+                        onBack = {
+                            if (showCuePreviews) {
+                                showCuePreviews = false
+                            } else {
+                                findNavController().popBackStack()
+                            }
+                        },
                     )
 
                     pairingDialog.value?.let { data ->
@@ -194,7 +218,7 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         }
     }
 
-    private fun buildItems(): List<SettingsItem> =
+    private fun buildItems(onCuePreviewsClick: () -> Unit): List<SettingsItem> =
         buildList {
             add(SettingsItem.Section(getString(R.string.category_connection)))
             add(
@@ -341,10 +365,13 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                         ),
                 ),
             )
-            add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
-            addCompletionCueItems()
-            add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
-            addManualHapticItems()
+            add(
+                SettingsItem.Action(
+                    title = getString(R.string.state_cues_previews_title),
+                    summary = getString(R.string.state_cues_previews_summary),
+                    onClick = onCuePreviewsClick,
+                ),
+            )
 
             add(SettingsItem.Section(getString(R.string.category_theme)))
             add(
@@ -399,6 +426,14 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
                     },
                 ),
             )
+        }
+
+    private fun buildCuePreviewItems(): List<SettingsItem> =
+        buildList {
+            add(SettingsItem.Section(getString(R.string.state_cues_completion_section)))
+            addCompletionCueItems()
+            add(SettingsItem.Section(getString(R.string.state_cues_manual_section)))
+            addManualHapticItems()
         }
 
     private fun MutableList<SettingsItem>.addCompletionCueItems() {
@@ -622,7 +657,15 @@ public class SettingsFragment : Fragment(), SharedPreferences.OnSharedPreference
         val backup = pendingRestore ?: return
         pendingRestore = null
         viewLifecycleOwner.lifecycleScope.launch {
-            val summary = runCatching { backupRepository.restore(backup) }.getOrNull()
+            val summary =
+                try {
+                    backupRepository.restore(backup)
+                } catch (_: BackupIdentityConflictException) {
+                    showMessage(R.string.backup_restore_identity_conflict)
+                    return@launch
+                } catch (_: Exception) {
+                    null
+                }
             if (summary == null) {
                 showMessage(R.string.backup_restore_failed)
                 return@launch

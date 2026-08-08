@@ -68,6 +68,7 @@ public class PomodoroService : Service(), TimerObserver {
 
     private val serviceScope = MainScope()
     private val commandMutex = Mutex()
+    private val achievementMutex = Mutex()
 
     private val networkCallback =
         object : ConnectivityManager.NetworkCallback() {
@@ -366,7 +367,9 @@ public class PomodoroService : Service(), TimerObserver {
 
     private fun seedAchievementBaseline() {
         serviceScope.launch(Dispatchers.IO) {
-            knownEarnedIds = currentEarnedIds()
+            achievementMutex.withLock {
+                if (knownEarnedIds == null) knownEarnedIds = currentEarnedIds()
+            }
         }
     }
 
@@ -388,20 +391,20 @@ public class PomodoroService : Service(), TimerObserver {
      */
     private fun checkForNewAchievements() {
         serviceScope.launch(Dispatchers.IO) {
-            val nowEarned = currentEarnedIds()
-            val previous = knownEarnedIds
-            knownEarnedIds = nowEarned
-            // Baseline not yet established: this read becomes the baseline, nothing is "new" yet.
-            if (previous == null) return@launch
-            val newly = nowEarned - previous
-            if (newly.isEmpty()) return@launch
-            prefs.hasUnseenAchievement = true
-            AchievementCatalog.all
-                .filter { it.id in newly }
-                .forEach { alertsNotifier.notifyAchievement(it) }
-            // Nudge any foreground UI so the Profile-tab dot appears now, not on the next resume.
-            // setPackage required for RECEIVER_NOT_EXPORTED receivers on modern Android.
-            sendBroadcast(Intent("com.pomo.STATE_UPDATE").setPackage(packageName))
+            achievementMutex.withLock {
+                val nowEarned = currentEarnedIds()
+                val previous = knownEarnedIds
+                knownEarnedIds = nowEarned
+                // Baseline not yet established: this read becomes the baseline, nothing is "new" yet.
+                if (previous == null) return@withLock
+                val newly = nowEarned - previous
+                if (newly.isEmpty()) return@withLock
+                prefs.hasUnseenAchievement = true
+                alertsNotifier.notifyAchievements(AchievementCatalog.all.filter { it.id in newly })
+                // Nudge any foreground UI so the Profile-tab dot appears now, not on the next resume.
+                // Explicit package required for RECEIVER_NOT_EXPORTED receivers on modern Android.
+                sendBroadcast(Intent("com.pomo.STATE_UPDATE").setPackage(packageName))
+            }
         }
     }
 

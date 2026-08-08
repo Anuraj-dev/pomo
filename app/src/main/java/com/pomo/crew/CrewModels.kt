@@ -41,6 +41,8 @@ public data class CrewStatsExtras(
     /** All-time focus minutes by weekday, 7 slots, Monday first. */
     val weekdayBuckets: List<Int>? = null,
     val allTimeWorkBlocks: Int? = null,
+    /** All-time local dates containing at least one completed Work block. */
+    val allTimeActiveDays: Int? = null,
     val bestStreak: Int? = null,
     val firstFocusLocalDate: String? = null,
     /** Dense daily history: index 0 is [historyStartDate], one entry per day up to today. */

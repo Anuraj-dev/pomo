@@ -92,10 +92,17 @@ public class MainActivity : AppCompatActivity() {
         val navController = navHostFragment.navController
         navView = findViewById(R.id.nav_view)
         navView.setupWithNavController(navController)
+        val bottomNavDestinationIds =
+            (0 until navView.menu.size()).map { index -> navView.menu.getItem(index).itemId }.toSet()
         navView.setOnItemSelectedListener { item ->
             val changedTab = navController.currentDestination?.id != item.itemId
             if (changedTab) {
                 navView.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+            }
+            // Do not save a detail page (Settings, Achievements, etc.) as the tab's
+            // restorable destination. Returning to a bottom-nav tab should show its root.
+            while (navController.currentDestination?.id !in bottomNavDestinationIds) {
+                if (!navController.popBackStack()) break
             }
             NavigationUI.onNavDestinationSelected(item, navController)
         }

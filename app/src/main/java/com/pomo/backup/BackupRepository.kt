@@ -18,6 +18,11 @@ import com.pomo.profile.AvatarStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** The backup belongs to a different active Crew identity and cannot be merged safely. */
+public class BackupIdentityConflictException : IllegalStateException(
+    "backup identity differs from the active phone identity",
+)
+
 /**
  * Writes every piece of local state the user cannot get back any other way into one plain JSON file
  * they own, and folds such a file back in after a reinstall.
@@ -176,6 +181,25 @@ public class BackupRepository(context: Context) {
 
     public suspend fun restore(backup: PomoBackup): BackupRestoreSummary =
         withContext(Dispatchers.IO) {
+            val hadMemberships = crewStore.loadMemberships().isNotEmpty()
+            // The identity is only taken back when this device is in no crews, or when the wrapped
+            // key cannot be decrypted at all (Android Auto Backup restores the prefs but not the
+            // Keystore entry, so the device cannot publish under the old key anyway). Swapping the
+            // key out from under a device that is actively publishing would orphan everything it has
+            // already put on its crews' boards under the old public key.
+            var identityRestored = false
+            if (backup.crew.identityPrivateKey.isNotBlank()) {
+                val currentIdentity = if (hadMemberships) identityStore.decryptedIdentityKey() else null
+                if (currentIdentity != null && currentIdentity != backup.crew.identityPrivateKey) {
+                    throw BackupIdentityConflictException()
+                }
+                identityRestored = currentIdentity == null
+                if (identityRestored) {
+                    identityStore.replaceIdentity(backup.crew.identityPrivateKey)
+                }
+            }
+            if (!hadMemberships) avatarStore.restore(backup.crew.profileAvatarBase64)
+
             val merged =
                 BackupMerge.merge(
                     existingDayStats = historyDao.getAllDayStatsSnapshot(),
@@ -183,16 +207,6 @@ public class BackupRepository(context: Context) {
                     backup = backup.history,
                 )
             historyDao.replaceAllHistory(merged.dayStats, merged.sessions)
-
-            // The identity is only taken back when this device is in no crews — the reinstall case it
-            // exists for. Swapping the key out from under a device that is actively publishing would
-            // orphan everything it has already put on its crews' boards under the old public key.
-            val hadMemberships = crewStore.loadMemberships().isNotEmpty()
-            val identityRestored = backup.crew.identityPrivateKey.isNotBlank() && !hadMemberships
-            if (identityRestored) {
-                identityStore.replaceIdentity(backup.crew.identityPrivateKey)
-            }
-            if (!hadMemberships) avatarStore.restore(backup.crew.profileAvatarBase64)
 
             val membershipsAdded =
                 crewStore.mergeMemberships(

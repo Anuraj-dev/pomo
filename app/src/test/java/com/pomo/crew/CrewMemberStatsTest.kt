@@ -24,6 +24,11 @@ public class CrewMemberStatsTest {
     }
 
     @Test
+    public fun negativeAllTimeActiveDaysRejectsTheSnapshot() {
+        assertFalse(CrewValidation.isValidSnapshot(snapshot(stats = CrewStatsExtras(allTimeActiveDays = -1))))
+    }
+
+    @Test
     public fun historyFieldsMustArriveTogetherAndMatchInLength() {
         val partial = CrewStatsExtras(historyStartDate = today.toString())
         assertFalse(CrewValidation.isValidSnapshot(snapshot(stats = partial)))
@@ -48,6 +53,7 @@ public class CrewMemberStatsTest {
                     }.toList(),
                 weekdayBuckets = IntArray(7).also { it[2] = 400 }.toList(),
                 allTimeWorkBlocks = 210,
+                allTimeActiveDays = 140,
                 bestStreak = 19,
                 firstFocusLocalDate = "2025-06-21",
                 historyStartDate = today.minusDays(2).toString(),
@@ -67,6 +73,7 @@ public class CrewMemberStatsTest {
 
         assertEquals(5_000, memberStats.lifetime.focusMinutes)
         assertEquals(210, memberStats.lifetime.sessions)
+        assertEquals(140, memberStats.lifetime.activeDays)
         assertEquals("2025-06-21", memberStats.lifetime.firstDate)
         assertEquals(366, memberStats.lifetime.daysWithApp)
         assertEquals(9, memberStats.rhythm.peakHour)
@@ -87,6 +94,7 @@ public class CrewMemberStatsTest {
 
         assertFalse(row.hasFullStats())
         assertEquals(5_000, memberStats.lifetime.focusMinutes)
+        assertEquals(2, memberStats.lifetime.activeDays)
         assertEquals(RhythmPattern.None, memberStats.rhythm.pattern)
         // Falls back to the 30 daily aggregates every snapshot has always carried.
         assertEquals(120, memberStats.records.bestDay?.minutes)

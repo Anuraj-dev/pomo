@@ -72,6 +72,7 @@ public class AchievementsFragment : Fragment() {
                 PomoTheme(mode = mainActivity?.prefs?.themeMode ?: ThemeMode.System) {
                     val snapshot by snapshotFlow.collectAsState(initial = StatsSnapshot.Empty)
                     AchievementsScreen(
+                        snapshot = snapshot,
                         statuses = AchievementEvaluator.evaluate(snapshot),
                         onBack = { findNavController().popBackStack() },
                     )

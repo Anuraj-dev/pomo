@@ -35,7 +35,7 @@ public data class StatsSnapshot(
     public companion object {
         public val Empty: StatsSnapshot =
             StatsSnapshot(
-                lifetime = Lifetime(focusMinutes = 0, sessions = 0, daysWithApp = 0, firstDate = null),
+                lifetime = Lifetime(focusMinutes = 0, sessions = 0, activeDays = 0, daysWithApp = 0, firstDate = null),
                 rhythm = HourRhythm(buckets = IntArray(24), peakHour = null, pattern = RhythmPattern.None),
                 weekShape = WeekShape(buckets = IntArray(7), strongestDayIndex = null),
                 habit = HabitWindow(weeks = 12, cells = emptyList(), currentStreak = 0, bestStreak = 0),
@@ -49,6 +49,9 @@ public data class StatsSnapshot(
 public data class Lifetime(
     val focusMinutes: Int,
     val sessions: Int,
+    /** Local calendar days containing at least one completed Work block. */
+    val activeDays: Int,
+    /** Inclusive elapsed calendar span since the first completed Work block. */
     val daysWithApp: Int,
     val firstDate: String?,
 )

@@ -78,9 +78,9 @@ Own a focus session from start to finish as a live performance readout. The phon
 - Snapshot day-boundary metadata contains the member's local date and numeric UTC
   offset at publication, not a named timezone. This is the accepted minimum
   privacy trade-off for cross-time-zone local-day ranking.
-- Crew shares only compact daily aggregates for the latest 30 local dates—Focus
-  minutes and completed Work blocks—plus lifetime Focus minutes and current
-  streak. Raw Work block timestamps never leave the member's phone for Crew.
+- Crew shares compact daily aggregates plus the aggregate lifetime totals,
+  rhythm buckets, and all-time records required by Crew stats and achievements.
+  Raw Work block timestamps never leave the member's phone for Crew.
 - Members with equal Focus minutes share a rank. Stable row ordering may resolve
   display order but must not resolve the competitive tie.
 - Members with zero Focus minutes in the selected window remain visible below
@@ -158,9 +158,10 @@ Own a focus session from start to finish as a live performance readout. The phon
 
 ## Non-goals
 
-- Gamification beyond the existing streak, daily goal, and Crew rankings. No XP,
-  levels, or coaching mechanics. Profiles remain limited to optional identity
-  photos and display names inside private Crews.
+- Gamification beyond the derived achievement record, existing streak, daily
+  goal, and Crew rankings. Achievements remain a performance ledger; no XP,
+  levels, rarity tiers, quests, or coaching mechanics. Profiles remain limited
+  to optional identity photos and display names inside private Crews.
 - Social networking or account features. Crew is limited to private,
   join-code-based comparison of focus telemetry; the app remains local-first
   and has no login or Pomo-owned social backend.

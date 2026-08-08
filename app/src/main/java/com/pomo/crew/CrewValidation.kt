@@ -73,6 +73,7 @@ public object CrewValidation {
         if (!isValidBuckets(stats.hourBuckets, HOUR_BUCKETS)) return false
         if (!isValidBuckets(stats.weekdayBuckets, WEEKDAY_BUCKETS)) return false
         if (stats.allTimeWorkBlocks != null && stats.allTimeWorkBlocks < 0) return false
+        if (stats.allTimeActiveDays != null && stats.allTimeActiveDays < 0) return false
         if (stats.bestStreak != null && stats.bestStreak < 0) return false
         if (stats.firstFocusLocalDate != null && !isIsoDate(stats.firstFocusLocalDate)) return false
         if (stats.bestDayLocalDate != null && !isIsoDate(stats.bestDayLocalDate)) return false

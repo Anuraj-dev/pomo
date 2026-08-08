@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
+import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import com.google.android.material.transition.MaterialSharedAxis
 import com.pomo.ui.screens.ReleaseNotesScreen
@@ -29,7 +30,7 @@ public class ReleaseNotesFragment : Fragment() {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 PomoTheme(mode = PreferenceManager.getDefaultSharedPreferences(requireContext()).themeMode()) {
-                    ReleaseNotesScreen()
+                    ReleaseNotesScreen(onBack = { findNavController().popBackStack() })
                 }
             }
         }

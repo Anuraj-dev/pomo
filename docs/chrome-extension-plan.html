@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pomo Chrome Extension — Visual Plan</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --bg2: #11161d;
+    --panel: #151b23;
+    --panel2: #1a212b;
+    --border: #263040;
+    --border2: #33415400;
+    --text: #e6e1d8;
+    --muted: #8b95a3;
+    --dim: #5c6675;
+    --red: #ff4d3d;
+    --red-dim: #7a241d;
+    --amber: #e3b341;
+    --green: #3fb950;
+    --blue: #58a6ff;
+    --mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace;
+    --sans: "Inter", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.55;
+    padding-bottom: 80px;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 28px; }
+
+  /* ─── Header ─── */
+  header {
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(180deg, var(--bg2), var(--bg));
+    padding: 48px 0 36px;
+  }
+  .kicker {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: var(--red);
+    text-transform: uppercase;
+  }
+  h1 { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; margin: 10px 0 8px; }
+  h1 .sub { color: var(--muted); font-weight: 400; }
+  .tagline { color: var(--muted); max-width: 720px; font-size: 15px; }
+  .meta-line {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    margin-top: 14px;
+  }
+  .meta-line span b { color: var(--text); font-weight: 500; }
+
+  /* ─── TOC ─── */
+  nav.toc {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(13,17,23,0.92); backdrop-filter: blur(8px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.toc .wrap { display: flex; gap: 4px; overflow-x: auto; padding: 10px 28px; }
+  nav.toc a {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; padding: 6px 10px; border-radius: 6px; white-space: nowrap;
+    border: 1px solid transparent;
+  }
+  nav.toc a:hover { color: var(--text); border-color: var(--border); background: var(--panel); }
+
+  /* ─── Sections ─── */
+  section { padding: 44px 0 0; }
+  .sec-label {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.22em;
+    color: var(--red); text-transform: uppercase; margin-bottom: 6px;
+  }
+  h2 { font-size: 24px; letter-spacing: -0.01em; margin-bottom: 6px; }
+  .sec-intro { color: var(--muted); font-size: 14px; max-width: 780px; margin-bottom: 22px; }
+  h3 { font-size: 15px; margin: 22px 0 10px; font-family: var(--mono); letter-spacing: 0.02em; }
+  p { margin-bottom: 10px; }
+  code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel2);
+    border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; color: var(--blue);
+  }
+
+  /* ─── Cards / grid ─── */
+  .grid { display: grid; gap: 14px; }
+  .g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+  .g4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+  .card {
+    background: var(--panel); border: 1px solid var(--border);
+    border-radius: 10px; padding: 18px;
+  }
+  .card h4 { font-size: 13px; font-family: var(--mono); letter-spacing: 0.04em; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .card p { font-size: 13px; color: var(--muted); }
+  .card .num {
+    font-family: var(--mono); font-size: 11px; color: var(--red);
+    border: 1px solid var(--red-dim); border-radius: 6px; padding: 1px 6px;
+  }
+
+  /* ─── Status pills ─── */
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 10.5px;
+    letter-spacing: 0.08em; padding: 2px 8px; border-radius: 999px;
+    border: 1px solid; white-space: nowrap;
+  }
+  .pill.full { color: var(--green); border-color: rgba(63,185,80,0.4); background: rgba(63,185,80,0.08); }
+  .pill.partial { color: var(--amber); border-color: rgba(227,179,65,0.4); background: rgba(227,179,65,0.08); }
+  .pill.none { color: var(--red); border-color: rgba(255,77,61,0.4); background: rgba(255,77,61,0.08); }
+  .pill.info { color: var(--blue); border-color: rgba(88,166,255,0.4); background: rgba(88,166,255,0.08); }
+
+  /* ─── Tables ─── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 24px; }
+  th {
+    text-align: left; font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+    text-transform: uppercase; color: var(--dim); padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 11px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  td.mono, th.mono { font-family: var(--mono); font-size: 12.5px; }
+  tr:hover td { background: rgba(255,255,255,0.015); }
+  .note-cell { color: var(--muted); font-size: 12.5px; }
+
+  /* ─── Architecture diagram ─── */
+  .arch { display: flex; flex-direction: column; gap: 14px; }
+  .arch-layer {
+    border: 1px solid var(--border); border-radius: 10px; background: var(--panel);
+    padding: 14px 16px;
+  }
+  .arch-layer .layer-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em;
+    text-transform: uppercase; color: var(--dim); margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .arch-layer .layer-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); }
+  .arch-boxes { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
+  .abox {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 12px;
+  }
+  .abox .t { font-family: var(--mono); font-size: 12.5px; color: var(--text); margin-bottom: 3px; }
+  .abox .d { font-size: 12px; color: var(--muted); line-height: 1.45; }
+  .abox.hl { border-color: rgba(255,77,61,0.45); }
+  .abox.hl .t { color: var(--red); }
+  .arrow {
+    text-align: center; font-family: var(--mono); color: var(--dim);
+    font-size: 13px; letter-spacing: 0.2em; line-height: 1; user-select: none;
+  }
+
+  /* ─── Flow / milestone ─── */
+  .milestone {
+    border: 1px solid var(--border); border-radius: 10px; margin-bottom: 14px;
+    overflow: hidden; background: var(--panel);
+  }
+  .ms-head {
+    display: flex; align-items: center; gap: 14px; padding: 14px 18px;
+    cursor: pointer; user-select: none;
+  }
+  .ms-head:hover { background: rgba(255,255,255,0.02); }
+  .ms-id {
+    font-family: var(--mono); font-size: 12px; color: var(--bg);
+    background: var(--red); border-radius: 6px; padding: 3px 8px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .ms-id.done { background: var(--green); }
+  .ms-title { font-family: var(--mono); font-size: 14.5px; flex: 1; }
+  .ms-est { font-family: var(--mono); font-size: 11px; color: var(--muted); white-space: nowrap; }
+  .ms-bar { height: 4px; background: var(--panel2); }
+  .ms-bar > div { height: 100%; background: linear-gradient(90deg, var(--red), #ff8a5c); }
+  .ms-body { padding: 4px 18px 16px; border-top: 1px solid var(--border); display: none; }
+  .ms.open .ms-body { display: block; }
+  .ms-body ul { padding-left: 20px; margin: 10px 0 6px; }
+  .ms-body li { font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  .ms-body li b { color: var(--text); font-weight: 500; }
+  .deliver {
+    display: inline-block; font-family: var(--mono); font-size: 11px; color: var(--blue);
+    border: 1px solid rgba(88,166,255,0.35); border-radius: 6px; padding: 2px 8px; margin: 8px 4px 0 0;
+  }
+
+  /* ─── Timeline (gantt-ish) ─── */
+  .timeline { margin: 20px 0 10px; }
+  .tl-row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; align-items: center; margin-bottom: 8px; }
+  .tl-label { font-family: var(--mono); font-size: 12px; color: var(--muted); text-align: right; }
+  .tl-track { position: relative; height: 26px; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; }
+  .tl-seg {
+    position: absolute; top: 3px; bottom: 3px; border-radius: 4px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 10.5px; color: #fff;
+  }
+  .tl-axis { display: grid; grid-template-columns: 150px 1fr; gap: 12px; margin-top: 4px; }
+  .tl-axis div { font-family: var(--mono); font-size: 10px; color: var(--dim); display: flex; justify-content: space-between; }
+
+  /* ─── Risk ─── */
+  .risk { display: flex; gap: 12px; align-items: flex-start; }
+  .risk-lvl { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; flex-shrink: 0; margin-top: 2px; }
+  .risk-lvl.high { background: rgba(255,77,61,0.12); color: var(--red); border: 1px solid rgba(255,77,61,0.4); }
+  .risk-lvl.med { background: rgba(227,179,65,0.12); color: var(--amber); border: 1px solid rgba(227,179,65,0.4); }
+  .risk-lvl.low { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.4); }
+  .risk h4 { font-size: 13px; font-family: var(--mono); margin-bottom: 3px; }
+  .risk p { font-size: 12.5px; color: var(--muted); margin: 0; }
+  .risk .mit { color: var(--blue); margin-top: 4px; font-size: 12.5px; }
+
+  /* ─── Repo tree ─── */
+  pre.tree {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 10px;
+    padding: 18px 22px; font-family: var(--mono); font-size: 12.5px; line-height: 1.7;
+    overflow-x: auto; color: var(--muted);
+  }
+  pre.tree .c { color: var(--red); }
+  pre.tree .hl { color: var(--text); }
+
+  /* ─── Callouts ─── */
+  .callout {
+    border-left: 3px solid var(--red); background: rgba(255,77,61,0.05);
+    border-radius: 0 8px 8px 0; padding: 14px 18px; margin: 18px 0; font-size: 13.5px;
+  }
+  .callout.blue { border-color: var(--blue); background: rgba(88,166,255,0.05); }
+  .callout.green { border-color: var(--green); background: rgba(63,185,80,0.05); }
+  .callout b { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; display: block; margin-bottom: 6px; }
+
+  /* ─── Checkbox ─── */
+  .checks { list-style: none; }
+  .checks li { padding: 9px 0; border-bottom: 1px dashed var(--border); font-size: 13.5px; display: flex; gap: 10px; align-items: baseline; }
+  .checks li::before { content: "▢"; color: var(--dim); font-family: var(--mono); font-size: 14px; }
+  .checks li b { font-family: var(--mono); font-size: 12.5px; font-weight: 500; color: var(--text); }
+  .checks li span { color: var(--muted); }
+
+  footer { border-top: 1px solid var(--border); margin-top: 60px; padding: 24px 0; color: var(--dim); font-family: var(--mono); font-size: 12px; text-align: center; }
+
+  @media print {
+    nav.toc { display: none; }
+    .ms-body { display: block; }
+  }
+  @media (max-width: 640px) {
+    .tl-row { grid-template-columns: 90px 1fr; }
+    .tl-label { font-size: 10.5px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <div class="kicker">Pomo → Web · Extension Plan · v0.1</div>
+    <h1>Pomo <span class="sub">/ Chrome Extension</span></h1>
+    <p class="tagline">
+      A detailed visual plan for porting the Pomo pomodoro instrument — timer, history, stats,
+      notifications, and the Crew telemetry model — from Android into a Manifest V3 Chrome
+      extension, with an honest account of what the browser can and cannot do.
+    </p>
+    <div class="meta-line">
+      <span>STATUS <b>PLANNING</b></span>
+      <span>PLATFORM <b>CHROME MV3</b></span>
+      <span>LANG <b>TS + BUN</b></span>
+      <span>TARGET <b>~6 WKS</b></span>
+      <span>PARITY <b>≈70%</b></span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <a href="#parity">Feature Parity</a>
+    <a href="#constraints">MV3 Constraints</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#data">Data Model</a>
+    <a href="#repo">Repo Layout</a>
+    <a href="#surfaces">UI Surfaces</a>
+    <a href="#milestones">Milestones</a>
+    <a href="#timeline">Timeline</a>
+    <a href="#risks">Risks</a>
+    <a href="#testing">Testing</a>
+    <a href="#acceptance">Acceptance</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ═════════════ 1. EXECUTIVE SUMMARY ═════════════ -->
+<section id="summary">
+  <div class="sec-label">01 · Executive Summary</div>
+  <h2>What ships, what degrades, what dies</h2>
+  <p class="sec-intro">
+    The extension inherits Pomo's product soul — fractional-second live timing, terminal-density stats,
+    snap transitions, cool monochrome with one signal red — and gains a new native surface: the New Tab page
+    becomes the always-open instrument. Three Android capabilities do not survive the move unchanged.
+  </p>
+  <div class="grid g3">
+    <div class="card">
+      <h4><span class="num">FULL</span> Timer · History · Stats · Notifications</h4>
+      <p>The entire local-first feature set ports cleanly. IndexedDB replaces Room; the Kotlin state machine
+      becomes a TypeScript engine; chrome.notifications replaces the Android notification channel.</p>
+    </div>
+    <div class="card">
+      <h4><span class="num">DEGRADED</span> Background resilience</h4>
+      <p>MV3 service workers suspend after ~30s idle; alarms fire at 30s+ granularity. Timing survives via
+      timestamp math (<code>endAt</code> + recompute), but the engine only advances while Chrome runs. The
+      browser, not the OS, is the keeper of time.</p>
+    </div>
+    <div class="card">
+      <h4><span class="num">REMOVED</span> LAN server · Widget</h4>
+      <p>Extensions cannot open listening sockets in MV3 — the LAN HTTP/WebSocket API needs a native-messaging
+      host or a companion process. The home-screen widget maps to a toolbar badge instead.</p>
+    </div>
+  </div>
+  <div class="callout blue">
+    <b>North star</b>
+    Chrome becomes a second instrument: the New Tab page renders Pomo at full-screen density, the badge
+    keeps a live countdown in the toolbar, and the engine stays a faithful port of the phone's state machine —
+    Room schema, phase rules, midnight-crossing history, and streak logic ported 1:1.
+  </div>
+</section>
+
+<!-- ═════════════ 2. FEATURE PARITY ═════════════ -->
+<section id="parity">
+  <div class="sec-label">02 · Feature Parity Matrix</div>
+  <h2>Android feature → Extension capability</h2>
+  <p class="sec-intro">Every headline capability from the Android app, mapped to its MV3 equivalent with a verdict.
+  <span class="pill full">FULL</span> ports 1:1 · <span class="pill partial">DEGRADED</span> works with limits ·
+  <span class="pill none">NOT PORTED</span> no browser equivalent.</p>
+
+  <table>
+    <thead>
+      <tr><th style="width:26%">Pomo Feature (Android)</th><th style="width:30%">Extension Equivalent</th><th style="width:12%">Verdict</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="mono">Pomodoro state machine<br><span class="note-cell">focus / short / long, auto-advance, pause/resume</span></td>
+        <td class="mono">Shared <code>TimerEngine</code> TS module</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Pure logic — port from Kotlin 1:1, unit-test identical edge cases (midnight, skip, reset).</td>
+      </tr>
+      <tr>
+        <td class="mono">Foreground service timing<br><span class="note-cell">resilient across restarts</span></td>
+        <td class="mono">Timestamp math + <code>chrome.alarms</code> wakeups</td>
+        <td><span class="pill partial">DEGRADED</span></td>
+        <td class="note-cell">Compute remaining from <code>endAt</code> on every wake. Dies with Chrome; survives tab close while Chrome runs.</td>
+      </tr>
+      <tr>
+        <td class="mono">Room session history</td>
+        <td class="mono">IndexedDB (Dexie or raw)</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Schema ported; midnight-crossing history logic reused verbatim.</td>
+      </tr>
+      <tr>
+        <td class="mono">Stats / daily aggregates / streaks</td>
+        <td class="mono">Same queries over IndexedDB</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Telemetry-dense layout renders even better at desktop width.</td>
+      </tr>
+      <tr>
+        <td class="mono">Notifications (session end, phase change)</td>
+        <td class="mono"><code>chrome.notifications</code></td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Alarm-driven; close enough UX, fewer channel controls.</td>
+      </tr>
+      <tr>
+        <td class="mono">Home-screen widget</td>
+        <td class="mono">Toolbar badge + side panel</td>
+        <td><span class="pill partial">REPLACED</span></td>
+        <td class="note-cell">Badge shows live countdown; side panel is the glanceable companion.</td>
+      </tr>
+      <tr>
+        <td class="mono">LAN HTTP/WebSocket server<br><span class="note-cell">desktop client control</span></td>
+        <td class="mono">Native messaging host (companion)</td>
+        <td><span class="pill none">REMOVED</span></td>
+        <td class="note-cell">No listening sockets in MV3. Native host can own the TCP server; ships as a separate installable binary. Phase M6 optional.</td>
+      </tr>
+      <tr>
+        <td class="mono">Pairing-token protection</td>
+        <td class="mono">Same token model in storage</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Trivial port; storage.local is per-extension.</td>
+      </tr>
+      <tr>
+        <td class="mono">Crew relays (WebSocket)<br><span class="note-cell">decentralized leaderboard</span></td>
+        <td class="mono">HTTP polling via <code>chrome.alarms</code></td>
+        <td><span class="pill partial">DEGRADED</span></td>
+        <td class="note-cell">MV3 cannot hold long-lived WS in a service worker. Poll relays at ~60s cadence, or keepalive trickery. Accept staleness; show <code>SYNCING</code> honestly.</td>
+      </tr>
+      <tr>
+        <td class="mono">secp256k1 identity, Keystore encryption</td>
+        <td class="mono"><code>crypto.subtle</code> + noble-secp256k1</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">WebCrypto cannot do secp256k1; noble-secp256k1 in a service worker is fine. Recovery-file export/import identical.</td>
+      </tr>
+      <tr>
+        <td class="mono">QR share / join codes</td>
+        <td class="mono">qrcode lib + copy button</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">desktop-client already has a qrcode-terminal; reuse its <code>pomo://crew/join/v2</code> handling.</td>
+      </tr>
+      <tr>
+        <td class="mono">Themes (dark canonical + light)</td>
+        <td class="mono">Same token set, CSS vars</td>
+        <td><span class="pill full">FULL</span></td>
+        <td class="note-cell">Port the palette from PRODUCT.md directly; prefers-color-scheme + manual override.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Platform gains (extension-only)</h3>
+  <div class="grid g4">
+    <div class="card"><h4><span class="num">NEW</span> New Tab instrument</h4><p>Full-screen Pomo as the new-tab page — the desk instrument the phone was always trying to be.</p></div>
+    <div class="card"><h4><span class="num">NEW</span> Side panel</h4><p><code>chrome.sidePanel</code>: persistent glanceable companion docked beside work tabs.</p></div>
+    <div class="card"><h4><span class="num">NEW</span> Badge countdown</h4><p>Live <code>M:SS</code> in the toolbar, colored by phase. Updates on alarm ticks.</p></div>
+    <div class="card"><h4><span class="num">NEW</span> Cross-OS</h4><p>Windows/macOS/Linux. Chrome-only at first; Firefox WebExtensions port is mostly free.</p></div>
+  </div>
+</section>
+
+<!-- ═════════════ 3. MV3 CONSTRAINTS ═════════════ -->
+<section id="constraints">
+  <div class="sec-label">03 · Platform Constraints</div>
+  <h2>The four walls of Manifest V3</h2>
+  <p class="sec-intro">Everything in this plan bends around these four constraints. They are walls, not fences — each has a documented workaround.</p>
+  <div class="grid g2">
+    <div class="card" style="border-color: rgba(255,77,61,0.4);">
+      <h4><span class="num">WALL 1</span> Service worker lifecycle</h4>
+      <p>A worker dies after ~30s of inactivity. No timers survive suspension. <b style="color:var(--text)">Workaround:</b> never rely on wall-clock ticks. Persist <code>endAt</code> on every transition; on wake, recompute remaining. <code>chrome.alarms</code> (min period 30s) wakes the worker to reconcile state and refresh the badge.</p>
+    </div>
+    <div class="card" style="border-color: rgba(255,77,61,0.4);">
+      <h4><span class="num">WALL 2</span> No listening sockets</h4>
+      <p>MV3 has no API to open a TCP/HTTP server (<code>chrome.sockets</code> is Chrome Apps territory, deprecated). The LAN desktop API cannot exist inside the extension. <b style="color:var(--text)">Workaround:</b> optional native messaging host binary owns the server; the extension owns state and forwards commands through the host.</p>
+    </div>
+    <div class="card" style="border-color: rgba(227,179,65,0.4);">
+      <h4><span class="num">WALL 3</span> No long-lived WebSockets</h4>
+      <p>Service workers are suspended regardless of open sockets; a WS connection is severed silently. Crew relays break. <b style="color:var(--text)">Workaround:</b> HTTP polling at 60s cadence via alarms, or a keepalive ping every ~25s to hold the worker alive while the tab is open. Expect higher latency; expose <code>SYNCING</code>/stale states honestly.</p>
+    </div>
+    <div class="card" style="border-color: rgba(227,179,65,0.4);">
+      <h4><span class="num">WALL 4</span> Timed execution is best-effort</h4>
+      <p>If Chrome is closed, nothing runs. No foreground service, no boot receiver. <b style="color:var(--text)">Workaround:</b> accept the platform: on next browser start, reconcile against <code>endAt</code> — a session that "expired" while Chrome was closed completes as if it had finished on time.</p>
+    </div>
+  </div>
+  <div class="callout">
+    <b>Design consequence</b>
+    The phone remains the *source of truth* for anyone running both. The extension is a second, independent instrument — same engine, same schema, separate data. Cross-device sync stays a non-goal, consistent with PRODUCT.md.
+  </div>
+</section>
+
+<!-- ═════════════ 4. ARCHITECTURE ═════════════ -->
+<section id="architecture">
+  <div class="sec-label">04 · Architecture</div>
+  <h2>Layered, storage-backed, UI-agnostic</h2>
+  <p class="sec-intro">Every surface (New Tab, side panel, popup, badge) is a read-only renderer of the same engine state. The engine is the only writer. This mirrors the Android app's single-owner-state discipline.</p>
+
+  <div class="arch">
+    <div class="arch-layer">
+      <div class="layer-title"><span class="dot" style="background:var(--green)"></span>UI SURFACES — renderers only, no state</div>
+      <div class="arch-boxes">
+        <div class="abox"><div class="t">New Tab page</div><div class="d">Full-screen instrument. Frax seconds, phase snap, density. Primary surface.</div></div>
+        <div class="abox"><div class="t">Side panel</div><div class="d">Glanceable companion docked to workspace. Stats + quick controls.</div></div>
+        <div class="abox"><div class="t">Toolbar popup</div><div class="d">Compact timer + 1-tap start/pause/reset + phase indicator.</div></div>
+        <div class="abox"><div class="t">Badge</div><div class="d">Live M:SS countdown, red when active. Updated by worker alarms.</div></div>
+        <div class="abox"><div class="t">Notifications</div><div class="d">Phase-complete alerts via chrome.notifications.</div></div>
+      </div>
+    </div>
+    <div class="arrow">▼ state via chrome.storage.session (pub/sub) ▼</div>
+    <div class="arch-layer" style="border-color: rgba(255,77,61,0.45);">
+      <div class="layer-title"><span class="dot"></span>CORE ENGINE — single writer · ported from Kotlin</div>
+      <div class="arch-boxes">
+        <div class="abox hl"><div class="t">TimerEngine</div><div class="d">Phase machine: focus/short/long, auto-advance, skip, pause. endAt-based.</div></div>
+        <div class="abox"><div class="t">SessionLog</div><div class="d">Commit session on completion; midnight-crossing split logic (ported).</div></div>
+        <div class="abox"><div class="t">StatsService</div><div class="d">Daily totals, streaks, rhythm buckets, best-day — Room query ports.</div></div>
+        <div class="abox"><div class="t">SettingsStore</div><div class="d">Durations, auto-advance, goal, theme. Same defaults as Android.</div></div>
+        <div class="abox"><div class="t">CrewEngine</div><div class="d">Identity (noble-secp256k1), snapshot sign/publish, relay polling, ranking windows.</div></div>
+        <div class="abox"><div class="t">Bridge (optional)</div><div class="d">Native messaging host transport for LAN server parity. Off by default.</div></div>
+      </div>
+    </div>
+    <div class="arrow">▼ writes ▼</div>
+    <div class="arch-layer">
+      <div class="layer-title"><span class="dot" style="background:var(--blue)"></span>STORAGE</div>
+      <div class="arch-boxes">
+        <div class="abox"><div class="t">IndexedDB</div><div class="d">Session history + Crew cache. Room schema ported 1:1. Large, async, queryable.</div></div>
+        <div class="abox"><div class="t">chrome.storage.local</div><div class="d">Settings, identity keyring, pairing tokens, timestamps.</div></div>
+        <div class="abox"><div class="t">chrome.storage.session</div><div class="d">Ephemeral live state bus for UI surfaces. Cleared at browser restart.</div></div>
+      </div>
+    </div>
+    <div class="arrow">▼ powered by ▼</div>
+    <div class="arch-layer">
+      <div class="layer-title"><span class="dot" style="background:var(--amber)"></span>PLATFORM APIs</div>
+      <div class="arch-boxes">
+        <div class="abox"><div class="t">chrome.alarms</div><div class="d">30s cadence wakeups: reconcile endAt, refresh badge, fire notifications.</div></div>
+        <div class="abox"><div class="t">chrome.notifications</div><div class="d">Phase-complete alerts.</div></div>
+        <div class="abox"><div class="t">chrome.sidePanel</div><div class="d">Docked companion surface.</div></div>
+        <div class="abox"><div class="t">crypto.subtle / WebCrypto</div><div class="d">Keyring encryption. noble-secp256k1 for identity ops.</div></div>
+        <div class="abox"><div class="t">chrome.runtime.nativeMessaging</div><div class="d">Optional LAN host bridge.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="callout green">
+    <b>Concurrency rule</b>
+    Exactly one writer: the service worker engine. UI surfaces read <code>chrome.storage.session</code> via <code>chrome.storage.onChanged</code> and render. No surface ever mutates history or settings directly — this keeps parity with the Android single-owner design and makes the engine testable in Node.
+  </div>
+</section>
+
+<!-- ═════════════ 5. DATA MODEL ═════════════ -->
+<section id="data">
+  <div class="sec-label">05 · Data Model</div>
+  <h2>Room → IndexedDB mapping</h2>
+  <p class="sec-intro">The extension is "separate" in data, but schema-identical to the phone so behavior stays the same and future sync is never blocked by drift.</p>
+
+  <table>
+    <thead>
+      <tr><th style="width:26%">Room entity (Android)</th><th style="width:28%">IndexedDB store</th><th>Mapping notes</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">WorkBlock (session)</td><td class="mono">db.workBlocks</td><td class="note-cell">Same columns: start, end, phase, completed. Midnight-crossing handled by the same split rule on insert.</td></tr>
+      <tr><td class="mono">DailyAggregate</td><td class="mono">db.dailyAggregates</td><td class="note-cell">Materialized per-local-day totals; recomputed on insert/update like the Room DAO.</td></tr>
+      <tr><td class="mono">Settings</td><td class="mono">storage.local.settings</td><td class="note-cell">Flat JSON; same keys and defaults as SharedPreferences.</td></tr>
+      <tr><td class="mono">Identity (Keystore-wrapped)</td><td class="mono">storage.local.keyring</td><td class="note-cell">Encrypted with WebCrypto AES-GCM, key from chrome.storage.session (non-persistent) — Keystore-equivalent death-on-restart semantics.</td></tr>
+      <tr><td class="mono">Crew cache (Room projection)</td><td class="mono">db.crewCache</td><td class="note-cell">Leaderboard, snapshots, member stats, relay freshness. Written only by CrewEngine.</td></tr>
+      <tr><td class="mono">Achievements / records</td><td class="mono">db.achievements</td><td class="note-cell">Derived from history like the phone's query layer.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Key migration decision</h3>
+  <p>IndexedDB uses schema versioning (onupgradeneeded). Adopt the same version-number discipline as Room's migration chain so future schema changes are additive. The extension's data is <i>not</i> migrated from the phone — separate instrument, separate history, per PRODUCT.md's no-sync stance.</p>
+</section>
+
+<!-- ═════════════ 6. REPO LAYOUT ═════════════ -->
+<section id="repo">
+  <div class="sec-label">06 · Repo Layout</div>
+  <h2>Monorepo sibling: <code>extension/</code></h2>
+  <p class="sec-intro">A new top-level directory beside <code>app/</code> and <code>desktop-client/</code>, sharing conventions but keeping the Android build untouched. Bun is the runtime/build tool per workspace defaults.</p>
+  <pre class="tree"><span class="hl">extension/</span>
+├── <span class="hl">manifest.json</span>            <span class="c">// MV3: background service_worker, newtab, side_panel, alarms, notifications</span>
+├── <span class="hl">package.json</span>             <span class="c">// bun scripts: dev, build, typecheck, test</span>
+├── <span class="hl">vite.config.ts</span>          <span class="c">// CRXJS plugin for HMR + zip</span>
+├── <span class="hl">src/</span>
+│   ├── <span class="hl">engine/</span>                <span class="c">// ← ported Kotlin core, platform-free</span>
+│   │   ├── timer.ts               <span class="c">// phase machine, endAt math, auto-advance</span>
+│   │   ├── session.ts             <span class="c">// commit rules, midnight split</span>
+│   │   ├── stats.ts               <span class="c">// aggregates, streaks, rhythm buckets</span>
+│   │   ├── settings.ts
+│   │   ├── crew/                  <span class="c">// identity, snapshot, relay polling, ranking</span>
+│   │   └── index.ts               <span class="c">// single writer facade</span>
+│   ├── <span class="hl">db/</span>                   <span class="c">// IndexedDB: schema v1, migration chain, DAO-style helpers</span>
+│   ├── <span class="hl">background/</span>            <span class="c">// service worker: alarms, badge, notifications, storage bridge</span>
+│   ├── <span class="hl">surfaces/</span>
+│   │   ├── newtab/                <span class="c">// full-screen instrument</span>
+│   │   ├── sidepanel/             <span class="c">// docked companion</span>
+│   │   └── popup/                 <span class="c">// toolbar compact</span>
+│   ├── <span class="hl">shared/</span>               <span class="c">// theme tokens, icons, format helpers</span>
+│   └── <span class="hl">bridge/</span>               <span class="c">// native messaging host protocol (phase M6)</span>
+├── <span class="hl">tests/</span>                 <span class="c">// bun test: engine + schema fixtures (no browser needed)</span>
+└── <span class="hl">dist/</span>                  <span class="c">// built, load-unpacked</span></pre>
+  <div class="callout blue">
+    <b>Reuse</b>
+    <code>desktop-client/src/</code> already holds the <code>pomo://crew/join/v2</code> URI handling, qrcode-terminal, formatting, and validation conventions in TypeScript. Port those modules instead of rewriting; they are the closest existing spec of the phone's TS-visible surface.
+  </div>
+</section>
+
+<!-- ═════════════ 7. UI SURFACES ═════════════ -->
+<section id="surfaces">
+  <div class="sec-label">07 · UI Surfaces</div>
+  <h2>Four surfaces, one instrument</h2>
+  <p class="sec-intro">All four render the same engine state. Design tokens come straight from PRODUCT.md: cool slate backgrounds, cream text, single signal-red accent, monospace numerals, snap transitions, no bounce.</p>
+
+  <div class="grid g2">
+    <div class="card">
+      <h4><span class="num">1</span> New Tab — the instrument</h4>
+      <p>Full-page Pomo: fractional-second readout, phase band, today's session count, streak, and a dense stats strip. One tap to start — no modal, no setup. This is the product's primary home and its best argument for existing.</p>
+    </div>
+    <div class="card">
+      <h4><span class="num">2</span> Side panel — the companion</h4>
+      <p>Docked on the workspace edge. Shows the live readout, quick start/pause/reset, and the three stats questions (total time, focus window, streak). Persists while Chrome runs.</p>
+    </div>
+    <div class="card">
+      <h4><span class="num">3</span> Popup — the quick control</h4>
+      <p>Compact card from the toolbar: phase, time, start/pause, reset, skip. Lower-30% one-handed rule becomes bottom-third rule. Two taps max to any control.</p>
+    </div>
+    <div class="card">
+      <h4><span class="num">4</span> Badge — the countdown</h4>
+      <p>Toolbar badge shows <code>M:SS</code> remaining, red during focus, muted otherwise. Refreshed by the 30s alarm loop; recomputed from <code>endAt</code> so it never drifts between ticks.</p>
+    </div>
+  </div>
+
+  <h3>Design rules carried over</h3>
+  <ul class="checks">
+    <li><b>Data is the design</b> <span>— numbers largest on every surface; sub-second tick visible in New Tab.</span></li>
+    <li><b>Snap, don't bounce</b> <span>— phase transitions instant; no crossfades, no spring curves.</span></li>
+    <li><b>One signal color</b> <span>— red marks live state, peaks, urgency. Nothing warm, nothing gold.</span></li>
+    <li><b>Glanceable</b> <span>— time readable from across the room at full-screen sizes; AA contrast in both themes.</span></li>
+    <li><b>Empty/loading/error states</b> <span>— every surface defines all three, per PRODUCT.md.</span></li>
+  </ul>
+</section>
+
+<!-- ═════════════ 8. MILESTONES ═════════════ -->
+<section id="milestones">
+  <div class="sec-label">08 · Milestones</div>
+  <h2>Six phases, each independently loadable</h2>
+  <p class="sec-intro">Every milestone ends with a working, load-unpacked extension. Click a header to expand its deliverable checklist.</p>
+
+  <div class="milestone open" id="ms0">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M0</span><span class="ms-title">Scaffold & build pipeline</span><span class="ms-est">~3 days</span>
+    </div>
+    <div class="ms-bar"><div style="width:6%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li><b>Bun + Vite + CRXJS</b> scaffold in <code>extension/</code>, MV3 manifest with all permission surfaces declared.</li>
+        <li>Dev loop: <code>bun dev</code> → load unpacked → HMR. Release: <code>bun build</code> → zip.</li>
+        <li>Empty New Tab page renders a live fake-tick readout to prove the surface pipeline early.</li>
+        <li>CI job wiring: typecheck + <code>bun test</code> run alongside Android CI without touching its steps.</li>
+      </ul>
+      <span class="deliver">loadable scaffold</span><span class="deliver">dev HMR</span><span class="deliver">CI lane</span>
+    </div>
+  </div>
+
+  <div class="milestone" id="ms1">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M1</span><span class="ms-title">Timer engine port + storage</span><span class="ms-est">~1 week</span>
+    </div>
+    <div class="ms-bar"><div style="width:18%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li>Port <b>TimerEngine</b> from Kotlin: phases, auto-advance, skip, pause, <code>endAt</code>-based reconciliation.</li>
+        <li>IndexedDB <b>schema v1</b>: workBlocks, dailyAggregates, settings, keyring, crewCache; DAO-style helpers.</li>
+        <li>Single-writer service worker: engine subscribes to alarms, persists on every state transition.</li>
+        <li>Unit tests: phase transitions, midnight split, endAt drift, pause/resume — mirroring Android's test matrix.</li>
+      </ul>
+      <span class="deliver">engine/ dir</span><span class="deliver">schema v1</span><span class="deliver">bun test green</span>
+    </div>
+  </div>
+
+  <div class="milestone" id="ms2">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M2</span><span class="ms-title">New Tab instrument UI</span><span class="ms-est">~1 week</span>
+    </div>
+    <div class="ms-bar"><div style="width:36%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li>Full-screen readout: fractional seconds, phase band, progress, session count, streak, stats strip.</li>
+        <li>Theme tokens from PRODUCT.md as CSS vars; dark canonical + light.</li>
+        <li>One-tap start; keyboard shortcuts (<code>Space</code> start/pause).</li>
+        <li>History + stats pages in New Tab with room at desktop widths — dense telemetry layout.</li>
+        <li>Empty/loading/error states on every view.</li>
+      </ul>
+      <span class="deliver">newtab/</span><span class="deliver">themes</span><span class="deliver">history+stats views</span>
+    </div>
+  </div>
+
+  <div class="milestone" id="ms3">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M3</span><span class="ms-title">Badge, popup, notifications, side panel</span><span class="ms-est">~1 week</span>
+    </div>
+    <div class="ms-bar"><div style="width:54%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li>Badge: live <code>M:SS</code> via alarm loop, phase-colored, from <code>endAt</code> (never drifts).</li>
+        <li>Popup: compact control card, bottom-third controls, two-tap max.</li>
+        <li>Notifications on phase completion with optional sound toggle.</li>
+        <li>Side panel docked surface reading the same session store.</li>
+      </ul>
+      <span class="deliver">badge</span><span class="deliver">popup/</span><span class="deliver">notifications</span><span class="deliver">sidepanel/</span>
+    </div>
+  </div>
+
+  <div class="milestone" id="ms4">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M4</span><span class="ms-title">Crew (degraded transport)</span><span class="ms-est">~1.5 weeks</span>
+    </div>
+    <div class="ms-bar"><div style="width:80%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li>Identity: noble-secp256k1, WebCrypto-wrapped keyring, recovery export/import with passphrase.</li>
+        <li>Snapshot v2 sign + publish; relay <b>polling</b> (60s) instead of WS; join codes + <code>pomo://crew/join/v2</code> URIs.</li>
+        <li>Ranking windows (today/7d/30d/all), staleness rules, ties, inactive sections — ported rules verbatim.</li>
+        <li>Leaderboard UI with search >20 members, Your Standing strip, member detail. Honest <code>SYNCING</code>/stale indicators.</li>
+      </ul>
+      <span class="deliver">identity</span><span class="deliver">poll transport</span><span class="deliver">leaderboard</span>
+    </div>
+  </div>
+
+  <div class="milestone" id="ms5">
+    <div class="ms-head" onclick="this.parentElement.classList.toggle('open')">
+      <span class="ms-id">M5</span><span class="ms-title">Polish, hardening, store packaging</span><span class="ms-est">~1 week</span>
+    </div>
+    <div class="ms-bar"><div style="width:100%"></div></div>
+    <div class="ms-body">
+      <ul>
+        <li>Edge audits: browser restart mid-session, alarm throttling, storage quota, offline first-load.</li>
+        <li>Performance: New Tab render budget ≤ 16ms/frame on a mid laptop; startup ≤ 100ms to usable.</li>
+        <li>Chrome Web Store listing: screenshots, privacy section (no data leaves device except Crew relays).</li>
+        <li>Optional <b>M6 (stretch)</b>: native messaging host for LAN server parity — scoped separately.</li>
+      </ul>
+      <span class="deliver">store zip</span><span class="deliver">perf pass</span><span class="deliver">privacy copy</span>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ 9. TIMELINE ═════════════ -->
+<section id="timeline">
+  <div class="sec-label">09 · Timeline</div>
+  <h2>Six weeks, one lane</h2>
+  <p class="sec-intro">Single-developer lane consistent with the project's workflow. M4 is the widest block — relay polling and ranking rules are the hardest port.</p>
+
+  <div class="timeline">
+    <div class="tl-row"><div class="tl-label">M0 · Scaffold</div><div class="tl-track"><div class="tl-seg" style="left:0%; width:5%; background:#ff4d3d;">M0</div></div></div>
+    <div class="tl-row"><div class="tl-label">M1 · Engine+DB</div><div class="tl-track"><div class="tl-seg" style="left:5%; width:14%; background:#e8604a;">M1</div></div></div>
+    <div class="tl-row"><div class="tl-label">M2 · New Tab</div><div class="tl-track"><div class="tl-seg" style="left:19%; width:14%; background:#d96f55;">M2</div></div></div>
+    <div class="tl-row"><div class="tl-label">M3 · Surfaces</div><div class="tl-track"><div class="tl-seg" style="left:33%; width:14%; background:#cc7d5f;">M3</div></div></div>
+    <div class="tl-row"><div class="tl-label">M4 · Crew</div><div class="tl-track"><div class="tl-seg" style="left:47%; width:21%; background:#bd8a68;">M4</div></div></div>
+    <div class="tl-row"><div class="tl-label">M5 · Polish</div><div class="tl-track"><div class="tl-seg" style="left:68%; width:14%; background:#af9770;">M5</div></div></div>
+    <div class="tl-row"><div class="tl-label">M6 · LAN host</div><div class="tl-track"><div class="tl-seg" style="left:68%; width:22%; background:#444; color:#8b95a3; border:1px dashed #334155;">STRETCH</div></div></div>
+    <div class="tl-axis"><div><span>WK 1</span><span>WK 2</span><span>WK 3</span><span>WK 4</span><span>WK 5</span><span>WK 6</span></div><div></div></div>
+  </div>
+
+  <div class="grid g3">
+    <div class="card"><h4><span class="num">✓</span> Quick wins by end of WK1</h4><p>Loadable extension, HMR loop, fake-tick New Tab. Momentum signal early.</p></div>
+    <div class="card"><h4><span class="num">⚠</span> Hardest block</h4><p>M4 Crew: secp256k1 in the worker, snapshot protocol, ranking-rule parity. Budget 1.5 weeks, cut relay freshness expectations, not rules.</p></div>
+    <div class="card"><h4><span class="num">→</span> Definition of done</h4><p>All M0–M5 checklists shipped; load-unpacked demo runs a full focus→break cycle with badge, notification, and committed history.</p></div>
+  </div>
+</section>
+
+<!-- ═════════════ 10. RISKS ═════════════ -->
+<section id="risks">
+  <div class="sec-label">10 · Risks & Mitigations</div>
+  <h2>What will try to kill this</h2>
+  <div class="grid g2">
+    <div class="card">
+      <div class="risk"><span class="risk-lvl high">HIGH</span><div>
+        <h4>Service worker suspension eats the timer</h4>
+        <p>Worker killed during a focus session; state diverges from user expectation.</p>
+        <p class="mit">→ endAt-only timing; every wake reconciles. Browser-restart recovery path: complete expired sessions as-if-finished. Test this path explicitly.</p>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="risk"><span class="risk-lvl high">HIGH</span><div>
+        <h4>Crew relay staleness</h4>
+        <p>Polling can't match WebSocket freshness; leaderboard feels dead, ranks go stale.</p>
+        <p class="mit">→ 60s poll + explicit SYNCING/age UI (already specced in PRODUCT.md). Extend relay API with conditional GET/ETag if the relay allows.</p>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="risk"><span class="risk-lvl med">MED</span><div>
+        <h4>Engine drift between phone and extension</h4>
+        <p>Two implementations of the same rules; behavior diverges quietly.</p>
+        <p class="mit">→ One spec, one fixture set. Port the Android unit-test matrix to TS; golden files for phase schedules and ranking windows.</p>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="risk"><span class="risk-lvl med">MED</span><div>
+        <h4>Storage quotas & async DB races</h4>
+        <p>IndexedDB writes from a waking worker can race with UI reads; quota edges on Crew cache.</p>
+        <p class="mit">→ Single-writer rule; versioned stores; cap crewCache rows (e.g. 30 days of snapshots).</p>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="risk"><span class="risk-lvl low">LOW</span><div>
+        <h4>New Tab override = risky default surface</h4>
+        <p>Chrome flags some newtab overrides; users may not want a timer on every new tab.</p>
+        <p class="mit">→ Keep newtab as the flagship but make it skippable in settings (side panel becomes home).</p>
+      </div></div>
+    </div>
+    <div class="card">
+      <div class="risk"><span class="risk-lvl low">LOW</span><div>
+        <h4>Store review friction</h4>
+        <p>Host permissions, native messaging host, or minimal_installation issues at CWS.</p>
+        <p class="mit">→ Start with zero host permissions; add bridge only via separate listing or opt-in unpacked path.</p>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ 11. TESTING ═════════════ -->
+<section id="testing">
+  <div class="sec-label">11 · Testing Strategy</div>
+  <h2>Engine in Node, surfaces in browser</h2>
+  <p class="sec-intro">The engine is platform-free TypeScript, so the Android-style unit-test discipline runs in plain <code>bun test</code> — no browser required for the hard parts.</p>
+
+  <table>
+    <thead>
+      <tr><th style="width:22%">Layer</th><th style="width:36%">Tool</th><th>Covers</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">Engine</td><td class="mono">bun test</td><td class="note-cell">Phase transitions, auto-advance, skip/pause/reset, midnight split, endAt reconciliation, streak math.</td></tr>
+      <tr><td class="mono">Crew</td><td class="mono">bun test + fake relay</td><td class="note-cell">Snapshot sign/verify, ranking windows vs deterministic 500-member fixture, ties, staleness, join-URI decode.</td></tr>
+      <tr><td class="mono">Storage</td><td class="mono">fake-indexeddb</td><td class="note-cell">Schema v1 migrations, DAO helpers, aggregate recompute on insert.</td></tr>
+      <tr><td class="mono">Surfaces</td><td class="mono">Playwright (extension mode)</td><td class="note-cell">Load-unpacked smoke: start session → badge ticks → notification fires → history row committed. Manual visual pass on themes.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout blue">
+    <b>CI rule</b>
+    Extension CI is a separate lane: <code>bun typecheck</code> + <code>bun test</code> on every PR. No Playwright in CI initially — manual load-unpacked pass per milestone, per the repo's lean local-run philosophy.
+  </div>
+</section>
+
+<!-- ═════════════ 12. ACCEPTANCE ═════════════ -->
+<section id="acceptance">
+  <div class="sec-label">12 · Acceptance Criteria</div>
+  <h2>Shipped looks like</h2>
+  <ul class="checks">
+    <li><b>3-second start</b> <span>— a first-time user starts a focus session within 3 seconds of opening a new tab, no onboarding.</span></li>
+    <li><b>1-second glance</b> <span>— phase, remaining time, and today's session count readable in one glance at desk distance.</span></li>
+    <li><b>Live readout</b> <span>— fractional seconds visibly tick in the New Tab surface.</span></li>
+    <li><b>Survives tab close</b> <span>— closing the New Tab never loses the session; badge keeps counting via the worker.</span></li>
+    <li><b>Browser-restart recovery</b> <span>— a session that elapsed while Chrome was closed completes and commits on next start.</span></li>
+    <li><b>Stats answers three questions</b> <span>— total focus time, focus window, streak, without scrolling.</span></li>
+    <li><b>Crew parity</b> <span>— ranking windows, ties, staleness, and recovery rules match the phone against the same fixture.</span></li>
+    <li><b>AA contrast</b> <span>— WCAG AA on all text in both themes, per PRODUCT.md.</span></li>
+    <li><b>Store-ready</b> <span>— privacy copy truthful: no accounts, relay data is self-reported aggregates only.</span></li>
+  </ul>
+
+  <div class="callout">
+    <b>Decision needed before M4</b>
+    Crew parity on the extension is the only feature whose cost is close to its value on a browser. Options: (a) full parity with polling transport, (b) read-only spectator mode for the member's own Crew, (c) skip Crew in v1. Recommend (a) if relays ship conditional polling; otherwise (b).
+  </div>
+</section>
+
+</main>
+
+<footer>
+  POMO · CHROME EXTENSION PLAN · docs/chrome-extension-plan.html · generated from repo context (README / PRODUCT.md / desktop-client)
+</footer>
+
+</body>
+</html>

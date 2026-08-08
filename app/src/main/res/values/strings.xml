@@ -79,6 +79,10 @@
     <string name="ring_notification_start">Start %1$s</string>
     <string name="state_cues_completion_section">Completion cues</string>
     <string name="state_cues_manual_section">Manual haptics</string>
+    <string name="state_cues_previews_title">Cue previews</string>
+    <string name="state_cues_previews_summary">Preview completion cues and manual haptics</string>
+    <string name="back_to_settings">Back to settings</string>
+    <string name="back_to_profile">Back to profile</string>
     <string name="state_cues_focus_complete_title">Focus complete</string>
     <string name="state_cues_focus_complete_summary">Release into break</string>
     <string name="state_cues_short_break_complete_title">Short break complete</string>
@@ -192,6 +196,7 @@
     <string name="backup_restore_identity_note">The Crew identity in the file is only taken back if this phone is in no crews yet.</string>
     <string name="backup_restore_invalid">That file is not a Pomo backup.</string>
     <string name="backup_restore_failed">Backup could not be restored</string>
+    <string name="backup_restore_identity_conflict">This backup belongs to a different active Crew identity. Export this phone first, then restore it on an empty Crew identity.</string>
     <string name="backup_restore_done">Restored %1$s and %2$s</string>
     <string name="backup_exported_unknown">an unknown date</string>
     <string name="backup_no_file_picker">No file picker is available on this phone.</string>
