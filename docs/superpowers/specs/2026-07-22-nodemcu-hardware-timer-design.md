@@ -1,46 +1,68 @@
 # NodeMCU Hardware Timer — Design
 
-Status: approved
+Status: approved (hybrid offline addendum)
 Date: 2026-07-22
+Updated: 2026-08-06 (hybrid offline mode)
 
 ## Goal
 
 A desk device (ESP8266 NodeMCU, 16x2 I2C LCD, buzzer, flash button) that mirrors
-and controls the Pomo timer. Start a session on the phone and the LCD shows it
-counting down. Press the device button and the phone updates. When a phase
+and controls the Pomo timer over the LAN, and runs a full local Pomodoro when the
+phone is unreachable. Start a session on the phone and the LCD shows it counting
+down. Press the device button and the phone updates while synced. When a phase
 completes the buzzer rings, so a silenced phone in another room still gets an
-audible alarm.
+audible alarm. When the phone is off the LAN, the desk still times focus blocks
+and later flushes history / may hand a live timer to the phone.
 
 ## Non-Goals
 
 - No cloud, relay, or broker. The device and phone share a LAN.
 - No Notion integration. The old standalone sketch is archived at
   `Anuraj-dev/pomodoro-timer-esp8266-notion` (private) and is not carried forward.
-- No standalone timer on the device. It never authors state.
-- No Android UI changes.
-- No new Pomo features (presets, 90-minute mode). Work duration stays a phone
-  setting.
+- No dual live clocks. While SYNCED the phone is the sole live clock; while
+  OFFLINE the desk is. On reconnect, **least remaining wins**: adopt succeeds
+  when the phone is stopped, same session, or both live and desk remaining is
+  strictly less; otherwise HTTP 409 `timer_busy` (phone keeps its clock).
+- No Android UI changes required for the hybrid path (API is additive).
+- No new Pomo product features (presets, 90-minute mode). Work duration stays a
+  phone setting (desk caches last known config for offline use).
+
+> **Superseded (original 2026-07-22 non-goal):** “No standalone timer on the
+> device. It never authors state.” Hybrid offline mode *does* run a local timer
+> and appends completed sessions via `POST /api/sessions/import`, and may hand a
+> live timer via `POST /api/timer/adopt`. Desktop clients remain non-authoring.
 
 ## Core Principle
 
-The device is a **third thin client**, alongside the home-screen widget and the
-`desktop-client/` CLI. `PomodoroService` remains the sole write boundary, exactly
-as `docs/architecture.md` requires. Sync is a consequence of that, not a feature:
-there is only ever one running clock, on the phone.
+The device is a **hybrid desk client**, alongside the home-screen widget and the
+`desktop-client/` CLI. `PomodoroService` remains the sole write boundary on the
+phone for live state and Room history, exactly as `docs/architecture.md`
+requires. There is only ever one **live** clock at a time:
+
+- **SYNC:** phone owns the clock; desk mirrors WebSocket + REST (as originally designed).
+- **OFFLINE:** desk owns the clock; on reconnect it flushes history and may adopt.
 
 ```text
 NodeMCU button ─┐
 Widget ─────────┤
 Notification ───┼──▶ PomodoroService ──▶ OfflineTimer ──▶ Room
-Timer screen ───┤        (canonical)          │
-Desktop CLI ────┘                             ▼
-                                       broadcast: UI, notification,
-                                       widget, WebSocket ──▶ NodeMCU LCD
+Timer screen ───┤        (canonical while SYNC) │
+Desktop CLI ────┘                               ▼
+                                         broadcast: UI, notification,
+                                         widget, WebSocket ──▶ NodeMCU LCD
+
+OFFLINE path (desk):
+  local TimerModel + buzzer + buttons
+       │  completed sessions → LittleFS queue (≤32)
+       └─ on reconnect: POST /api/sessions/import
+                        POST /api/timer/adopt (desk live: phone stopped, or
+                        both live and desk rem < phone rem; least remaining)
 ```
 
-The device sends commands over the existing authenticated REST endpoints and
-renders state from the existing `/ws` WebSocket. It caches the last known state
-only for display. It never merges, writes, or reconciles history.
+While SYNCED, the device sends commands over authenticated REST and renders
+state from `/ws`. It does not optimistically mutate the model after commands.
+While OFFLINE, local gestures mutate the desk engine only; reconnect is ordered
+so the phone never shares live ownership with the desk.
 
 ## Part 1 — Android Changes
 
@@ -138,13 +160,15 @@ only `:app`) and to CI (Gradle-only workflow).
 
 ```text
 firmware/
-  README.md                  wiring, libraries, board settings, flashing steps
+  README.md                  wiring, libraries, offline/SYNC, markers, flashing
   PomoLink/
     PomoLink.ino             setup() / loop(), wires the modules together
     secrets.h.example        template — copy to secrets.h and fill in
-    PomoClient.h / .cpp      discovery, WebSocket, REST commands, JSON parsing
-    TimerModel.h / .cpp      last known state + local countdown extrapolation
-    Display.h / .cpp         16x2 LCD rendering
+    PomoClient.h / .cpp      WiFi, discovery, WS, REST, import/adopt, modes
+    TimerModel.h / .cpp      phone snapshot + local offline Pomodoro engine
+    ConfigStore.h / .cpp     LittleFS durations, epoch basis, client_id seq
+    SessionQueue.h / .cpp    bounded offline history queue for import
+    Display.h / .cpp         16x2 LCD rendering + connection markers
     Buttons.h / .cpp         non-blocking multi-click and long-press detection
     Buzzer.h / .cpp          non-blocking melody sequencer
 ```
@@ -214,47 +238,64 @@ becomes a millis-driven toggle with a step counter.
 ### 2.5 Connection state machine
 
 ```text
-BOOT ─▶ WIFI_CONNECTING ─▶ DISCOVERING ─▶ WS_CONNECTING ─▶ SYNCED
-                 ▲                              │            │
-                 └────────── on WiFi loss ──────┴────────────┘
-                            (backoff, then retry from DISCOVERING)
+BOOT ─▶ WIFI ─▶ DISCOVERING ─▶ CONNECTING ─▶ SYNCED
+  │       │         ▲     │            │            │
+  │       │         │     │            │            ├─▶ OFFLINE (~) ──▶ fixed-interval rediscover
+  │       │         │     │            │            │                 + REST known-host probe
+  │       │         │     │            │            └─▶ UNPAIRED (?) ──▶ (5 min) ──▶ DISCOVERING
+  │       │         │     └─ boot probe (WiFi wait ~45s; DISCOVERING restarts ~45s) ─▶ OFFLINE
+  └───────┴─────────┴──────── rediscover / unpaired cooldown ──────────┘
 ```
 
-- `DISCOVERING` queries `MDNS.queryService("pomo", "tcp")`. On a hit, use the
-  returned IP and port. On miss, fall back to `POMO_HOST_FALLBACK` if set,
-  otherwise retry with backoff.
-- `WS_CONNECTING` opens `/ws` and sends `{"type":"hello","token":"..."}` as the
-  first frame. The phone closes the socket on a bad token — treat an immediate
-  close after hello as `UNPAIRED` and surface it on the LCD rather than
-  reconnect-looping silently.
-- Reconnect uses exponential backoff capped at 30 s, so a phone that is off for
-  hours does not hammer the network.
-- **Heartbeat:** poll `GET /api/status` every 30 s regardless of WebSocket
-  health. This corrects any clock drift, detects a half-open socket that
-  `webSocket.loop()` still believes is alive, and re-seeds state after a missed
-  broadcast. If neither a WebSocket frame nor a successful poll lands within
-  45 s, drop to `DISCONNECTED`.
+- `DISCOVERING` queries `MDNS.queryService("pomo", "tcp")` unless
+  `POMO_HOST_FALLBACK` is set (configured host skips mDNS entirely) or a
+  known host was just REST-proven while OFFLINE. Multi-responder: token-probe
+  each candidate; select first HTTP 200. Boot probe is two sequential ~45 s
+  windows: WiFi wait up to ~45 s, then on association the probe clock restarts
+  for a fresh DISCOVERING ~45 s (worst case ~90 s to offline-usable). Hard-cuts
+  only while still `DISCOVERING` / WiFi wait — not while `CONNECTING`.
+- `CONNECTING` opens `/ws` and sends `{"type":"hello","token":"..."}` as the
+  first frame. The boot probe watchdog does **not** hard-cut `CONNECTING`;
+  handshake/hello wait is owned by the ~20 s socket-stale window (and
+  enter-SYNC is not aborted mid-pipeline). Only the first authenticated WS
+  `state` starts the enter-SYNC pipeline (import → adopt → deferred config
+  cache). REST status probes after a close are reachability/token checks;
+  HTTP 401 becomes `UNPAIRED` (`?`) but HTTP 200 does not enter SYNC.
+- Offline rediscover and reconnect retry on one fixed ~5 s interval. While
+  OFFLINE with a known host, REST reachability is also checked ~every 5 s and
+  can skip mDNS. Unpaired cooldown is ~5 minutes.
+- **Heartbeat:** do not poll `GET /api/status` while SYNCED or CONNECTING;
+  blocking REST calls can starve the ESP8266 WebSocket loop. A healthy REST
+  response while CONNECTING proves reachability/token only and never enters
+  SYNC; the first authenticated WebSocket `state` frame starts enter-SYNC.
+  Config refresh is deferred until SYNC is stable (~5 min healthy, ~1 min after
+  failure). A missing WebSocket frame for ~20 s triggers soft resync while the
+  phone retains clock ownership; after the safety limit, unreachable recovery
+  returns to OFFLINE.
 
 ### 2.6 Time model
 
 No NTP. The archived sketch's `getNTPTime()` is dropped entirely.
 
-Each state payload carries `remaining` in seconds. On receipt the device records
-`rxMillis = millis()` alongside it. While `status == "running"` the displayed
-value is:
+**SYNC path:** each state payload carries `remaining`, `start_time`, `phase`, and
+`server_time`. The device applies the frame against the prior epoch basis so
+lag projection can account for elapsed wall time, then re-anchors the basis
+from the accepted frame. Older/out-of-order frames for the same phase are
+rejected when they would inflate the remaining time (unless the duration grew
+through `extend`). While `status == "running"`:
 
 ```text
-displayed = remaining - (millis() - rxMillis) / 1000
+displayed = remaining - (estimated_epoch_now - server_time)
 ```
 
-Every subsequent push re-snaps the baseline, so error never accumulates. Between
-pushes the device free-runs on its own crystal for at most one phase; at ±20 ppm
-that is well under a second over 25 minutes, and the 30 s heartbeat corrects it
-anyway. When `status` is `paused` or `stopped`, `remaining` is displayed as-is
-with no extrapolation.
+Every accepted push re-anchors the baseline. When paused/stopped, `remaining`
+is shown as-is. `displayed` clamps at zero.
+The desk does not advance the phone's phase — it waits for the phone.
 
-`displayed` clamps at zero. The device never advances the phase itself — it waits
-for the phone to say so.
+**OFFLINE path:** the same millis extrapolation runs on desk-owned state. When
+remaining hits zero the local engine completes the phase (buzzer + queue
+enqueue + advance to next phase stopped). Phone `server_time` samples (and
+cached config) give approximate wall-clock starts for import/adopt.
 
 ### 2.7 Controls
 
@@ -272,14 +313,15 @@ sketch carry over.
 All requests carry `X-Pomo-Token`. Long press fires on release, not on threshold,
 so it cannot be confused with a click.
 
-Gestures are **ignored** unless the state is `SYNCED`. The device never queues
-commands to replay later — a command replayed minutes after the fact would
-control a timer the user has since changed, which is exactly the kind of implicit
-override this design rules out.
+**SYNCED:** gestures map to REST (`toggle` / `skip` / `reset` / `extend`). The
+device does not optimistically update after a command; it waits for the phone
+broadcast.
 
-The device does not optimistically update its display after sending a command. It
-waits for the resulting broadcast, so what the LCD shows is always something the
-phone actually said.
+**OFFLINE / UNPAIRED:** gestures drive the local engine (same mapping). No REST
+command queue — offline actions never replay against the phone later.
+
+**Boot probe / no local owner yet:** gestures are ignored until OFFLINE or
+SYNCED.
 
 ### 2.8 Display
 
@@ -315,39 +357,100 @@ payload. Column 15 of row 1 is the connection indicator:
 
 | Char | Meaning |
 | --- | --- |
-| (space) | synced |
-| `.` | connecting or discovering |
-| `!` | phone unreachable |
-| `?` | token rejected — re-flash with a fresh token |
+| (space) | SYNCED — phone owns the live clock |
+| `.` | connecting, discovering, boot probe, or enter-SYNC pipeline |
+| `~` | OFFLINE — desk owns the live clock (was `!` in the original draft) |
+| `?` | UNPAIRED — token rejected; local timer still usable — re-flash token |
 
 Redraw only when the rendered text changes. A full `lcd.clear()` every second
 causes visible flicker on I2C; write per-cell instead and only touch what moved.
 
 ### 2.9 Buzzer
 
-Fires **only** on a `phase_complete` event. Never on inferred state transitions,
-never on button presses, never on errors.
+Fires on **natural phase completion only** — never on skip/reset/pause, never on
+button presses, never on errors.
+
+- **SYNC:** phone WebSocket `phase_complete` event.
+- **OFFLINE:** local engine rundown (same melodies).
 
 - `phase == "work"` → the reward melody from the archived sketch
   (`Pomodoro_timer.ino:654`), plus the 3x backlight blink.
 - `phase == "short"` or `"long"` → the gentler break-end melody
   (`Pomodoro_timer.ino:520-550`).
 
-Both converted to the non-blocking sequencer of 2.4. If a new event arrives while
-a melody is playing, the new melody replaces it rather than queuing.
+Both use the non-blocking sequencer of 2.4. If a new event arrives while a
+melody is playing, the new melody replaces it rather than queuing.
 
-### 2.10 Offline behaviour
+### 2.10 Offline behaviour (hybrid — supersedes original draft)
 
-Confirmed requirement: the device syncs, it never overrides.
+Original draft required display-only stale countdown and silent buttons. Product
+direction is **hybrid offline mode**:
 
-- Phone unreachable while a timer was running: keep counting the display down
-  from the last known state and show `!`. Do not fire the buzzer at zero — the
-  device does not know whether the phone actually completed the phase. Hold at
-  `00:00` until the truth arrives.
-- On reconnect, snap to whatever the phone reports, even if that contradicts the
-  local display.
-- Buttons do nothing while disconnected.
-- No local session is ever recorded or uploaded.
+| Topic | Behaviour |
+| --- | --- |
+| Ownership | SYNC → phone sole live clock. OFFLINE / UNPAIRED → desk sole live clock. Never both. |
+| Boot | Two sequential ~45 s windows (marker `.`): WiFi wait up to ~45 s; after association, DISCOVERING restarts for another ~45 s (worst case ~90 s). Boot watchdog does not hard-cut CONNECTING (handshake uses ~20 s socket stale) or abort enter-SYNC mid-pipeline. Missing SSID / either timeout → offline-usable (`~`), not stuck on “Starting up”. |
+| Rediscover | Fixed ~5 s interval while OFFLINE. REST reachability probe of known host ~every 5 s can skip mDNS. Marker `.` only while actively probing / CONNECTING. |
+| Stale / leave SYNC | No WebSocket frame for ~20 s → bounded soft resync while phone ownership is retained; unreachable recovery eventually becomes OFFLINE (`~`). WiFi loss also enters local ownership. |
+| Local engine | Full Pomodoro: start/pause/resume, skip, reset, extend +300 s; natural complete buzzes and advances phase. Live timer snapshot `/pomo_timer.json` survives reboot. |
+| History queue | Up to 32 completed sessions on LittleFS (`/pomo_sessions.json`); temp+rename + validation; drop oldest when full; real `start_time` when known. |
+| Enter SYNC order | (1) first authenticated WS `state` frame (REST status while CONNECTING is reachability/token-only) (2) `POST /api/sessions/import` (3) drop accepted ids and quarantine terminal rejected ids (4) if desk live: adopt when phone stopped, or when both live and desk remaining < phone remaining (strict least-remaining); same session always; live adopt needs `start_time > 0` (5) on 409 (phone rem ≤ desk rem) or phone wins by remaining → snap to phone (6) cache `server_time` + `GET /api/config` (retry; periodic refresh while SYNCED). |
+| Unpaired | Bad token → marker `?`, 5 min cooldown, **local controls still work**. |
+| Sync trigger | Opening Pomo on the LAN is enough; no desk-side “sync now” gesture. |
+
+Phone API additives (see `docs/protocol.md`): `server_time` on status/state,
+`POST /api/sessions/import`, `POST /api/timer/adopt` (Room owns `completed`
+after adopt).
+
+## Addendum — Hybrid offline mode (2026-08-06)
+
+This addendum freezes the product contract that overrides §2.10 of the original
+approval and the “no standalone timer” non-goal:
+
+1. **Phone optional at the desk.** Desk runs full Pomodoro offline; phone is
+   not required for countdown, buzzer, or buttons.
+2. **Ping cadence.** Fixed ~5 s rediscover/reconnect retries while offline,
+   plus REST reachability on a known host (~5 s). Boot
+   probe: WiFi wait ~45 s then fresh DISCOVERING ~45 s after association;
+   CONNECTING uses ~20 s socket stale, not the boot-probe hard-cut. A stale
+   socket first gets a bounded soft-resync attempt while phone ownership is
+   retained.
+3. **On connect.** Enter-SYNC starts from the first authenticated WS `state`;
+   REST `/api/status` while CONNECTING is reachability/token-only. Flush offline history; optionally adopt a live desk timer under
+   least remaining (phone stopped always; both live only if desk remaining is
+   strictly less; same session always; live `start_time > 0`); otherwise 409 /
+   snap to phone. Phone sets `completed` from Room after adopt.
+4. **SYNC.** Phone is sole live clock; desk mirrors WS with apply-before-cache
+   lag projection and stale/out-of-order remaining rejection. Config refreshes
+   only after SYNC is stable, with retry after failure; `daily_goal` 0 accepted.
+5. **Defaults.** Boot probe two × ~45 s (WiFi wait, then DISCOVERING after
+   association), rediscover/reconnect fixed ~5 s, stale ~20 s with bounded soft
+   resync, markers space /
+   `~` / `.` / `?`, queue 32, timer snapshot `/pomo_timer.json`, durations
+   25/5/15 (cached).
+6. **mDNS.** Multi-responder token probe selects first HTTP 200; configured host
+   fallback wins; phone `PomoServiceAdvertiser` retries async registration
+   failures indefinitely every ~5 s while advertisement is wanted.
+
+## Addendum — Hybrid bugfix contract (code truth, 2026-08-06)
+
+Short lock-in of behaviours implemented on `feat/nodemcu-hardware-timer` (see
+firmware headers and `docs/protocol.md` / `firmware/README.md`):
+
+| # | Behaviour |
+| --- | --- |
+| 1 | CONNECTING enters SYNC only from an authenticated WebSocket `state`; REST status is reachability/token-only. |
+| 2 | Offline boot without WiFi becomes offline-usable (`~`), not stuck Starting up. |
+| 3 | Fixed ~5 s rediscover/reconnect + offline REST reachability probe. |
+| 4 | SYNC countdown: apply-before-cache, lag projection, reject stale/out-of-order remaining inflation. |
+| 5 | Config fetch retry + periodic refresh while SYNCED; `daily_goal` 0 accepted. |
+| 6 | Offline timer snapshot survives reboot (`/pomo_timer.json`); real `start_time` for history. |
+| 7 | SessionQueue crash-safer temp+rename + validation on load. |
+| 8 | Adopt: Room is completed source of truth; live adopt requires `start_time > 0`; least-remaining. |
+| 9 | mDNS: multi-responder token probe selects first 200; host fallback wins; phone advertiser retries async failures. |
+| 10 | Markers: space SYNC, `~` OFFLINE, `.` probe, `?` unpaired. |
+
+Firmware user docs: `firmware/README.md`. Client contract: `docs/protocol.md`.
 
 ## Verification
 
@@ -372,11 +475,20 @@ Firmware is verified on real hardware — there is no emulator worth the effort:
 6. Let a work phase run to zero → buzzer plays the reward melody, backlight
    blinks, phone records the session in Room.
 7. Press skip mid-phase → phone advances, buzzer stays **silent**.
-8. Force-stop the Pomo app → LCD shows `!` within 45 s, buttons stop working.
-9. Reopen Pomo → device reconnects and snaps to the phone's state.
-10. Reboot the router so the phone gets a new IP → device rediscovers via mDNS
+8. Force-stop the Pomo app → the desk detects the missing WebSocket within
+   ~20 s, attempts bounded soft resync, and becomes `~` when the phone remains
+   unreachable; local buttons still drive the desk timer offline.
+9. Complete a work phase offline → buzzer rings; reopen Pomo on the LAN → desk
+   reconnects, flushes import, history appears on the phone.
+10. Start offline while phone is stopped → on reconnect desk adopts live timer
+    onto the phone. Start offline while phone is already running with **more**
+    remaining than the desk → desk adopts (least remaining). Start offline
+    while phone remaining ≤ desk remaining → desk gets 409 and snaps to phone
+    (no dual clocks).
+11. Reboot the router so the phone gets a new IP → device rediscovers via mDNS
     with no reflash.
-11. Rotate the pairing token in Pomo Settings → LCD shows `?`.
+12. Rotate the pairing token in Pomo Settings → LCD shows `?`; local timer still
+    works until `secrets.h` is reflashed.
 
 ## Risks
 
@@ -386,7 +498,7 @@ Firmware is verified on real hardware — there is no emulator worth the effort:
 | Android doze suspends the Ktor server | `PomodoroService` is a foreground service; verify with the screen off for 30 min during test 6 |
 | ESP8266 RAM exhaustion from JSON + WebSocket + LCD | ArduinoJson 7 with a bounded document; parse only the fields actually rendered; no full-history parsing on device |
 | Blocking melody drops the WebSocket | Non-blocking sequencer (2.4) — the primary reason that requirement is non-negotiable |
-| Phone IP changes mid-session | 30 s heartbeat detects the dead socket, state machine returns to `DISCOVERING` |
+| Phone IP changes mid-session | ~20 s WebSocket stale detection triggers bounded soft resync; fixed-interval recovery returns to `OFFLINE` when the phone remains unreachable |
 
 ## Delivery
 

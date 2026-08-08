@@ -24,6 +24,8 @@ import com.pomo.db.HistoryCacheRepository
 import com.pomo.network.PhoneMessages
 import com.pomo.network.PhoneServer
 import com.pomo.network.PomoServiceAdvertiser
+import com.pomo.network.SessionImportPayloads
+import com.pomo.network.TimerAdoptPayloads
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
 import com.pomo.timer.OfflineTimer
@@ -400,13 +402,15 @@ public class PomodoroService : Service(), TimerObserver {
                 prefs.hasUnseenAchievement = true
                 alertsNotifier.notifyAchievements(AchievementCatalog.all.filter { it.id in newly })
                 // Nudge any foreground UI so the Profile-tab dot appears now, not on the next resume.
-                sendBroadcast(Intent("com.pomo.STATE_UPDATE"))
+                // Explicit package required for RECEIVER_NOT_EXPORTED receivers on modern Android.
+                sendBroadcast(Intent("com.pomo.STATE_UPDATE").setPackage(packageName))
             }
         }
     }
 
     private fun broadcastStateUpdate() {
-        val intent = Intent("com.pomo.STATE_UPDATE")
+        // Explicit package so same-app RECEIVER_NOT_EXPORTED receivers reliably get the intent.
+        val intent = Intent("com.pomo.STATE_UPDATE").setPackage(packageName)
         sendBroadcast(intent)
         TimerWidgetProvider.updateAllWidgets(this, currentState)
         serviceScope.launch {
@@ -757,6 +761,111 @@ public class PomodoroService : Service(), TimerObserver {
 
     public suspend fun getHistoryPayload(): Map<String, HistoryCacheRepository.ServerDayEntry> {
         return historyCacheRepository.getHistoryPayload()
+    }
+
+    /**
+     * Desk offline-history flush. Validates sessions, writes new ones to Room, refreshes
+     * today's completed count, and broadcasts state so UIs and WS clients catch up.
+     */
+    public suspend fun importSessions(body: String): Map<String, Any> =
+        commandMutex.withLock {
+            val nowSeconds = System.currentTimeMillis() / 1000L
+            val knownStarts = historyCacheRepository.getAllSessionStarts()
+            val knownClientIds = prefs.importedClientIds()
+            val parsed =
+                SessionImportPayloads.parseAndValidate(
+                    body = body,
+                    nowSeconds = nowSeconds,
+                    knownStarts = knownStarts,
+                    knownClientIds = knownClientIds,
+                )
+
+            val newlyAcceptedClientIds = mutableListOf<String>()
+            for (row in parsed.accepted) {
+                if (!row.alreadyPresent) {
+                    historyCacheRepository.saveLocalSession(row.session)
+                }
+                newlyAcceptedClientIds += row.clientId
+            }
+            prefs.markImportedClientIds(newlyAcceptedClientIds)
+
+            withContext(Dispatchers.Main) {
+                val today = historyCacheRepository.getEffectiveDateString()
+                if (currentState.date == today || currentState.date == null) {
+                    currentState.completed = historyCacheRepository.getTodayCompletedCount()
+                    currentState.date = today
+                    sanitizeState(currentState)
+                    offlineTimer.updateState(currentState)
+                    saveCurrentState()
+                    updateNotification()
+                    broadcastStateUpdate()
+                } else {
+                    // Running across midnight: do not redate, but still push WS so history UIs refresh.
+                    broadcastStateUpdate()
+                }
+            }
+
+            // Any newly imported completed work can affect Crew ranking / achievements.
+            if (parsed.accepted.any { !it.alreadyPresent && it.session.type == TimerState.PHASE_WORK }) {
+                publishCrewSnapshot("desk session import")
+                checkForNewAchievements()
+            }
+
+            mapOf(
+                "success" to true,
+                "accepted" to parsed.accepted.map { it.clientId },
+                "rejected" to
+                    parsed.rejected.map { row ->
+                        mapOf("client_id" to row.clientId, "error" to row.error)
+                    },
+            )
+        }
+
+    /**
+     * Desk hands a live offline (or shorter) timer to the phone under the least-remaining
+     * adopt policy: always when phone is stopped; same session always; different live
+     * sessions only when desk remaining is strictly less than phone remaining. Otherwise
+     * [AdoptResult.Conflict] (HTTP 409). On success the phone owns the sole live clock.
+     *
+     * Today's [TimerState.completed] always comes from Room after adopt — desk cannot
+     * silently inflate daily counts or long-break cadence.
+     */
+    public suspend fun adoptTimer(body: String): AdoptResult {
+        val payload = TimerAdoptPayloads.parse(body)
+        // Apply under lock; notify UI after release so stateSnapshot cannot race a mid-broadcast lock.
+        val result =
+            commandMutex.withLock {
+                withContext(Dispatchers.Main) {
+                    if (!TimerAdoptPayloads.canAdopt(currentState, payload)) {
+                        return@withContext AdoptResult.Conflict(currentState.copy())
+                    }
+
+                    val next = TimerAdoptPayloads.applyTo(currentState, payload)
+                    next.date = historyCacheRepository.getEffectiveDateString()
+                    // Room is canonical for today's completed work blocks. Desk completed is
+                    // a hint only — never accept a higher desk count without matching imported
+                    // sessions (import already refreshed Room before adopt on reconnect).
+                    next.completed = historyCacheRepository.getTodayCompletedCount()
+                    sanitizeState(next)
+                    currentState = next
+                    offlineTimer.updateState(currentState)
+                    saveCurrentState()
+                    AdoptResult.Success(currentState.copy())
+                }
+            }
+        if (result is AdoptResult.Success) {
+            withContext(Dispatchers.Main) {
+                updateNotification()
+                broadcastStateUpdate()
+            }
+        }
+        return result
+    }
+
+    public sealed class AdoptResult {
+        public data class Success(val state: TimerState) : AdoptResult()
+
+        public data class Conflict(val state: TimerState) : AdoptResult()
     }
 
     public suspend fun updateSessionTag(

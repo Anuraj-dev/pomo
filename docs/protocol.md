@@ -1,7 +1,10 @@
 # Pomo Phone Protocol
 
 The Android app hosts a local API from `PomodoroService` using Ktor CIO. Desktop
-clients are remote controls and displays; the phone remains the source of truth.
+clients are remote controls and displays. The phone is the live clock while
+synced; the NodeMCU desk may run a local Pomodoro while offline and, on
+reconnect, append completed history and optionally hand a live timer to the
+phone via adopt. There is never more than one live clock at a time.
 
 Default base URL:
 
@@ -37,7 +40,15 @@ LAN clients should resolve the phone's address this way rather than storing an
 IP, which changes whenever the router issues a new DHCP lease. Discovery does
 not carry the pairing token — clients still need the token from the pairing
 payload. Advertising follows the phone API's own settings: it stops when the
-API is disabled and when wifi-only mode has no active LAN network.
+API is disabled and when wifi-only mode has no active LAN network. Async mDNS
+registration failures on the phone retry indefinitely every 5 seconds while
+the service still wants the port advertised.
+
+When multiple `_pomo._tcp` responders exist (e.g. dev + release packages, or
+two phones), clients must not trust the first mDNS answer alone. The desk
+firmware probes each candidate with authenticated `GET /api/status` and selects
+the first HTTP 200. A configured host/port override wins outright and skips
+mDNS.
 
 Clients on networks that block multicast should fall back to a manually
 configured host and port.
@@ -76,7 +87,9 @@ Invalid WebSocket tokens are closed without subscribing the client.
 
 ## Timer State
 
-Timer state is JSON-compatible with `TimerState.kt`:
+Timer state is JSON-compatible with `TimerState.kt`. Status responses and
+WebSocket `state` frames also include additive `server_time` (phone wall-clock
+epoch seconds) so offline-capable clients can align session starts:
 
 ```json
 {
@@ -90,7 +103,9 @@ Timer state is JSON-compatible with `TimerState.kt`:
   "daily_goal": 8,
   "date": "2026-05-07",
   "last_action_time": 1710000000,
-  "version": 2
+  "tag": "",
+  "version": 2,
+  "server_time": 1710000100
 }
 ```
 
@@ -101,11 +116,24 @@ status: stopped | running | paused
 phase:  work | short | long
 ```
 
+Clients MUST ignore unknown fields. `server_time` is additive and optional for
+legacy display-only clients.
+
+Desk / offline-capable clients SHOULD use `server_time` with `remaining` to
+project the live countdown onto wall-clock now (end ≈ `server_time` +
+`remaining` while running) so delayed or out-of-order state frames cannot
+rebase the display to an older remaining. When both a prior epoch basis and a
+new snapshot exist, apply the snapshot (with lag projection) **before**
+re-anchoring the cached epoch so projection uses the previous basis. For the
+same running session (`start_time` + `phase`), clients SHOULD ignore snapshots
+with an older `server_time`, and SHOULD reject remaining inflation that is not
+explained by a larger `duration` (e.g. extend).
+
 ## REST Endpoints
 
 ### GET /api/status
 
-Returns the current phone-owned timer state.
+Returns the current phone-owned timer state plus `server_time` (epoch seconds).
 
 ```bash
 curl -H "X-Pomo-Token: $TOKEN" "$PHONE_URL/api/status"
@@ -201,6 +229,158 @@ long_break_after     positive integer
 daily_goal           non-negative integer
 ```
 
+### POST /api/sessions/import
+
+Flushes completed offline sessions from a desk (or similar) into phone Room
+history. Auth: `X-Pomo-Token`. Idempotent on `client_id` and on session `start`
+primary key: duplicates are listed in `accepted` without double-counting.
+
+```bash
+curl -X POST \
+  -H "X-Pomo-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "source": "desk",
+    "sessions": [
+      {
+        "client_id": "esp-1-a3f0",
+        "type": "work",
+        "duration": 1500,
+        "completed": true,
+        "start": 1710000000,
+        "tag": ""
+      }
+    ]
+  }' \
+  "$PHONE_URL/api/sessions/import"
+```
+
+Body fields:
+
+```text
+source              optional string (e.g. "desk"); informational only
+sessions[]          array of session objects
+  client_id         required non-empty string (desk-side idempotency key)
+  type              work | short | long
+  duration          positive integer seconds
+  completed         must be true (only completed sessions are imported)
+  start             optional epoch seconds; if omitted, phone assigns from now
+  tag               optional string
+```
+
+Validation:
+
+- `type` must be `work`, `short`, or `long`.
+- `duration` must be `> 0`.
+- `completed` must be `true`.
+- `client_id` must be non-empty.
+- When `start` is present, it must fall in a plausible window: not older than
+  14 days, not more than a few minutes in the future.
+- When `start` is omitted for multiple sessions, the phone assigns starts from
+  `now - duration` walking backward so list order is chronological and primary
+  keys do not collide.
+
+Response:
+
+```json
+{
+  "success": true,
+  "accepted": ["esp-1-a3f0"],
+  "rejected": [
+    { "client_id": "bad", "error": "invalid type" }
+  ]
+}
+```
+
+The response is terminal for each row that appears in `accepted` or
+`rejected`: the desk drops accepted rows and quarantines rejected rows after
+logging their `client_id` and error. A successful HTTP response with a valid
+`accepted` array therefore allows synchronization to continue even when a row
+is invalid. Transport failures, non-200 responses, malformed responses, or a
+missing `accepted` array are retryable and leave the corresponding queue rows
+queued.
+
+After a successful import the phone refreshes today's completed count and
+broadcasts timer state (WebSocket + local UI).
+
+### POST /api/timer/adopt
+
+Hands a live offline (or shorter) timer from the desk to the phone. Auth:
+`X-Pomo-Token`. **Least remaining wins** when both sides have a live timer.
+
+Adoption rules (phone becomes sole clock on success):
+
+1. **Phone STOPPED** → always adopt the desk payload.
+2. **Same session** (matching `start_time` + `phase`) → always adopt (desk
+   refresh of remaining / status).
+3. **Both live** (phone and desk `running` or `paused`) on **different**
+   sessions → adopt only when desk `remaining` is **strictly less** than phone
+   `remaining` (`payload.remaining < current.remaining`).
+4. Otherwise → **HTTP 409** `timer_busy`: phone keeps its clock; desk must snap
+   to phone state. This includes phone remaining ≤ desk remaining (equal or
+   longer desk), and any non-live payload while the phone is live on a different
+   session.
+
+There is never dual live ownership after merge: one winner; once SYNCED the
+phone owns the live clock.
+
+```bash
+curl -X POST \
+  -H "X-Pomo-Token: $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "running",
+    "phase": "work",
+    "remaining": 900,
+    "duration": 1500,
+    "start_time": 1710000000.0,
+    "completed": 2,
+    "daily_goal": 8,
+    "tag": ""
+  }' \
+  "$PHONE_URL/api/timer/adopt"
+```
+
+Body fields:
+
+```text
+status       stopped | running | paused
+phase        work | short | long
+remaining    seconds remaining (>= 0, <= duration)
+duration     total phase seconds (> 0)
+start_time   epoch seconds (float-compatible); must be > 0 when status is
+             running or paused (same-session identity); may be 0 / omitted
+             when status is stopped
+completed    completed work blocks today (>= 0); phone treats Room as
+             canonical after adopt and does not inflate from a higher desk
+             count (import matching sessions first via /api/sessions/import)
+daily_goal   daily goal (>= 0)
+tag          active tag string (may be empty)
+```
+
+Success response:
+
+```json
+{
+  "success": true,
+  "state": { "...": "TimerState" }
+}
+```
+
+Conflict (HTTP 409) — phone live and phone remaining ≤ desk remaining (or same
+session not matching and desk not strictly shorter):
+
+```json
+{
+  "success": false,
+  "error": "timer_busy",
+  "state": { "...": "TimerState" }
+}
+```
+
+On success the phone applies the payload into `OfflineTimer` / service state,
+persists, updates notification, and broadcasts over WebSocket.
+
 ### GET /api/history
 
 Returns Room-backed canonical history keyed by the phone's local calendar date:
@@ -246,12 +426,12 @@ First message:
 ```
 
 State messages are sent immediately after authentication and after every state
-change:
+change. `data` matches `GET /api/status` (TimerState fields plus `server_time`):
 
 ```json
 {
   "type": "state",
-  "data": { "...": "TimerState" }
+  "data": { "...": "TimerState", "server_time": 1710000100 }
 }
 ```
 
@@ -289,14 +469,49 @@ may be added without a protocol version bump.
 
 ## Client Contract
 
-Remote clients (desktop and hardware) should:
+Remote clients should:
 
 - Discover the phone through mDNS where possible, with a manual host fallback.
-- Ignore WebSocket frames with an unrecognised `type`.
-
+- Ignore WebSocket frames with an unrecognised `type` and ignore unknown JSON fields.
 - Store `url` and `token` from the pairing payload.
 - Use REST endpoints for commands.
 - Use WebSocket updates or polling for display.
-- Cache the last successful state only for stale/offline display.
-- Treat cache writes as best-effort and local-only.
-- Never write canonical timer or history state locally.
+
+**Desktop clients** remain thin: they must not author canonical timer or history
+state. They may cache the last successful state only for stale/offline display;
+cache writes are best-effort and local-only.
+
+**NodeMCU desk (hybrid) may append history and adopt a live timer.** This is the
+exception to “clients never author state.” While the phone is reachable (SYNC),
+the phone is the sole live clock and the desk mirrors WebSocket (+ REST) state
+and sends REST commands. While the phone is unreachable (OFFLINE), the desk may
+run a local Pomodoro (buzzer, buttons, countdown), persist a live timer snapshot
+across reboot, and queue completed sessions (LittleFS temp+rename; real phase
+`start_time` when known). On reconnect it:
+
+1. Completes enter-SYNC from the first authenticated WebSocket `state` frame
+   while CONNECTING. Authenticated `GET /api/status` probes only check
+   reachability/token and never promote the desk to SYNCED. Marker stays `.`
+   until the pipeline finishes.
+2. Flushes completed offline sessions with `POST /api/sessions/import` (append-only;
+   accepted client IDs are dropped and rejected IDs are quarantined with serial
+   diagnostics; unaccepted or failed responses remain queued and retry on the
+   fixed ~5-second interval).
+3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
+   when the phone is stopped, or when both are live and desk remaining is
+   strictly less than phone remaining (least-remaining). Same session is always
+   allowed. Live payloads require `start_time > 0`; after adopt the phone sets
+   `completed` from Room (desk completed is not authoritative).
+4. On adopt `409` (phone remaining ≤ desk remaining on a different session) or
+   when the desk does not try adopt, snaps to phone state.
+5. Caches `server_time` and defers `GET /api/config` until SYNC is stable;
+   healthy refresh is ~5 minutes and failed refreshes retry after ~1 minute.
+   `daily_goal` may be `0`.
+
+Never run two live clocks after merge: least remaining wins; once SYNCED the
+phone owns the sole live clock. Opening the Pomo app on the LAN is enough for
+the desk to rediscover (fixed ~5-second retries after leave-SYNC, plus REST
+reachability on a known host) and sync; there is no separate desk “push sync”
+command. A stale WebSocket is detected after ~20 seconds and gets bounded soft
+resync while phone ownership is retained; unreachable recovery eventually
+returns to OFFLINE.

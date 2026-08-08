@@ -13,9 +13,14 @@ through service methods:
 - Home-screen widget actions
 - Authenticated HTTP commands from `PhoneServer`
 - The NodeMCU desk device, through the same authenticated HTTP commands
+  (including offline history import and live timer adopt)
 
 Room is the canonical history store. Desktop clients may display or cache data,
-but they should not merge, overwrite, or author timer/history state.
+but they should not merge, overwrite, or author timer/history state. The desk
+may append completed offline sessions and hand over a live timer under the
+least-remaining adopt rule (phone stopped always; same session always; both
+live only when desk remaining is strictly less); it does not dual-own the clock
+while synced.
 
 ## Runtime Flow
 
@@ -78,7 +83,12 @@ network/PhoneServer.kt
 ```
 
 Embedded Ktor CIO server. Exposes authenticated REST commands and a WebSocket
-state stream for desktop clients.
+state stream for desktop and desk clients. Additive protocol surfaces include
+`server_time` on status/state, `POST /api/sessions/import` (history append from
+offline desk queue), and `POST /api/timer/adopt` (live timer handoff under the
+least-remaining rule: phone stopped always; same session always; both live on
+different sessions only when desk remaining is strictly less than phone
+remaining; otherwise HTTP 409 `timer_busy`).
 
 ```text
 ui/
@@ -107,8 +117,13 @@ When the timer changes, `PomodoroService`:
 ## History
 
 Completed sessions are written through `HistoryCacheRepository` into Room. Daily
-stats are derived locally from those session writes. The app intentionally does
-not import or reconcile legacy laptop history.
+stats are derived locally from those session writes. Sources of history writes:
+
+- Local phone completions and partial work skips (`OfflineTimer`)
+- Desk offline flush via `POST /api/sessions/import` (append-only, idempotent on
+  `start` / `client_id`; missing starts are assigned on the phone)
+
+The app intentionally does not import or reconcile legacy laptop history.
 
 History dates use the phone's local calendar day. When a session crosses
 midnight, the repository splits it into per-date segments, rounds each segment's
@@ -154,13 +169,44 @@ Remote clients are thin:
 - Desktop background services refresh cache only; they do not own timer
   lifecycle, history, or sync.
 
-The NodeMCU desk device (`firmware/PomoLink/`) is one of these thin clients. It
-renders broadcast state on an LCD, sends button gestures to the REST endpoints,
-and sounds a buzzer on the `phase_complete` event. It runs no timer of its own:
-when the phone is unreachable it displays a disconnected marker and refuses
-commands rather than authoring state it would later have to reconcile.
+The NodeMCU desk device (`firmware/PomoLink/`) is a **hybrid** client:
+
+- **SYNC:** phone is the sole live clock. Desk mirrors WebSocket (+ REST) state
+  with lag projection and stale-frame rejection (apply snapshot before
+  re-anchoring epoch cache), sends control commands, and buzzes on
+  `phase_complete` from the phone. Config is fetched on enter-SYNC (retry) and
+  refreshed periodically while SYNCED; `daily_goal` may be `0`.
+- **OFFLINE:** desk owns countdown, buzzer, and buttons. Completed sessions are
+  queued on LittleFS (`/pomo_sessions.json`, crash-safer temp+rename, validated
+  load). A live running/paused timer is snapshotted to `/pomo_timer.json` so it
+  survives reboot. Boot without WiFi (or after the boot probe: WiFi wait ~45 s,
+  then a fresh DISCOVERING window ~45 s after association)
+  becomes offline-usable (`~`), not stuck on “Starting up”.
+- **Reconnect:** rediscovery and reconnect use one fixed ~5 s interval, plus a
+  known-host REST reachability probe every ~5 s. Enter-SYNC starts from the
+  first healthy WebSocket `state` frame; `GET /api/status` while CONNECTING is
+  only a reachability/token check and never promotes the desk to SYNCED. It
+  then posts `POST /api/sessions/import`, dropping accepted client IDs and
+  quarantining rejected IDs with serial diagnostics. Unaccepted or failed
+  responses remain queued and retry on the same fixed interval; the desk stays
+  CONNECTING until the queue is empty. It then
+  optionally calls `POST /api/timer/adopt` under least-remaining (phone stopped
+  always; same session always; both live only when desk remaining is strictly
+  less). Live adopt requires `start_time > 0`. HTTP 409 `timer_busy` means the
+  desk snaps to the phone. After adopt, **Room** is the source of truth for
+  today's `completed` count on the phone.
+
+There is never dual live ownership after merge: one winner under least
+remaining; once SYNCED the phone owns the sole live clock.
+
+LCD connection markers: space = SYNCED, `~` = OFFLINE, `.` = probe/reconnect
+pipeline, `?` = unpaired (token rejected; local timer still usable).
 
 While serving, the service advertises `_pomo._tcp` over mDNS so LAN clients
-resolve the phone by name.
+resolve the phone by name. Async registration failures retry indefinitely every
+5 s while the service wants the port advertised. Desk discovery token-probes
+multiple responders and selects the first HTTP 200; a configured host/port
+fallback wins outright and skips mDNS.
 
-See [protocol.md](protocol.md) for endpoint details.
+See [protocol.md](protocol.md) for endpoint details and
+[firmware/README.md](../firmware/README.md) for desk timings and wiring.
