@@ -240,21 +240,21 @@ bool SessionQueue::enqueue(const char* clientId, const char* type, int durationS
   return ok;
 }
 
-int SessionQueue::dropAccepted(const char* const* clientIds, int acceptedCount) {
-  if (clientIds == nullptr || acceptedCount <= 0 || count_ == 0) return 0;
+int SessionQueue::dropByClientId(const char* const* clientIds, int clientIdCount) {
+  if (clientIds == nullptr || clientIdCount <= 0 || count_ == 0) return 0;
 
   int dropped = 0;
   int write = 0;
   for (int i = 0; i < count_; i++) {
-    bool accept = false;
-    for (int j = 0; j < acceptedCount; j++) {
+    bool drop = false;
+    for (int j = 0; j < clientIdCount; j++) {
       if (clientIds[j] != nullptr &&
           strcmp(items_[i].clientId, clientIds[j]) == 0) {
-        accept = true;
+        drop = true;
         break;
       }
     }
-    if (accept) {
+    if (drop) {
       dropped++;
       continue;
     }
@@ -264,9 +264,9 @@ int SessionQueue::dropAccepted(const char* const* clientIds, int acceptedCount) 
   count_ = write;
   if (dropped > 0) {
     if (!save()) {
-      Serial.println("[SessionQueue] dropAccepted save failed");
+      Serial.println("[SessionQueue] dropByClientId save failed");
     }
-    Serial.printf("[SessionQueue] dropped %d accepted, remaining %d\n", dropped,
+    Serial.printf("[SessionQueue] dropped %d terminal row(s), remaining %d\n", dropped,
                   count_);
   }
   return dropped;
@@ -276,7 +276,7 @@ int SessionQueue::stripImplausibleStarts(long nowEpoch) {
   if (nowEpoch <= 0 || count_ == 0) return 0;
 
   // Match SessionImportPayloads on the phone so omitted starts are assigned
-  // instead of rejected forever (dropAccepted only removes accepted ids).
+  // instead of becoming terminally rejected.
   const long maxFuture = nowEpoch + 5L * 60L;
   const long minStart = nowEpoch - 14L * 24L * 60L * 60L;
 

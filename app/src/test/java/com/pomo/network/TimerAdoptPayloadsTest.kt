@@ -50,6 +50,20 @@ public class TimerAdoptPayloadsTest {
     }
 
     @Test(expected = IllegalArgumentException::class)
+    public fun parse_rejectsDurationAboveMaximum() {
+        TimerAdoptPayloads.parse(
+            """{"status":"stopped","phase":"work","remaining":0,"duration":86401,"start_time":0,"completed":0,"daily_goal":8}""",
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    public fun parse_rejectsNonFiniteDuration() {
+        TimerAdoptPayloads.parse(
+            """{"status":"stopped","phase":"work","remaining":0,"duration":1e309,"start_time":0,"completed":0,"daily_goal":8}""",
+        )
+    }
+
+    @Test(expected = IllegalArgumentException::class)
     public fun parse_rejectsZeroStartTimeWhenRunning() {
         TimerAdoptPayloads.parse(
             """{"status":"running","phase":"work","remaining":10,"duration":100,"start_time":0,"completed":0,"daily_goal":8}""",

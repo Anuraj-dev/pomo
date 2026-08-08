@@ -187,6 +187,7 @@ void PomoClient::tick() {
   // would stay ~ forever despite a live phone).
   if (state_ == CONN_CONNECTING || state_ == CONN_SYNCED) {
     webSocket.loop();
+    tickDeferredDisconnect();
   }
 
   tickProbeWatchdog();
@@ -653,40 +654,48 @@ void PomoClient::onWebSocketDisconnected() {
     return;
   }
 
-  if (state_ == CONN_SYNCED) {
+  deferredDisconnectState_ = state_;
+  deferredDisconnectPending_ = true;
+  Serial.println("[PomoClient] WS disconnect deferred to main loop");
+}
+
+void PomoClient::tickDeferredDisconnect() {
+  if (!deferredDisconnectPending_) return;
+  const ConnState disconnectedState = deferredDisconnectState_;
+  deferredDisconnectPending_ = false;
+
+  if (disconnectedState == CONN_SYNCED && state_ == CONN_SYNCED) {
     // Do not flip to OFFLINE / local timer — phone is likely still up.
     Serial.println("[PomoClient] WS drop while SYNCED → soft resync");
     softResync("ws disconnected");
     return;
   }
 
-  if (state_ == CONN_CONNECTING) {
-    // Bad token: phone closes after hello. Probe once for 401 → UNPAIRED.
-    // Do NOT REST-promote to SYNCED (that created the thrash loop).
-    Serial.println("[PomoClient] WS drop while CONNECTING — token/reachability probe");
-    String body;
-    const int code =
-        httpRequest("GET", "/api/status", nullptr, &body, kHttpTimeoutMs);
-    if (code == 401) {
-      enterUnpaired("ws drop 401");
-      return;
-    }
-    if (code == 200) {
-      // Phone is fine; WS just failed. Soft-reopen without local ownership if
-      // we already know the phone clock, else stay CONNECTING with a fresh WS.
-      if (everSynced_ && model_ != nullptr && !model_->isLocalOwner()) {
-        softResync("ws drop phone up");
-      } else if (softResyncCount_ < kSoftResyncMax) {
-        softResyncCount_++;
-        beginWebSocket("ws drop retry");
-      } else {
-        enterOffline("ws connect failed");
-      }
-      return;
-    }
-    // Transport fail — let stale timer / boot probe decide; do not thrash HTTP.
-    Serial.printf("[PomoClient] WS drop CONNECTING REST code=%d\n", code);
+  if (disconnectedState != CONN_CONNECTING || state_ != CONN_CONNECTING) return;
+  // Bad token: phone closes after hello. Probe once for 401 → UNPAIRED.
+  // Do NOT REST-promote to SYNCED (that created the thrash loop).
+  Serial.println("[PomoClient] WS drop while CONNECTING — token/reachability probe");
+  String body;
+  const int code = httpRequest("GET", "/api/status", nullptr, &body, kHttpTimeoutMs);
+  if (code == 401) {
+    enterUnpaired("ws drop 401");
+    return;
   }
+  if (code == 200) {
+    // Phone is fine; WS just failed. Soft-reopen without local ownership if
+    // we already know the phone clock, else stay CONNECTING with a fresh WS.
+    if (everSynced_ && model_ != nullptr && !model_->isLocalOwner()) {
+      softResync("ws drop phone up");
+    } else if (softResyncCount_ < kSoftResyncMax) {
+      softResyncCount_++;
+      beginWebSocket("ws drop retry");
+    } else {
+      enterOffline("ws connect failed");
+    }
+    return;
+  }
+  // Transport fail — let stale timer / boot probe decide; do not thrash HTTP.
+  Serial.printf("[PomoClient] WS drop CONNECTING REST code=%d\n", code);
 }
 
 void PomoClient::cacheServerTime(JsonObjectConst data) {
@@ -932,37 +941,56 @@ bool PomoClient::flushSessionQueue() {
     return false;
   }
 
-  // Collect accepted client_ids for drop (bounded by queue capacity).
-  const char* ids[SessionQueue::kCapacity];
-  char idStorage[SessionQueue::kCapacity][24];
-  int n = 0;
+  // Static storage avoids putting the bounded response buffers on the ESP stack.
+  // The loop is single-threaded, so this helper is not re-entrant.
+  static const char* ids[SessionQueue::kCapacity];
+  static char idStorage[SessionQueue::kCapacity][24];
+  int terminalIdCount = 0;
+  int acceptedCount = 0;
   for (JsonVariant v : accepted) {
-    if (n >= SessionQueue::kCapacity) break;
+    if (terminalIdCount >= SessionQueue::kCapacity) break;
     const char* id = v.as<const char*>();
     if (id == nullptr || id[0] == '\0') continue;
-    strncpy(idStorage[n], id, sizeof(idStorage[n]) - 1);
-    idStorage[n][sizeof(idStorage[n]) - 1] = '\0';
-    ids[n] = idStorage[n];
-    n++;
+    strncpy(idStorage[terminalIdCount], id, sizeof(idStorage[terminalIdCount]) - 1);
+    idStorage[terminalIdCount][sizeof(idStorage[terminalIdCount]) - 1] = '\0';
+    ids[terminalIdCount] = idStorage[terminalIdCount];
+    terminalIdCount++;
+    acceptedCount++;
   }
-  queue_->dropAccepted(ids, n);
 
   int rejectedCount = 0;
+  int quarantinedCount = 0;
   JsonArray rejected = resp["rejected"].as<JsonArray>();
   if (!rejected.isNull()) {
     for (JsonObject row : rejected) {
       rejectedCount++;
       Serial.printf("[PomoClient] flush row rejected id=%s err=%s\n",
                     row["client_id"] | "", row["error"] | "");
+      if (terminalIdCount < SessionQueue::kCapacity) {
+        const char* id = row["client_id"] | "";
+        if (id[0] != '\0') {
+          strncpy(idStorage[terminalIdCount], id,
+                  sizeof(idStorage[terminalIdCount]) - 1);
+          idStorage[terminalIdCount][sizeof(idStorage[terminalIdCount]) - 1] = '\0';
+          ids[terminalIdCount] = idStorage[terminalIdCount];
+          terminalIdCount++;
+          quarantinedCount++;
+        }
+      }
     }
   }
+  const int droppedCount = queue_->dropByClientId(ids, terminalIdCount);
 
-  Serial.printf("[PomoClient] flush accepted=%d rejected=%d queue_remaining=%d\n",
-                n, rejectedCount, queue_->count());
+  Serial.printf(
+      "[PomoClient] flush accepted=%d rejected=%d terminal_dropped=%d queue_remaining=%d\n",
+      acceptedCount, rejectedCount, droppedCount, queue_->count());
   if (!queue_->empty()) {
-    Serial.println(
-        "[PomoClient] flush incomplete; rejected/unaccepted rows remain queued");
+    Serial.println("[PomoClient] flush incomplete; retryable rows remain queued");
     return false;
+  }
+  if (quarantinedCount > 0) {
+    Serial.printf("[PomoClient] quarantined %d terminal rejection(s)\n",
+                  quarantinedCount);
   }
   return true;
 }

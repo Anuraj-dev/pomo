@@ -26,7 +26,7 @@
 // state frame only:
 //   (1) WS state snapshot
 //   (2) POST /api/sessions/import
-//   (3) drop accepted client_ids
+//   (3) drop accepted client_ids and quarantine terminal rejected ids
 //   (4)/(5) adopt or snap (least remaining)
 //   (6) defer GET /api/config until SYNCED is stable; refresh is non-blocking
 //       with respect to the state-machine retry cadence
@@ -51,6 +51,7 @@ class PomoClient {
   void tickWebSocket();
   void tickHeartbeat();
   void tickProbeWatchdog();
+  void tickDeferredDisconnect();
   void onWebSocketText(const char* payload, size_t length);
   void onWebSocketConnected();
   void onWebSocketDisconnected();
@@ -119,4 +120,6 @@ class PomoClient {
   // Suppress DISCONNECTED callbacks from intentional webSocket.disconnect().
   bool ignoreDisconnect_ = false;
   bool softResyncing_ = false;
+  bool deferredDisconnectPending_ = false;
+  ConnState deferredDisconnectState_ = CONN_BOOT;
 };

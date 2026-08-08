@@ -854,8 +854,10 @@ public class PomodoroService : Service(), TimerObserver {
                 }
             }
         if (result is AdoptResult.Success) {
-            updateNotification()
-            broadcastStateUpdate()
+            withContext(Dispatchers.Main) {
+                updateNotification()
+                broadcastStateUpdate()
+            }
         }
         return result
     }

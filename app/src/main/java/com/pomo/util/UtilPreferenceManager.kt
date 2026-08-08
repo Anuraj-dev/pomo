@@ -191,8 +191,14 @@ public class UtilPreferenceManager(context: Context) {
      * flush after a lost response does not double-write when start was phone-assigned.
      */
     public fun importedClientIds(): Set<String> {
+        val ordered = readOrderedImportedClientIds()
+        if (ordered != null) return ordered
         // Copy: SharedPreferences may return a mutable instance that must not be edited in place.
-        return prefs.getStringSet(IMPORTED_CLIENT_IDS_KEY, null)?.let { HashSet(it) }.orEmpty()
+        return runCatching { prefs.getStringSet(IMPORTED_CLIENT_IDS_KEY, null) }
+            .getOrNull()
+            ?.filter { it.isNotBlank() }
+            ?.toCollection(LinkedHashSet())
+            .orEmpty()
     }
 
     public fun markImportedClientIds(clientIds: Collection<String>) {
@@ -205,7 +211,22 @@ public class UtilPreferenceManager(context: Context) {
             } else {
                 merged
             }
-        prefs.edit().putStringSet(IMPORTED_CLIENT_IDS_KEY, HashSet(trimmed)).apply()
+        prefs.edit()
+            .putString(IMPORTED_CLIENT_IDS_ORDERED_KEY, gson.toJson(trimmed.toList()))
+            .remove(IMPORTED_CLIENT_IDS_KEY)
+            .apply()
+    }
+
+    private fun readOrderedImportedClientIds(): LinkedHashSet<String>? {
+        val json = runCatching { prefs.getString(IMPORTED_CLIENT_IDS_ORDERED_KEY, null) }.getOrNull()
+            ?: return null
+        return runCatching {
+            gson.fromJson(json, Array<String>::class.java)
+                ?.asSequence()
+                ?.filter { it.isNotBlank() }
+                ?.toCollection(LinkedHashSet())
+                ?: LinkedHashSet()
+        }.getOrNull()
     }
 
     public companion object {
@@ -220,6 +241,7 @@ public class UtilPreferenceManager(context: Context) {
         private const val CREW_IDENTITY_PUBLIC_KEY: String = "crew_identity_public_key"
         private const val CREW_NOSTR_PRIVATE_KEY: String = "crew_nostr_private_key"
         private const val IMPORTED_CLIENT_IDS_KEY: String = "imported_session_client_ids"
+        private const val IMPORTED_CLIENT_IDS_ORDERED_KEY: String = "imported_session_client_ids_ordered"
         private const val MAX_IMPORTED_CLIENT_IDS: Int = 128
 
         private fun generateToken(): String {

@@ -7,6 +7,7 @@
 namespace {
 
 const char* kPath = "/pomo_config.json";
+const char* kTmpPath = "/pomo_config.tmp";
 const char* kTimerPath = "/pomo_timer.json";
 const char* kTimerTmpPath = "/pomo_timer.tmp";
 bool gFsMounted = false;
@@ -148,18 +149,7 @@ bool ConfigStore::save() const {
     doc["epoch"] = estimateEpochNow();
   }
 
-  File f = LittleFS.open(kPath, "w");
-  if (!f) {
-    Serial.println("[ConfigStore] write open failed");
-    return false;
-  }
-  const size_t n = serializeJson(doc, f);
-  f.close();
-  if (n == 0) {
-    Serial.println("[ConfigStore] write empty");
-    return false;
-  }
-  return true;
+  return writeFileAtomic(kPath, kTmpPath, doc);
 }
 
 void ConfigStore::setDurations(int workMinutes, int shortMinutes, int longMinutes,

@@ -15,6 +15,9 @@ import com.pomo.timer.TimerState
 public object TimerAdoptPayloads {
     private val gson = Gson()
 
+    /** Keep untrusted timer payloads finite and bounded to one day. */
+    public const val MAX_DURATION_SECONDS: Double = 24.0 * 60.0 * 60.0
+
     public data class Payload(
         val status: String,
         val phase: String,
@@ -56,12 +59,12 @@ public object TimerAdoptPayloads {
         }
 
         val duration = wire.duration ?: throw IllegalArgumentException("duration required")
-        if (duration <= 0.0) {
+        if (!duration.isFinite() || duration <= 0.0 || duration > MAX_DURATION_SECONDS) {
             throw IllegalArgumentException("duration must be > 0")
         }
 
         val remaining = wire.remaining ?: throw IllegalArgumentException("remaining required")
-        if (remaining < 0.0) {
+        if (!remaining.isFinite() || remaining < 0.0 || remaining > MAX_DURATION_SECONDS) {
             throw IllegalArgumentException("remaining must be >= 0")
         }
         if (remaining > duration) {
@@ -69,7 +72,7 @@ public object TimerAdoptPayloads {
         }
 
         val startTime = wire.start_time ?: 0.0
-        if (startTime < 0.0) {
+        if (!startTime.isFinite() || startTime < 0.0) {
             throw IllegalArgumentException("start_time must be >= 0")
         }
         // Live timers need a positive start_time so same-session identity works

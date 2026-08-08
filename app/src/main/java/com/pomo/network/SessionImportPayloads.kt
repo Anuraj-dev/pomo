@@ -74,7 +74,6 @@ public object SessionImportPayloads {
 
         val rejected = mutableListOf<Rejected>()
         val valid = mutableListOf<ValidRow>()
-        val seenClientIdsInRequest = mutableSetOf<String>()
 
         for (item in wire.sessions.orEmpty()) {
             val clientId = item.client_id?.trim().orEmpty()
@@ -105,13 +104,6 @@ public object SessionImportPayloads {
                 rejected += Rejected(clientId = clientId, error = "start out of range")
                 continue
             }
-
-            // Duplicate client_id in the same request: first valid wins; later copies are
-            // still listed as accepted/alreadyPresent so the desk can drop them.
-            if (clientId in seenClientIdsInRequest) {
-                continue
-            }
-            seenClientIdsInRequest += clientId
 
             val tag = item.tag?.trim()?.takeIf { it.isNotEmpty() }
             valid +=

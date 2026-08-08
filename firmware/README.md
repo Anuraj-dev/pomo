@@ -117,10 +117,11 @@ While the reconnect marker (`.`) is shown, the desk:
 1. Accepts the first proof of a healthy phone from a WebSocket `state` frame.
    REST probes while `CONNECTING` only check reachability/token; they never
    promote the desk to SYNCED. HTTP 401 becomes UNPAIRED (`?`).
-2. Flushes the offline queue with `POST /api/sessions/import` and drops only
-   accepted `client_id`s. Rejected, unaccepted, transport-failed, or malformed
-   imports stay queued and keep the desk in `CONNECTING`; the same pipeline is
-   retried every 5 s. Implausible `start` values are stripped before flush so
+2. Flushes the offline queue with `POST /api/sessions/import`, dropping accepted
+   `client_id`s and quarantining rejected IDs with serial diagnostics.
+   Unaccepted, transport-failed, or malformed imports stay queued and keep the
+   desk in `CONNECTING`; the same pipeline is retried every 5 s. Implausible
+   `start` values are stripped before flush so
    the phone can assign wall time.
 3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
    under the **least-remaining** rule: always when the phone is stopped; when

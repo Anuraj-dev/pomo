@@ -114,6 +114,27 @@ public class SessionImportPayloadsTest {
     }
 
     @Test
+    public fun parseAndValidate_duplicateClientIdInRequestIsTerminalAccept() {
+        val result =
+            SessionImportPayloads.parseAndValidate(
+                """
+                {
+                  "sessions": [
+                    {"client_id":"dup","type":"work","duration":600,"completed":true},
+                    {"client_id":"dup","type":"work","duration":300,"completed":true}
+                  ]
+                }
+                """.trimIndent(),
+                nowSeconds = now,
+            )
+
+        assertEquals(2, result.accepted.size)
+        assertFalse(result.accepted[0].alreadyPresent)
+        assertTrue(result.accepted[1].alreadyPresent)
+        assertEquals(0, result.rejected.size)
+    }
+
+    @Test
     public fun parseAndValidate_rejectsStartsOutsidePlausibleWindow() {
         val tooOld = now - SessionImportPayloads.MAX_START_AGE_SECONDS - 10
         val tooFuture = now + SessionImportPayloads.MAX_START_FUTURE_SKEW_SECONDS + 10

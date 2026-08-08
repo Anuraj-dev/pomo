@@ -38,10 +38,9 @@ class SessionQueue {
   bool enqueue(const char* clientId, const char* type, int durationSec,
                long startEpoch, const char* tag);
 
-  // Remove every session whose client_id appears in the null-terminated list
-  // of accepted ids (array of C strings, count = acceptedCount).
-  // Returns how many local rows were dropped.
-  int dropAccepted(const char* const* clientIds, int acceptedCount);
+  // Remove every session whose client_id appears in the list of terminal ids
+  // (accepted or quarantined response ids). Returns how many rows were dropped.
+  int dropByClientId(const char* const* clientIds, int clientIdCount);
 
   // Drop hasStart on rows whose start is outside the phone import window
   // (not older than 14 days, not more than 5 minutes ahead of nowEpoch).

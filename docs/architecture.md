@@ -186,9 +186,10 @@ The NodeMCU desk device (`firmware/PomoLink/`) is a **hybrid** client:
   known-host REST reachability probe every ~5 s. Enter-SYNC starts from the
   first healthy WebSocket `state` frame; `GET /api/status` while CONNECTING is
   only a reachability/token check and never promotes the desk to SYNCED. It
-  then posts `POST /api/sessions/import`, dropping only accepted client IDs.
-  Rejected, unaccepted, or failed imports remain queued and retry on the same
-  fixed interval; the desk stays CONNECTING until the queue is empty. It then
+  then posts `POST /api/sessions/import`, dropping accepted client IDs and
+  quarantining rejected IDs with serial diagnostics. Unaccepted or failed
+  responses remain queued and retry on the same fixed interval; the desk stays
+  CONNECTING until the queue is empty. It then
   optionally calls `POST /api/timer/adopt` under least-remaining (phone stopped
   always; same session always; both live only when desk remaining is strictly
   less). Live adopt requires `start_time > 0`. HTTP 409 `timer_busy` means the

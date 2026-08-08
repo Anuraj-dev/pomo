@@ -292,6 +292,14 @@ Response:
 }
 ```
 
+The response is terminal for each row that appears in `accepted` or
+`rejected`: the desk drops accepted rows and quarantines rejected rows after
+logging their `client_id` and error. A successful HTTP response with a valid
+`accepted` array therefore allows synchronization to continue even when a row
+is invalid. Transport failures, non-200 responses, malformed responses, or a
+missing `accepted` array are retryable and leave the corresponding queue rows
+queued.
+
 After a successful import the phone refreshes today's completed count and
 broadcasts timer state (WebSocket + local UI).
 
@@ -486,8 +494,9 @@ across reboot, and queue completed sessions (LittleFS temp+rename; real phase
    reachability/token and never promote the desk to SYNCED. Marker stays `.`
    until the pipeline finishes.
 2. Flushes completed offline sessions with `POST /api/sessions/import` (append-only;
-   only accepted client IDs are dropped; rejected, unaccepted, or failed rows
-   remain queued and retry on the fixed ~5-second interval).
+   accepted client IDs are dropped and rejected IDs are quarantined with serial
+   diagnostics; unaccepted or failed responses remain queued and retry on the
+   fixed ~5-second interval).
 3. If the desk still has a running/paused timer, may call `POST /api/timer/adopt`
    when the phone is stopped, or when both are live and desk remaining is
    strictly less than phone remaining (least-remaining). Same session is always
