@@ -175,40 +175,47 @@ export interface PomoResponse {
   settings?: PomoSettings;
   crews?: CrewSummary[];
   activeCrewId?: string | null;
+  /** Explicit id of the crew that was just joined/created. */
+  crewId?: string;
   board?: CrewBoardResult;
   joinCode?: string;
   hiddenMembers?: string[];
   recovery?: string;
   backup?: string;
   restoreSummary?: { sessionsAdded: number; daysAffected: number; membershipsAdded: number; identityRestored: boolean };
+  backupImport?: { sessionsAdded: number; daysAffected: number; conflicts: number };
   needsIdentityConfirmation?: boolean;
   stats?: SurfaceStats;
   history?: HistoryPayload;
 }
 
-const POMO_REQUEST_TYPES = new Set<string>([
-  "pomo:command",
-  "pomo:query",
-  "pomo:stats",
-  "pomo:history",
-  "pomo:settings:get",
-  "pomo:settings:set",
-  "pomo:crew:list",
-  "pomo:crew:select",
-  "pomo:crew:board",
-  "pomo:crew:join",
-  "pomo:crew:create",
-  "pomo:crew:leave",
-  "pomo:crew:hide",
-  "pomo:crew:hidden",
-  "pomo:crew:refresh",
-  "pomo:crew:joinCode",
-  "pomo:crew:rename",
-  "pomo:recovery:export",
-  "pomo:recovery:import",
-  "pomo:backup:export",
-  "pomo:backup:import",
-]);
+// Complete registry of request types. `satisfies` fails to compile if a new
+// member is added to the PomoRequest union without being registered here.
+const REQUEST_TYPE_REGISTRY = {
+  "pomo:command": 0,
+  "pomo:query": 0,
+  "pomo:stats": 0,
+  "pomo:history": 0,
+  "pomo:settings:get": 0,
+  "pomo:settings:set": 0,
+  "pomo:crew:list": 0,
+  "pomo:crew:select": 0,
+  "pomo:crew:board": 0,
+  "pomo:crew:join": 0,
+  "pomo:crew:create": 0,
+  "pomo:crew:leave": 0,
+  "pomo:crew:hide": 0,
+  "pomo:crew:hidden": 0,
+  "pomo:crew:refresh": 0,
+  "pomo:crew:joinCode": 0,
+  "pomo:crew:rename": 0,
+  "pomo:recovery:export": 0,
+  "pomo:recovery:import": 0,
+  "pomo:backup:export": 0,
+  "pomo:backup:import": 0,
+} satisfies { [K in PomoRequest["type"]]: 0 };
+
+const POMO_REQUEST_TYPES = new Set<string>(Object.keys(REQUEST_TYPE_REGISTRY));
 
 export function isPomoRequest(value: unknown): value is PomoRequest {
   if (typeof value !== "object" || value === null) return false;
@@ -216,39 +223,65 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
   const type = record.type;
   if (typeof type !== "string" || !POMO_REQUEST_TYPES.has(type)) return false;
   const stringField = (name: string): boolean => typeof record[name] === "string";
+  // Reject empty/whitespace-only strings for user-supplied fields.
+  const nonEmptyStringField = (name: string): boolean => typeof record[name] === "string" && record[name].trim().length > 0;
   const windowField = (name: string): boolean =>
     record[name] === undefined || record[name] === "today" || record[name] === "7d" || record[name] === "30d" || record[name] === "all";
+  const hexField = (name: string, length: number): boolean =>
+    typeof record[name] === "string" && new RegExp(`^[0-9a-f]{${length}}$`).test(record[name]);
   switch (type) {
     case "pomo:command":
-      return (record.command === "toggle" || record.command === "skip" || record.command === "reset" || record.command === "extend") &&
-        (record.seconds === undefined || (typeof record.seconds === "number" && Number.isFinite(record.seconds)));
-    case "pomo:settings:set":
-      return typeof record.settings === "object" && record.settings !== null && !Array.isArray(record.settings);
+      if (record.command === "extend") {
+        // Seconds must be a positive whole number of seconds.
+        return typeof record.seconds === "number" && Number.isInteger(record.seconds) && record.seconds > 0;
+      }
+      return (
+        (record.command === "toggle" || record.command === "skip" || record.command === "reset") &&
+        record.seconds === undefined
+      );
+    case "pomo:settings:set": {
+      if (typeof record.settings !== "object" || record.settings === null || Array.isArray(record.settings)) return false;
+      const settingsRecord = record.settings as Record<string, unknown>;
+      for (const [name, rule] of Object.entries({
+        workMinutes: (v: unknown) => typeof v === "number" && Number.isFinite(v),
+        shortMinutes: (v: unknown) => typeof v === "number" && Number.isFinite(v),
+        longMinutes: (v: unknown) => typeof v === "number" && Number.isFinite(v),
+        longBreakAfter: (v: unknown) => typeof v === "number" && Number.isFinite(v),
+        dailyGoal: (v: unknown) => typeof v === "number" && Number.isFinite(v),
+        theme: (v: unknown) => v === "system" || v === "light" || v === "dark",
+        newtabInstrument: (v: unknown) => typeof v === "boolean",
+        soundEnabled: (v: unknown) => typeof v === "boolean",
+        tag: (v: unknown) => typeof v === "string",
+      })) {
+        if (settingsRecord[name] !== undefined && !rule(settingsRecord[name])) return false;
+      }
+      return true;
+    }
     case "pomo:crew:board":
-      return stringField("crewId") && windowField("window") && record.window !== undefined;
+      return hexField("crewId", 32) && windowField("window") && record.window !== undefined;
     case "pomo:crew:join":
-      return stringField("payload") && stringField("displayName");
+      return nonEmptyStringField("payload") && nonEmptyStringField("displayName");
     case "pomo:crew:create":
-      return stringField("crewName") && stringField("displayName");
+      return nonEmptyStringField("crewName") && nonEmptyStringField("displayName");
     case "pomo:crew:select":
-      return stringField("crewId");
+      return hexField("crewId", 32);
     case "pomo:crew:leave":
     case "pomo:crew:joinCode":
-      return stringField("crewId");
+      return hexField("crewId", 32);
     case "pomo:crew:hide":
-      return stringField("crewId") && stringField("identityPublicKey") && typeof record.hidden === "boolean";
+      return hexField("crewId", 32) && hexField("identityPublicKey", 64) && typeof record.hidden === "boolean";
     case "pomo:crew:hidden":
-      return stringField("crewId");
+      return hexField("crewId", 32);
     case "pomo:crew:refresh":
-      return stringField("crewId") && windowField("window");
+      return hexField("crewId", 32) && windowField("window");
     case "pomo:crew:rename":
-      return stringField("crewId") && stringField("displayName");
+      return hexField("crewId", 32) && nonEmptyStringField("displayName");
     case "pomo:recovery:export":
-      return stringField("passphrase");
+      return nonEmptyStringField("passphrase");
     case "pomo:recovery:import":
-      return stringField("payload") && stringField("passphrase");
+      return nonEmptyStringField("payload") && nonEmptyStringField("passphrase");
     case "pomo:backup:import":
-      return stringField("payload") && (record.confirmIdentityReplacement === undefined || typeof record.confirmIdentityReplacement === "boolean");
+      return nonEmptyStringField("payload") && (record.confirmIdentityReplacement === undefined || typeof record.confirmIdentityReplacement === "boolean");
     default:
       return true;
   }

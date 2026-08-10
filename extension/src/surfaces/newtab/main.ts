@@ -2,6 +2,13 @@ import type { DayStatRow, SessionRow } from "../../db/types";
 import { lastNDays } from "../../engine/stats";
 import { dateStringOf, utcOffsetMinutesAt } from "../../engine/dateLogic";
 import type { PomoSettings } from "../../engine/settings";
+import {
+  MAX_DAILY_GOAL,
+  MAX_LONG_BREAK_AFTER,
+  MAX_LONG_MINUTES,
+  MAX_SHORT_MINUTES,
+  MAX_WORK_MINUTES,
+} from "../../engine/settings";
 import type { TimerSnapshot } from "../../engine/timer";
 import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
@@ -64,6 +71,8 @@ const settingNewtabEl = document.getElementById("settingNewtab") as HTMLInputEle
 let activeTab: TabKey = "instrument";
 let latest: TimerSnapshot | null = null;
 let previousStatus: TimerSnapshot["status"] | null = null;
+let userNavigated = false;
+let tabLoadSeq = 0;
 
 buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 
@@ -73,6 +82,7 @@ function tabButtons(): HTMLElement[] {
 
 function setActiveTab(key: TabKey, updateUrl = true): void {
   activeTab = key;
+  userNavigated = true;
   if (updateUrl) history.replaceState(null, "", `#${key}`);
   for (const tab of tabButtons()) {
     const active = tab.dataset["tab"] === key;
@@ -82,10 +92,16 @@ function setActiveTab(key: TabKey, updateUrl = true): void {
   for (const [name, el] of Object.entries(pages)) {
     el.hidden = name !== key;
   }
-  if (key === "history") void loadHistory();
-  if (key === "stats") void loadStats();
-  if (key === "settings") void loadSettingsPage();
+  const seq = ++tabLoadSeq;
+  if (key === "history") void loadHistory(seq);
+  if (key === "stats") void loadStats(seq);
+  if (key === "settings") void loadSettingsPage(seq);
 }
+
+window.addEventListener("hashchange", () => {
+  const hash = location.hash.slice(1);
+  if (Object.hasOwn(pages, hash)) setActiveTab(hash as TabKey, false);
+});
 
 tabsEl.addEventListener("click", (event) => {
   const target = event.target as HTMLElement;
@@ -110,7 +126,18 @@ document.addEventListener("keydown", (event) => {
   const target = event.target as HTMLElement | null;
   if (target !== null && target !== document.body) {
     const tag = target.tagName;
-    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable) return;
+    // Exclude interactive elements (including buttons, which otherwise get a
+    // click AND a toggle from the same spacebar press).
+    if (
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      tag === "BUTTON" ||
+      tag === "A" ||
+      target.isContentEditable
+    ) {
+      return;
+    }
   }
   event.preventDefault();
   sendCommand("toggle");
@@ -118,6 +145,12 @@ document.addEventListener("keydown", (event) => {
 
 settingsFormEl.addEventListener("submit", (event) => {
   event.preventDefault();
+  const invalid = validateSettingsForm();
+  if (invalid !== null) {
+    settingsStatusEl.textContent = invalid;
+    settingsStatusEl.dataset["kind"] = "error";
+    return;
+  }
   const settings: Partial<PomoSettings> = {
     workMinutes: Number(settingWorkEl.value),
     shortMinutes: Number(settingShortEl.value),
@@ -132,6 +165,29 @@ settingsFormEl.addEventListener("submit", (event) => {
   settingsStatusEl.textContent = "Saving…";
   void saveSettings(settings);
 });
+
+/** Client-side mirrors of the sanitizer's bounds; prevents sending junk that
+ * the SW would silently clamp. Returns an error message or null. */
+function validateSettingsForm(): string | null {
+  const fields: Array<[HTMLInputElement, number, number, string]> = [
+    [settingWorkEl, 1, MAX_WORK_MINUTES, "Work duration"],
+    [settingShortEl, 1, MAX_SHORT_MINUTES, "Short break"],
+    [settingLongEl, 1, MAX_LONG_MINUTES, "Long break"],
+    [settingAfterEl, 1, MAX_LONG_BREAK_AFTER, "Long break cadence"],
+    [settingGoalEl, 0, MAX_DAILY_GOAL, "Daily goal"],
+  ];
+  for (const [el, min, max, label] of fields) {
+    const raw = el.value.trim();
+    if (raw.length === 0) {
+      return `${label} must be between ${min} and ${max}.`;
+    }
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max) {
+      return `${label} must be between ${min} and ${max}.`;
+    }
+  }
+  return null;
+}
 
 async function saveSettings(settings: Partial<PomoSettings>): Promise<void> {
   try {
@@ -157,17 +213,22 @@ async function fetchHistory(): Promise<HistoryPayload | null> {
   return null;
 }
 
-async function loadHistory(): Promise<void> {
-  renderHistory(await fetchHistory());
+async function loadHistory(seq: number): Promise<void> {
+  const payload = await fetchHistory();
+  if (seq !== tabLoadSeq) return;
+  renderHistory(payload);
 }
 
-async function loadStats(): Promise<void> {
-  void renderStats(await fetchHistory());
+async function loadStats(seq: number): Promise<void> {
+  const payload = await fetchHistory();
+  if (seq !== tabLoadSeq) return;
+  void renderStats(payload);
 }
 
-async function loadSettingsPage(): Promise<void> {
+async function loadSettingsPage(seq: number): Promise<void> {
   try {
     const response = await request({ type: "pomo:settings:get" });
+    if (seq !== tabLoadSeq) return;
     if (!response.ok || response.settings === undefined) {
       settingsStatusEl.textContent = response.error ?? "Could not load settings";
       settingsStatusEl.dataset["kind"] = "error";
@@ -175,6 +236,7 @@ async function loadSettingsPage(): Promise<void> {
     }
     populateSettings(response.settings);
   } catch {
+    if (seq !== tabLoadSeq) return;
     settingsStatusEl.textContent = "Could not load settings";
     settingsStatusEl.dataset["kind"] = "error";
   }
@@ -236,15 +298,18 @@ function renderHistory(payload: HistoryPayload | null): void {
     return;
   }
   const dayStatByDate = new Map(payload.dayStats.map((day) => [day.date, day]));
-  let currentDate: string | null = null;
-  let group: HTMLElement | null = null;
+  // Group regardless of input order, emitting groups in date-descending order.
+  const byDate = new Map<string, SessionRow[]>();
   for (const session of payload.sessions) {
-    if (session.date !== currentDate) {
-      currentDate = session.date;
-      group = dayGroup(session.date, dayStatByDate.get(session.date));
-      dayGroupsEl.appendChild(group);
-    }
-    group!.appendChild(sessionRow(session));
+    const list = byDate.get(session.date);
+    if (list === undefined) byDate.set(session.date, [session]);
+    else list.push(session);
+  }
+  const dates = [...byDate.keys()].sort((a, b) => b.localeCompare(a));
+  for (const date of dates) {
+    const group = dayGroup(date, dayStatByDate.get(date));
+    for (const session of byDate.get(date)!) group.appendChild(sessionRow(session));
+    dayGroupsEl.appendChild(group);
   }
 }
 
@@ -371,7 +436,9 @@ async function chooseInitialTab(): Promise<void> {
     return;
   }
   const response = await request({ type: "pomo:settings:get" });
-  if (response.ok && response.settings?.newtabInstrument === false) {
+  // The user may have clicked a tab while this resolved; never override their
+  // explicit navigation.
+  if (!userNavigated && response.ok && response.settings?.newtabInstrument === false) {
     // chrome_url_overrides is manifest-scoped, so fall back to a non-instrument view.
     setActiveTab("history");
   }
@@ -385,8 +452,8 @@ subscribeState((state) => {
   applyInstrument(document.body, phaseEl, statusEl, state, { timeEl, fractionEl });
   void refreshStats(todayCountEl, totalMinutesEl, streakEl);
   if (completedOrStopped) {
-    if (activeTab === "history") void loadHistory();
-    if (activeTab === "stats") void loadStats();
+    if (activeTab === "history") void loadHistory(tabLoadSeq);
+    if (activeTab === "stats") void loadStats(tabLoadSeq);
   }
 });
 

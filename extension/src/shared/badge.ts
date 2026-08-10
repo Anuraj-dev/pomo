@@ -13,7 +13,7 @@ const M_SS_THRESHOLD_MS = 10 * MINUTE_MS;
 const MAX_MINUTES = 999;
 
 export function badgeTextOf(remainingMs: number): string {
-  if (remainingMs <= 0) return "0:00";
+  if (!Number.isFinite(remainingMs) || remainingMs <= 0) return "0:00";
   if (remainingMs >= M_SS_THRESHOLD_MS) {
     return `${Math.min(MAX_MINUTES, Math.floor(remainingMs / MINUTE_MS))}m`;
   }

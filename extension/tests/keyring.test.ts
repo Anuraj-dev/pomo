@@ -11,6 +11,7 @@ import {
   unwrapIdentityKey,
   wrapIdentityKey,
 } from "../src/crew/keyring";
+import { canonicalRelayUrl } from "../src/crew/joinCode";
 import { base64UrlToBytes, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../src/shared/bytes";
 
 const PRIVATE_KEY = "0".repeat(63) + "1";
@@ -61,7 +62,7 @@ describe("recovery codec", () => {
       crewId: memberships[0]!.crewId,
       crewName: memberships[0]!.crewName,
       joinCode: expect.stringMatching(/^pomo-crew\.v2\./),
-      relays: memberships[0]!.relays,
+      relays: memberships[0]!.relays.map((relay) => canonicalRelayUrl(relay)),
       key: memberships[0]!.key,
       displayName: memberships[0]!.crewName,
       protocolVersion: 2,

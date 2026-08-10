@@ -10,7 +10,7 @@ import { SNAPSHOT_EVENT_KIND } from "./types";
 import type { CrewMembership, DailyAggregate, SnapshotPlain } from "./types";
 
 export interface CrewStore {
-  upsertLatest(snapshot: CrewSnapshotRowLike, daily: CrewDailyRowLike[]): Promise<boolean>;
+  upsertLatest(snapshot: CrewSnapshotRowLike, daily: CrewDailyRowLike[], now?: number): Promise<boolean>;
   updateRelayState(
     crewId: string,
     relayUrl: string,
@@ -21,6 +21,7 @@ export interface CrewStore {
   snapshotsForCrew(crewId: string): Promise<CrewSnapshotRowLike[]>;
   hiddenKeys(crewId: string): Promise<string[]>;
   dailyFor(crewId: string, identityPublicKey: string): Promise<CrewDailyRowLike[]>;
+  dailyForCrew(crewId: string): Promise<CrewDailyRowLike[]>;
   relayStates(crewId: string): Promise<CrewRelayStateRow[]>;
 }
 
@@ -131,8 +132,20 @@ export async function refreshMembership(
   );
 
   let accepted = 0;
+  const verifiedIds = new Set<string>();
   for (const event of events) {
-    if (!(await verifyEvent(event, { crewId: membership.crewId, now }))) continue;
+    // Dedup only after verification: ids are content-addressed (SHA-256), but
+    // gating on an unverified id first would let a malformed frame suppress a
+    // legitimate event sharing that id.
+    if (verifiedIds.has(event.id)) continue;
+    let verified = false;
+    try {
+      verified = await verifyEvent(event, { crewId: membership.crewId, now });
+    } catch (error) {
+      console.error(`snapshot event verification threw for ${membership.crewId}`, error);
+    }
+    if (!verified) continue;
+    verifiedIds.add(event.id);
     let snapshot: SnapshotPlain;
     try {
       snapshot = await decryptEnvelope(event.content, membership.key);
@@ -143,7 +156,7 @@ export async function refreshMembership(
     if (snapshot.publishedAtEpochSeconds > now + MAX_CREATED_AT_SKEW_SECONDS) continue;
     if (snapshot.publishedAtEpochSeconds > event.created_at + MAX_CREATED_AT_SKEW_SECONDS) continue;
     const daily = dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates);
-    if (await dao.upsertLatest(snapshotToRow(snapshot), daily)) {
+    if (await dao.upsertLatest(snapshotToRow(snapshot), daily, now)) {
       accepted++;
     }
   }
@@ -184,6 +197,7 @@ export async function publishOwnSnapshot(
   await dao.upsertLatest(
     snapshotToRow(snapshot),
     dailyRowsFor(membership.crewId, snapshot.identityPublicKey, snapshot.dailyAggregates),
+    now,
   );
   const event = await signEvent(
     {
@@ -211,9 +225,15 @@ export async function loadCrewBoard(
 ): Promise<{ board: Board; relayStates: CrewRelayStateRow[]; memberCount: number }> {
   const rows = await dao.snapshotsForCrew(crewId);
   const hiddenKeys = new Set(await dao.hiddenKeys(crewId));
+  const dailyByMember = new Map<string, CrewDailyRowLike[]>();
+  for (const row of await dao.dailyForCrew(crewId)) {
+    const list = dailyByMember.get(row.identityPublicKey);
+    if (list === undefined) dailyByMember.set(row.identityPublicKey, [row]);
+    else list.push(row);
+  }
   const snapshots: SnapshotPlain[] = [];
   for (const row of rows) {
-    const daily = await dao.dailyFor(crewId, row.identityPublicKey);
+    const daily = dailyByMember.get(row.identityPublicKey) ?? [];
     snapshots.push({
       ...rowToSnapshot(row),
       dailyAggregates: daily.map((d) => ({
@@ -225,5 +245,7 @@ export async function loadCrewBoard(
   }
   const board = aggregateBoard(snapshots, { window, now, hiddenKeys });
   const relayStates = await dao.relayStates(crewId);
-  return { board, relayStates, memberCount: snapshots.length };
+  // memberCount reflects what the board shows: hidden members are filtered out.
+  const visibleCount = rows.filter((row) => !hiddenKeys.has(row.identityPublicKey)).length;
+  return { board, relayStates, memberCount: visibleCount };
 }

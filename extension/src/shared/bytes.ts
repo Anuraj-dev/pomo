@@ -1,3 +1,5 @@
+const fatalDecoder = new TextDecoder("utf-8", { fatal: true });
+
 export function bytesToBase64Url(bytes: Uint8Array): string {
   let bin = "";
   for (const b of bytes) bin += String.fromCharCode(b);
@@ -5,7 +7,7 @@ export function bytesToBase64Url(bytes: Uint8Array): string {
 }
 
 export function base64UrlToBytes(s: string): Uint8Array {
-  if (!/^[A-Za-z0-9_-]+$/.test(s)) throw new Error("invalid base64url: unexpected character");
+  if (!/^[A-Za-z0-9_-]*$/.test(s)) throw new Error("invalid base64url: unexpected character");
   const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
   const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
   const bin = atob(padded);
@@ -18,8 +20,10 @@ export function utf8ToBytes(s: string): Uint8Array {
   return new TextEncoder().encode(s);
 }
 
+/** Fatal decode: malformed UTF-8 in serialized/crypto payloads must throw
+ * rather than silently substitute U+FFFD. */
 export function bytesToUtf8(b: Uint8Array): string {
-  return new TextDecoder().decode(b);
+  return fatalDecoder.decode(b);
 }
 
 export function bufferOf(bytes: Uint8Array): ArrayBuffer {

@@ -1,8 +1,8 @@
 import { CrewDao, HistoryDao } from "../db/dao";
 import { openDb } from "../db/schema";
 import type { SessionRow } from "../db/types";
-import { deltasForBlock, splitBlockByCalendarDay } from "../engine/blocks";
-import { dateStringOf, utcOffsetMinutesAt } from "../engine/dateLogic";
+import { deltaForSegment, splitBlockByCalendarDay } from "../engine/blocks";
+import { dateStringOf, prevDate, utcOffsetMinutesAt } from "../engine/dateLogic";
 import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine/settings";
 import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
@@ -44,13 +44,14 @@ const ALARM_PERIOD_MINUTES = 0.5;
 const PHASE_COMPLETE_NOTIFICATION = "pomo-phase-complete";
 const CREW_PUBLISH_MIN_INTERVAL = 24 * 60 * 60;
 
-let db: IDBDatabase;
-let dao: HistoryDao;
-let crewDao: CrewDao;
+let db: IDBDatabase | null = null;
+let dao: HistoryDao | null = null;
+let crewDao: CrewDao | null = null;
 let settings: PomoSettings = { ...DEFAULT_SETTINGS };
 let engine: TimerEngine;
 let earnedByDate = new Map<string, number>();
 let pendingWrite = Promise.resolve();
+let syncPromise: Promise<void> = Promise.resolve();
 let initPromise: Promise<void> | null = null;
 let identityPrivateKey: string | null = null;
 let identityRecoveryRequired = false;
@@ -73,8 +74,8 @@ function nowSeconds(): number {
   return Math.floor(Date.now() / 1000);
 }
 
-function timezoneOffsetMinutes(): number {
-  return utcOffsetMinutesAt(nowSeconds());
+function timezoneOffsetMinutes(now: number = nowSeconds()): number {
+  return utcOffsetMinutesAt(now);
 }
 
 function earnedBlocksForDate(date: string): number {
@@ -83,7 +84,6 @@ function earnedBlocksForDate(date: string): number {
 
 function commit(block: CompletedBlock): void {
   const offset = utcOffsetMinutesAt;
-  const deltasByDate = new Map(deltasForBlock(block, offset).map((delta) => [delta.date, delta]));
   const segments = splitBlockByCalendarDay({
     start: block.start,
     duration: block.duration,
@@ -92,23 +92,34 @@ function commit(block: CompletedBlock): void {
     tag: block.tag,
     offsetMinutes: offset,
   });
-  for (const segment of segments) {
-    const row: SessionRow = {
-      start: segment.start,
-      date: segment.date,
-      type: segment.type,
-      duration: segment.duration,
-      completed: segment.completed,
-      tag: segment.tag,
-    };
-    const delta = deltasByDate.get(segment.date)!;
-    earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + delta.earnedBlocks);
-    pendingWrite = pendingWrite
-      .catch((error: unknown) => {
-        console.error("session commit failed", error);
-      })
-      .then(() => dao.insertSessionWithDayStats(row, delta));
-  }
+  pendingWrite = pendingWrite
+    .catch((error: unknown) => {
+      console.error("session commit failed", error);
+    })
+    .then(async () => {
+      const insertedStarts = await dao!.insertBlock(
+        segments.map((segment) => {
+          const delta = deltaForSegment(segment, block.completed);
+          return {
+            row: {
+              start: segment.start,
+              date: segment.date,
+              type: segment.type,
+              duration: segment.duration,
+              completed: segment.completed,
+              tag: segment.tag,
+            } satisfies SessionRow,
+            delta,
+          };
+        }),
+      );
+      const inserted = new Set(insertedStarts);
+      for (const segment of segments) {
+        if (segment.type === "work" && segment.completed && inserted.has(segment.start)) {
+          earnedByDate.set(segment.date, earnedBlocksForDate(segment.date) + 1);
+        }
+      }
+    });
   if (block.completed) notifyPhaseComplete(block.type);
   if (block.type === "work") {
     void pendingWrite.then(() => publishCrews(true)).catch((error: unknown) => {
@@ -129,13 +140,17 @@ async function syncAfterWrites(): Promise<void> {
 function notifyPhaseComplete(phase: Phase): void {
   if (!settings.soundEnabled) return;
   const isWork = phase === "work";
-  chrome.notifications.create(PHASE_COMPLETE_NOTIFICATION, {
-    type: "basic",
-    iconUrl: "icons/icon128.png",
-    title: isWork ? "Focus session complete" : "Break over",
-    message: isWork ? "Great work. Time for a break." : "Ready for the next focus session?",
-    priority: 0,
-  });
+  chrome.notifications
+    .create(PHASE_COMPLETE_NOTIFICATION, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: isWork ? "Focus session complete" : "Break over",
+      message: isWork ? "Great work. Time for a break." : "Ready for the next focus session?",
+      priority: 0,
+    })
+    .catch((error: unknown) => {
+      console.error("phase-complete notification failed", error);
+    });
 }
 
 function enginePorts(): ConstructorParameters<typeof TimerEngine>[0] {
@@ -162,11 +177,29 @@ function applyBadge(state: TimerSnapshot): void {
   chrome.action.setBadgeBackgroundColor({ color: badgeColorOf(state.phase) });
 }
 
-async function sync(): Promise<void> {
-  const state = engine.snapshot();
-  await chrome.storage.local.set({ [ENGINE_KEY]: state });
-  await chrome.storage.session.set({ [STATE_KEY]: state });
-  applyBadge(state);
+/** Serialized state sync: snapshots are persisted in call order so an older
+ * write can never overwrite a newer one. A tick runs first so an expired
+ * running session is never persisted as still running (tick is idempotent).
+ * The badge is applied from the same snapshot that was persisted. */
+function sync(): Promise<void> {
+  const operation = syncPromise.then(async () => {
+    engine.tick();
+    const state = engine.snapshot();
+    await chrome.storage.local.set({ [ENGINE_KEY]: state });
+    await chrome.storage.session.set({ [STATE_KEY]: state });
+    applyBadge(state);
+  });
+  syncPromise = operation.catch(() => undefined);
+  return operation;
+}
+
+/** Awaits queued history writes so database-backed reads see durable state. */
+async function awaitHistoryWrites(): Promise<void> {
+  try {
+    await pendingWrite;
+  } catch (error) {
+    console.error("history write failed; continuing with possibly stale data", error);
+  }
 }
 
 async function ensureAlarm(): Promise<void> {
@@ -182,10 +215,14 @@ async function loadSettings(): Promise<void> {
 }
 
 async function loadEarnedCount(extraDate?: string): Promise<void> {
-  const today = dateStringOf(nowSeconds(), timezoneOffsetMinutes());
-  const dates = new Set([today]);
+  const now = nowSeconds();
+  const offset = timezoneOffsetMinutes(now);
+  const today = dateStringOf(now, offset);
+  // Cross-midnight sessions complete against their start date, which for a
+  // bounded work session is at most one day back.
+  const dates = new Set([today, prevDate(today, offset)]);
   if (extraDate !== undefined) dates.add(extraDate);
-  await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao.earnedBlocksForDate(date))));
+  await Promise.all([...dates].map(async (date) => earnedByDate.set(date, await dao!.earnedBlocksForDate(date))));
 }
 
 async function initIdentity(): Promise<void> {
@@ -227,17 +264,17 @@ async function exportPortableBackup(): Promise<string> {
   if (identityRecoveryRequired && crewMemberships.length > 0) {
     throw new Error("identity recovery required before exporting Crew memberships");
   }
-  const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
+  const [dayStats, sessions] = await Promise.all([dao!.dayStats(), dao!.allSessions()]);
   const snapshots = [];
   const dailyAggregates = [];
   const hiddenMembers: Array<{ crewId: string; identityPublicKey: string; hiddenAtEpochSeconds: number }> = [];
   for (const membership of crewMemberships) {
-    const rows = await crewDao.snapshotsForCrew(membership.crewId);
+    const rows = await crewDao!.snapshotsForCrew(membership.crewId);
     snapshots.push(...rows);
     for (const row of rows) {
-      dailyAggregates.push(...(await crewDao.dailyFor(membership.crewId, row.identityPublicKey)));
+      dailyAggregates.push(...(await crewDao!.dailyFor(membership.crewId, row.identityPublicKey)));
     }
-    for (const identityPublicKey of await crewDao.hiddenKeys(membership.crewId)) {
+    for (const identityPublicKey of await crewDao!.hiddenKeys(membership.crewId)) {
       hiddenMembers.push({ crewId: membership.crewId, identityPublicKey, hiddenAtEpochSeconds: nowSeconds() });
     }
   }
@@ -253,7 +290,10 @@ async function exportPortableBackup(): Promise<string> {
   });
 }
 
-async function importPortableBackup(payloadJson: string, confirmIdentityReplacement: boolean): Promise<PomoResponse> {
+async function importPortableBackup(
+  payloadJson: string,
+  confirmIdentityReplacement: boolean,
+): Promise<PomoResponse & { backupImport?: { sessionsAdded: number; daysAffected: number; conflicts: number } }> {
   const backup = decodePortableBackup(payloadJson);
   if (backup.crew.memberships.some((membership) => membership.protocolVersion !== 2)) {
     return { ok: false, error: "backup contains an unsupported Crew protocol version" };
@@ -291,10 +331,13 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   }
   const mergedMemberships = [...byCrew.values()];
   const mergedCrewIds = new Set(mergedMemberships.map((membership) => membership.crewId));
-  const historySummary = await dao.mergeBackup(
+  const historySummary = await dao!.mergeBackup(
     backup.history.dayStats.map((day) => ({ date: day.date, earnedBlocks: day.completed, focusMinutes: day.workMinutes, breakMinutes: day.breakMinutes, lastUpdated: Date.now() })),
     backup.history.sessions.map((session) => ({ ...session })),
   );
+  if (historySummary.conflicts > 0) {
+    console.warn(`backup import found ${historySummary.conflicts} session conflicts; local history wins`);
+  }
   await loadEarnedCount();
   engine.refreshCompletedCount();
   for (const snapshot of backup.crew.snapshots) {
@@ -302,11 +345,11 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
     const daily = backup.crew.dailyAggregates.filter(
       (aggregate) => aggregate.crewId === snapshot.crewId && aggregate.identityPublicKey === snapshot.identityPublicKey,
     );
-    await crewDao.upsertLatest(snapshot, daily);
+    await crewDao!.upsertLatest(snapshot, daily, nowSeconds());
   }
   for (const hidden of backup.crew.hiddenMembers) {
     if (!mergedCrewIds.has(hidden.crewId)) continue;
-    await crewDao.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
+    await crewDao!.setHidden(hidden.crewId, hidden.identityPublicKey, hidden.hiddenAtEpochSeconds);
   }
   let identityRestored = false;
   if (identityDiffers && importedIdentity !== "") {
@@ -335,6 +378,7 @@ async function importPortableBackup(payloadJson: string, confirmIdentityReplacem
   return {
     ok: true,
     crews: await crewSummaries(),
+    backupImport: historySummary,
     restoreSummary: {
       ...historySummary,
       membershipsAdded: Math.max(0, mergedMemberships.length - previousMembershipCount),
@@ -373,7 +417,7 @@ async function setActiveCrewId(crewId: string | null): Promise<void> {
 async function publishSelf(membership: StoredMembership, now: number): Promise<boolean> {
   if (identityPrivateKey === null) return false;
   try {
-    const [dayStats, sessions] = await Promise.all([dao.dayStats(), dao.allSessions()]);
+    const [dayStats, sessions] = await Promise.all([dao!.dayStats(), dao!.allSessions()]);
     const result = await publishOwnSnapshot(
       {
         membership,
@@ -385,7 +429,7 @@ async function publishSelf(membership: StoredMembership, now: number): Promise<b
         now,
         offsetMinutes: timezoneOffsetMinutes(),
       },
-      crewDao,
+      crewDao!,
     );
     return result.ok;
   } catch (error) {
@@ -430,7 +474,7 @@ async function refreshCrewsAndPublishIfDue(crewId: string): Promise<void> {
     if (crewSyncPromise !== null) await crewSyncPromise;
     const now = nowSeconds();
     try {
-      await refreshMembership(membership, crewDao, now);
+      await refreshMembership(membership, crewDao!, now);
     } catch (error) {
       console.error(`crew refresh failed for ${membership.crewId}`, error);
     }
@@ -447,7 +491,7 @@ async function refreshCrewsAndPublishIfDue(crewId: string): Promise<void> {
 async function crewSummaries(): Promise<CrewSummary[]> {
   const summaries: CrewSummary[] = [];
   for (const membership of crewMemberships) {
-    const states = await crewDao.relayStates(membership.crewId);
+    const states = await crewDao!.relayStates(membership.crewId);
     summaries.push({
       crewId: membership.crewId,
       crewName: membership.crewName,
@@ -484,12 +528,12 @@ async function addMembership(
   await saveMemberships();
   await setActiveCrewId(crewId);
   await publishCrews(true);
-  return { ok: true, crews: await crewSummaries() };
+  return { ok: true, crewId, activeCrewId: crewId, crews: await crewSummaries() };
 }
 
 async function buildBoardResponse(crewId: string, window: WindowKey, now: number): Promise<CrewBoardResult> {
   const membership = crewMemberships.find((m) => m.crewId === crewId)!;
-  const { board, relayStates } = await loadCrewBoard(crewDao, crewId, window, now);
+  const { board, relayStates } = await loadCrewBoard(crewDao!, crewId, window, now);
   const selfKey = identityPrivateKey === null ? "" : publicKeyOf(identityPrivateKey);
   const crew = (await crewSummaries()).find((c) => c.crewId === crewId) ?? {
     crewId: membership.crewId,
@@ -502,8 +546,26 @@ async function buildBoardResponse(crewId: string, window: WindowKey, now: number
   return { crew, board, relayStates, standing: standingFor(board, selfKey), selfPublicKey: selfKey };
 }
 
+async function openDbCached(): Promise<IDBDatabase> {
+  const connection = await openDb();
+  connection.onversionchange = () => {
+    connection.close();
+    db = null;
+    dao = null;
+    crewDao = null;
+  };
+  return connection;
+}
+
+async function ensureDb(): Promise<void> {
+  if (dao !== null) return;
+  db = await openDbCached();
+  dao = new HistoryDao(db);
+  crewDao = new CrewDao(db);
+}
+
 async function init(): Promise<void> {
-  db = await openDb();
+  db = await openDbCached();
   dao = new HistoryDao(db);
   crewDao = new CrewDao(db);
   await loadSettings();
@@ -526,7 +588,22 @@ async function init(): Promise<void> {
   await sync();
 }
 
+/** Ticks the engine and reports whether a state transition occurred, so callers
+ * only persist when the visible state actually changed. */
+function reconcileEngine(): boolean {
+  const before = engine.snapshot();
+  engine.tick();
+  const after = engine.snapshot();
+  return (
+    before.status !== after.status ||
+    before.phase !== after.phase ||
+    before.completed !== after.completed ||
+    before.date !== after.date
+  );
+}
+
 async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
+  await ensureDb();
   switch (request.type) {
     case "pomo:command":
       switch (request.command) {
@@ -549,17 +626,20 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
           engine.reset();
           break;
         case "extend":
+          // extend() ticks internally and rejects expired/invalid requests.
           engine.extend(request.seconds ?? 0);
           break;
       }
       await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:query":
+      if (reconcileEngine()) await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:stats": {
-      const days = await dao.dayStats();
+      await awaitHistoryWrites();
+      const days = await dao!.dayStats();
       const now = nowSeconds();
-      const offset = timezoneOffsetMinutes();
+      const offset = timezoneOffsetMinutes(now);
       const today = dateStringOf(now, offset);
       const sum = totals(days);
       return {
@@ -576,9 +656,10 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:history": {
-      const [sessions, dayStats] = await Promise.all([dao.allSessions(), dao.dayStats()]);
+      await awaitHistoryWrites();
+      const [sessions, dayStats] = await Promise.all([dao!.allSessions(), dao!.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);
-      dayStats.sort((a, b) => (a.date < b.date ? 1 : -1));
+      dayStats.sort((a, b) => b.date.localeCompare(a.date));
       return {
         ok: true,
         history: { sessions: sessions.slice(0, 200), dayStats: dayStats.slice(0, 120) },
@@ -588,8 +669,9 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       return { ok: true, settings };
     case "pomo:settings:set":
       settings = sanitizeSettings({ ...settings, ...request.settings });
-      void chrome.storage.local.set({ [SETTINGS_KEY]: settings });
-      void sync();
+      engine.reconfigure();
+      await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+      await sync();
       return { ok: true, settings };
     case "pomo:crew:list":
       return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
@@ -619,21 +701,21 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       crewMemberships = crewMemberships.filter((m) => m.crewId !== request.crewId);
       await saveMemberships();
       await setActiveCrewId(previousActiveCrewId === request.crewId ? crewMemberships[0]?.crewId ?? null : previousActiveCrewId);
-      await crewDao.deleteCrew(request.crewId);
+      await crewDao!.deleteCrew(request.crewId);
       return { ok: true, crews: await crewSummaries(), activeCrewId: await activeCrewIdForMemberships() };
       }
     case "pomo:crew:hide":
       if (request.hidden) {
-        await crewDao.setHidden(request.crewId, request.identityPublicKey, nowSeconds());
+        await crewDao!.setHidden(request.crewId, request.identityPublicKey, nowSeconds());
       } else {
-        await crewDao.unhide(request.crewId, request.identityPublicKey);
+        await crewDao!.unhide(request.crewId, request.identityPublicKey);
       }
       return { ok: true };
     case "pomo:crew:hidden":
       if (!crewMemberships.some((membership) => membership.crewId === request.crewId)) {
         return { ok: false, error: "crew not found" };
       }
-      return { ok: true, hiddenMembers: await crewDao.hiddenKeys(request.crewId) };
+      return { ok: true, hiddenMembers: await crewDao!.hiddenKeys(request.crewId) };
     case "pomo:crew:rename": {
       const membership = crewMemberships.find((m) => m.crewId === request.crewId);
       if (membership === undefined) return { ok: false, error: "crew not found" };
@@ -702,7 +784,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
         identityRecoveryRequired = false;
         const importedCrewIds = new Set(memberships.map((membership) => membership.crewId));
         for (const membership of crewMemberships) {
-          if (!importedCrewIds.has(membership.crewId)) await crewDao.deleteCrew(membership.crewId);
+          if (!importedCrewIds.has(membership.crewId)) await crewDao!.deleteCrew(membership.crewId);
         }
         const previousActiveCrewId = await activeCrewIdForMemberships();
         crewMemberships = memberships;
@@ -729,20 +811,29 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   }
 }
 
+function logTopLevelError(context: string): (error: unknown) => void {
+  return (error: unknown) => {
+    console.error(`[${context}]`, error);
+  };
+}
+
 chrome.runtime.onInstalled.addListener(() => {
-  void initOnce();
+  void initOnce().catch(logTopLevelError("onInstalled"));
 });
 
 chrome.runtime.onStartup.addListener(() => {
-  void initOnce();
+  void initOnce().catch(logTopLevelError("onStartup"));
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name !== ALARM_NAME) return;
-  void initOnce().then(() => {
-    engine.tick();
-    return syncAfterWrites();
-  });
+  void initOnce()
+    .then(async () => {
+      await ensureDb();
+      engine.tick();
+      return syncAfterWrites();
+    })
+    .catch(logTopLevelError("alarm"));
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
@@ -756,4 +847,4 @@ chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) =
   return true;
 });
 
-void initOnce();
+void initOnce().catch(logTopLevelError("module"));

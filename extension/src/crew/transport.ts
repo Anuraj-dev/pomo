@@ -3,6 +3,10 @@ import type { NostrEvent } from "./types";
 
 export const DEFAULT_RELAY_TIMEOUT_MS = 2_750;
 export const MAX_EVENTS_PER_BURST = 1_000;
+const MAX_FRAME_BYTES = 128 * 1024;
+
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+const textEncoder = new TextEncoder();
 
 export type RelayCompletion =
   | { relayUrl: string; status: "completed"; note?: string }
@@ -46,11 +50,40 @@ function defaultSocket(url: string): WebSocket {
   return new WebSocket(url);
 }
 
+/** Structural well-formedness used before any factory runs. The strict
+ * public-relay policy (wss: only, no private hosts) is enforced in
+ * defaultSocket; loopback ws: URLs remain reachable through a caller's
+ * explicit factory so tests can stand up local relays. */
+function isWellFormedRelayUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return (url.protocol === "wss:" || url.protocol === "ws:") && url.hostname.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 function parseFrame(raw: unknown): Frame | null {
-  if (typeof raw !== "string" && !(raw instanceof Uint8Array)) return null;
+  let text: string;
+  if (typeof raw === "string") {
+    if (textEncoder.encode(raw).length > MAX_FRAME_BYTES) return null;
+    text = raw;
+  } else if (raw instanceof ArrayBuffer || ArrayBuffer.isView(raw)) {
+    if (raw.byteLength > MAX_FRAME_BYTES) return null;
+    try {
+      text = textDecoder.decode(raw instanceof ArrayBuffer ? raw : raw.buffer.slice(raw.byteOffset, raw.byteOffset + raw.byteLength));
+    } catch {
+      return null;
+    }
+  } else if (typeof Blob !== "undefined" && raw instanceof Blob) {
+    // With binaryType = "arraybuffer" the transport never receives Blob frames.
+    return null;
+  } else {
+    return null;
+  }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(String(raw));
+    parsed = JSON.parse(text);
   } catch {
     return null;
   }
@@ -87,6 +120,16 @@ function runBurst(
           };
 
           try {
+            // URLs are always validated before the socket is created, so a
+            // custom factory cannot smuggle malformed/non-wss endpoints past
+            // the policy. The full public-relay policy (private-host rejection)
+            // is enforced in defaultSocket, which is the only factory used in
+            // production; loopback URLs remain reachable through a caller's
+            // explicit factory so tests can stand up local relays.
+            if (!isWellFormedRelayUrl(relayUrl)) {
+              resolve({ relayUrl, status: "failed", reason: "invalid relay url" });
+              return;
+            }
             socket = connect(relayUrl);
           } catch {
             resolve({ relayUrl, status: "failed", reason: "could not create socket" });
@@ -95,6 +138,11 @@ function runBurst(
 
           timer = setTimeout(() => settle({ status: "timedOut" }), timeoutMs);
           const subId = crypto.randomUUID();
+          try {
+            socket.binaryType = "arraybuffer";
+          } catch {
+            // binaryType is not assignable on some exotic WebSocket shims.
+          }
 
           socket.onopen = () => {
             try {
@@ -119,6 +167,12 @@ function runBurst(
   );
 }
 
+function isPlausibleEvent(candidate: unknown): candidate is Record<string, unknown> {
+  if (typeof candidate !== "object" || candidate === null || Array.isArray(candidate)) return false;
+  const record = candidate as Record<string, unknown>;
+  return typeof record.id === "string" && record.id.length === 64;
+}
+
 export async function fetchEventsBurst(
   filters: Array<Record<string, unknown>>,
   relayUrls: string[],
@@ -138,20 +192,29 @@ export async function fetchEventsBurst(
     (frame, socket, subId, settle) => {
       const [type, ...rest] = frame;
       if (type === "EVENT" && rest[0] === subId) {
-        const candidate = rest[1] as NostrEvent | undefined;
-        if (candidate && typeof candidate.id === "string" && !seen.has(candidate.id)) {
-          if (events.length >= MAX_EVENTS_PER_BURST) {
-            try {
-              socket.send(JSON.stringify(["CLOSE", subId]));
-            } catch {
-              // best-effort close
-            }
-            settle({ status: "completed", note: "event limit reached" });
-            return;
-          }
-          seen.add(candidate.id);
-          events.push(candidate);
+        const candidate = rest[1];
+        // Cheap structural pre-filter so junk frames cannot fill the burst cap;
+        // cryptographic verification and id-dedup happen downstream in
+        // crewService.refreshMembership() after verifyEvent succeeds.
+        if (!isPlausibleEvent(candidate)) return;
+        let serialized: string;
+        try {
+          serialized = JSON.stringify(candidate);
+        } catch {
+          return;
         }
+        if (serialized.length > MAX_FRAME_BYTES || seen.has(serialized)) return;
+        if (events.length >= MAX_EVENTS_PER_BURST) {
+          try {
+            socket.send(JSON.stringify(["CLOSE", subId]));
+          } catch {
+            // best-effort close
+          }
+          settle({ status: "completed", note: "event limit reached" });
+          return;
+        }
+        seen.add(serialized);
+        events.push(candidate as unknown as NostrEvent);
       } else if (type === "EOSE" && rest[0] === subId) {
         try {
           socket.send(JSON.stringify(["CLOSE", subId]));

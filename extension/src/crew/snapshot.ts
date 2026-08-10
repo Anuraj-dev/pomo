@@ -1,3 +1,4 @@
+import { isValidDateString } from "../engine/dateLogic";
 import { base64UrlToBytes, bufferOf, bytesToBase64Url, bytesToUtf8, utf8ToBytes } from "../shared/bytes";
 import { hexToBytes, isLowerHex } from "../shared/hex";
 import { NONCE_BYTES } from "./keyring";
@@ -63,7 +64,13 @@ function parseEnvelope(envelopeJson: string): Envelope {
   if (typeof ciphertext !== "string" || ciphertext.length === 0) {
     throw new Error("invalid snapshot envelope: missing ciphertext");
   }
-  if (ciphertext.length > MAX_CIPHERTEXT_BYTES) {
+  let ciphertextBytes: Uint8Array;
+  try {
+    ciphertextBytes = base64UrlToBytes(ciphertext);
+  } catch {
+    throw new Error("invalid snapshot envelope: ciphertext is not valid base64url");
+  }
+  if (ciphertextBytes.length > MAX_CIPHERTEXT_BYTES) {
     throw new Error("invalid snapshot envelope: ciphertext exceeds maximum size");
   }
   let nonceBytes: Uint8Array;
@@ -74,20 +81,6 @@ function parseEnvelope(envelopeJson: string): Envelope {
   }
   if (nonceBytes.length !== NONCE_BYTES) throw new Error("invalid snapshot envelope: nonce must be 12 bytes");
   return { version: data.version, crewId, identityPublicKey, nonce, ciphertext };
-}
-
-const DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})$/;
-
-function isRealCalendarDate(value: string): boolean {
-  const match = DATE_PATTERN.exec(value);
-  if (match === null) return false;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  if (month < 1 || month > 12 || day < 1) return false;
-  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1]!;
-  return day <= daysInMonth;
 }
 
 function validateAggregates(aggregates: unknown): void {
@@ -102,13 +95,13 @@ function validateAggregates(aggregates: unknown): void {
       throw new Error("invalid snapshot: malformed daily aggregate");
     }
     const record = aggregate as Record<string, unknown>;
-    if (typeof record.localDate !== "string" || !DATE_PATTERN.test(record.localDate) || !isRealCalendarDate(record.localDate)) {
+    if (!isRealDateString(record.localDate)) {
       throw new Error("invalid snapshot: malformed aggregate localDate");
     }
     if (!isNonNegativeNumber(record.focusMinutes)) {
       throw new Error("invalid snapshot: malformed aggregate focusMinutes");
     }
-    if (!isNonNegativeNumber(record.completedWorkBlocks)) {
+    if (!isNonNegativeInteger(record.completedWorkBlocks)) {
       throw new Error("invalid snapshot: malformed aggregate completedWorkBlocks");
     }
     const localDate = record.localDate as string;
@@ -127,6 +120,15 @@ function isNonNegativeNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
+function isNonNegativeInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0;
+}
+
+/** Real calendar-date check (not just the YYYY-MM-DD shape). */
+function isRealDateString(value: unknown): value is string {
+  return typeof value === "string" && isValidDateString(value);
+}
+
 export function validateStats(stats: unknown): void {
   if (stats === null) return;
   if (typeof stats !== "object" || Array.isArray(stats)) throw new Error("invalid snapshot: malformed stats");
@@ -140,9 +142,30 @@ export function validateStats(stats: unknown): void {
   };
   optionalBuckets("hourBuckets", 24);
   optionalBuckets("weekdayBuckets", 7);
-  for (const name of ["allTimeWorkBlocks", "allTimeActiveDays", "bestStreak", "bestDayFocusMinutes", "bestDayWorkBlocks", "bestWeekFocusMinutes", "bestWeekWorkBlocks"]) {
+  const optionalCount = (name: string): void => {
+    const value = record[name];
+    if (value !== undefined && value !== null && !isNonNegativeInteger(value)) {
+      throw new Error(`invalid snapshot: malformed ${name}`);
+    }
+  };
+  for (const name of ["allTimeActiveDays", "bestStreak", "bestDayFocusMinutes", "bestWeekFocusMinutes"]) {
     const value = record[name];
     if (value !== undefined && value !== null && !isNonNegativeNumber(value)) {
+      throw new Error(`invalid snapshot: malformed ${name}`);
+    }
+  }
+  for (const name of ["allTimeWorkBlocks", "bestDayWorkBlocks", "bestWeekWorkBlocks"]) {
+    const value = record[name];
+    if (value !== undefined && value !== null && !isNonNegativeInteger(value)) {
+      throw new Error(`invalid snapshot: malformed ${name}`);
+    }
+  }
+  optionalCount("allTimeWorkBlocks");
+  optionalCount("allTimeActiveDays");
+  optionalCount("bestStreak");
+  for (const name of ["firstFocusLocalDate", "historyStartDate", "bestDayLocalDate", "bestWeekStartDate"]) {
+    const value = record[name];
+    if (value !== undefined && value !== null && !isRealDateString(value)) {
       throw new Error(`invalid snapshot: malformed ${name}`);
     }
   }
@@ -188,17 +211,17 @@ function validateSnapshot(snapshot: unknown, envelope: Envelope): SnapshotPlain 
   if (!isNonNegativeNumber(s.allTimeFocusMinutes)) {
     throw new Error("invalid snapshot: malformed allTimeFocusMinutes");
   }
-  if (!isNonNegativeNumber(s.publishedAtEpochSeconds)) {
+  if (!isNonNegativeInteger(s.publishedAtEpochSeconds)) {
     throw new Error("invalid snapshot: malformed publishedAtEpochSeconds");
   }
-  if (typeof s.localDate !== "string" || !DATE_PATTERN.test(s.localDate)) {
+  if (!isRealDateString(s.localDate)) {
     throw new Error("invalid snapshot: malformed localDate");
   }
-  if (typeof s.utcOffsetMinutes !== "number" || s.utcOffsetMinutes < -720 || s.utcOffsetMinutes > 840) {
+  if (typeof s.utcOffsetMinutes !== "number" || !Number.isInteger(s.utcOffsetMinutes) || s.utcOffsetMinutes < -720 || s.utcOffsetMinutes > 840) {
     throw new Error("invalid snapshot: malformed utcOffsetMinutes");
   }
-  if (!isNonNegativeNumber(s.currentStreak)) throw new Error("invalid snapshot: malformed currentStreak");
-  if (!isNonNegativeNumber(s.lastFocusedAtEpochSeconds)) {
+  if (!isNonNegativeInteger(s.currentStreak)) throw new Error("invalid snapshot: malformed currentStreak");
+  if (!isNonNegativeInteger(s.lastFocusedAtEpochSeconds)) {
     throw new Error("invalid snapshot: malformed lastFocusedAtEpochSeconds");
   }
   validateAggregates(s.dailyAggregates);
@@ -206,11 +229,33 @@ function validateSnapshot(snapshot: unknown, envelope: Envelope): SnapshotPlain 
   return s as unknown as SnapshotPlain;
 }
 
+/** Validates a snapshot against its own self-declared identity. Used on the
+ * publish path so invalid local data is rejected before it is encrypted. */
+export function validateSnapshotPlain(snapshot: unknown): SnapshotPlain {
+  if (typeof snapshot !== "object" || snapshot === null) throw new Error("invalid snapshot: not an object");
+  const s = snapshot as Record<string, unknown>;
+  const crewId = s.crewId;
+  if (typeof crewId !== "string" || !isLowerHex(crewId, 32)) {
+    throw new Error("invalid snapshot: malformed crewId");
+  }
+  const identityPublicKey = s.identityPublicKey;
+  if (typeof identityPublicKey !== "string" || !isLowerHex(identityPublicKey, 64)) {
+    throw new Error("invalid snapshot: malformed identityPublicKey");
+  }
+  const envelope = { crewId, identityPublicKey } as unknown as Envelope;
+  return validateSnapshot(snapshot, envelope);
+}
+
 export async function buildEnvelope(snapshot: SnapshotPlain, crewKeyHex64: string): Promise<string> {
+  // Never encrypt data we would refuse to decrypt from a peer.
+  validateSnapshotPlain(snapshot);
   const key = await keyFromCrewKey(crewKeyHex64);
   const iv = new Uint8Array(NONCE_BYTES);
   crypto.getRandomValues(iv);
   const plaintext = bufferOf(utf8ToBytes(JSON.stringify(snapshot)));
+  if (plaintext.byteLength > MAX_PLAINTEXT_BYTES) {
+    throw new Error("invalid snapshot: plaintext exceeds maximum size");
+  }
   const envelope: Envelope = {
     version: snapshot.version,
     crewId: snapshot.crewId,
@@ -225,13 +270,17 @@ export async function buildEnvelope(snapshot: SnapshotPlain, crewKeyHex64: strin
       plaintext,
     ),
   );
-  return JSON.stringify({
+  const encoded = JSON.stringify({
     version: envelope.version,
     crewId: envelope.crewId,
     identityPublicKey: envelope.identityPublicKey,
     nonce: bytesToBase64Url(iv),
     ciphertext: bytesToBase64Url(ciphertext),
   });
+  if (utf8ToBytes(encoded).length > MAX_ENVELOPE_BYTES) {
+    throw new Error("invalid snapshot envelope: exceeds maximum size");
+  }
+  return encoded;
 }
 
 export async function decryptEnvelope(envelopeJson: string, crewKeyHex64: string): Promise<SnapshotPlain> {

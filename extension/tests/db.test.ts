@@ -1,6 +1,7 @@
 import "./helpers/db";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { MAX_CREATED_AT_SKEW_SECONDS } from "../src/crew/nostrEvent";
 import { CrewDao, HistoryDao } from "../src/db/dao";
 import type { CrewDailyRow, CrewRelayStateRow, CrewSnapshotRow } from "../src/db/dao";
 import type { SessionRow } from "../src/db/types";
@@ -165,6 +166,174 @@ describe("HistoryDao", () => {
     expect(await history.earnedBlocksForDate("2026-08-07")).toBe(3);
     expect(await history.earnedBlocksForDate("2026-08-08")).toBe(0);
   });
+
+  test("insertBlock is idempotent: replaying a segment start never double-counts dayStats", async () => {
+    const block = {
+      row: session(100, "2026-08-01", "work", 1500),
+      delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+    };
+    expect(await history.insertBlock([block])).toEqual([100]);
+    expect(await history.insertBlock([block])).toEqual([]);
+    expect(await history.sessionsForDate("2026-08-01")).toHaveLength(1);
+    expect(await history.dayStatsForDate("2026-08-01")).toEqual({
+      date: "2026-08-01",
+      earnedBlocks: 1,
+      focusMinutes: 25,
+      breakMinutes: 0,
+      lastUpdated: expect.any(Number),
+    });
+  });
+
+  test("mergeBackup imports disjoint sessions and dayStats into an existing database", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup(
+      [
+        { date: "2026-08-02", earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0, lastUpdated: 1_000 },
+        { date: "2026-08-03", earnedBlocks: 2, focusMinutes: 50, breakMinutes: 0, lastUpdated: 2_000 },
+      ],
+      [session(200, "2026-08-02", "work", 1500), session(300, "2026-08-03", "short", 300)],
+    );
+    expect(result).toEqual({ sessionsAdded: 2, daysAffected: 2, conflicts: 0 });
+    expect((await history.sessionsForDate("2026-08-02")).map((r) => r.start)).toEqual([200]);
+    expect(await history.dayStatsForDate("2026-08-02")).toEqual({
+      date: "2026-08-02",
+      earnedBlocks: 1,
+      focusMinutes: 25,
+      breakMinutes: 0,
+      lastUpdated: expect.any(Number),
+    });
+    expect(await history.dayStatsForDate("2026-08-03")).toEqual({
+      date: "2026-08-03",
+      earnedBlocks: 2,
+      focusMinutes: 50,
+      breakMinutes: 5,
+      lastUpdated: expect.any(Number),
+    });
+  });
+
+  test("mergeBackup counts a conflict on a duplicate start with different content and keeps the local row", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500, true, "local"),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup(
+      [{ date: "2026-08-01", earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0, lastUpdated: 1 }],
+      [session(100, "2026-08-01", "work", 900, false, "backup")],
+    );
+    expect(result).toEqual({ sessionsAdded: 0, daysAffected: 0, conflicts: 1 });
+    const rows = await history.sessionsForDate("2026-08-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tag).toBe("local");
+    expect(rows[0]!.completed).toBe(true);
+  });
+
+  test("mergeBackup counts a conflict when only the date differs on a colliding start", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup([], [session(100, "2026-08-02", "work", 1500)]);
+    expect(result).toEqual({ sessionsAdded: 0, daysAffected: 0, conflicts: 1 });
+    const rows = await history.sessionsForDate("2026-08-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.date).toBe("2026-08-01");
+  });
+
+  test("mergeBackup counts a conflict when only the tag differs on a colliding start", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500, true, "local"),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup([], [session(100, "2026-08-01", "work", 1500, true, "backup")]);
+    expect(result).toEqual({ sessionsAdded: 0, daysAffected: 0, conflicts: 1 });
+    const rows = await history.sessionsForDate("2026-08-01");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.tag).toBe("local");
+  });
+
+  test("mergeBackup rejects a duplicate start within the backup payload and counts a conflict", async () => {
+    const result = await history.mergeBackup(
+      [],
+      [session(100, "2026-08-01", "work", 1500), session(100, "2026-08-01", "work", 900, false)],
+    );
+    expect(result).toEqual({ sessionsAdded: 1, daysAffected: 1, conflicts: 1 });
+    const rows = await history.allSessions();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.duration).toBe(1500);
+    expect(rows[0]!.completed).toBe(true);
+  });
+
+  test("mergeBackup counts identical duplicate starts in the payload as conflicts too", async () => {
+    const result = await history.mergeBackup(
+      [],
+      [session(100, "2026-08-01", "work", 1500), session(100, "2026-08-01", "work", 1500)],
+    );
+    expect(result).toEqual({ sessionsAdded: 1, daysAffected: 1, conflicts: 1 });
+    const rows = await history.allSessions();
+    expect(rows).toHaveLength(1);
+  });
+
+  test("mergeBackup max-merges dayStats per field across derived, local, and backup totals", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const result = await history.mergeBackup(
+      [{ date: "2026-08-01", earnedBlocks: 5, focusMinutes: 10, breakMinutes: 3, lastUpdated: 1 }],
+      [session(200, "2026-08-01", "short", 300)],
+    );
+    expect(result).toEqual({ sessionsAdded: 1, daysAffected: 1, conflicts: 0 });
+    expect(await history.dayStatsForDate("2026-08-01")).toEqual({
+      date: "2026-08-01",
+      earnedBlocks: 5,
+      focusMinutes: 25,
+      breakMinutes: 5,
+      lastUpdated: expect.any(Number),
+    });
+  });
+
+  test("mergeBackup only writes day rows that actually changed", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 2, focusMinutes: 50, breakMinutes: 0 },
+      },
+    ]);
+    const before = await history.dayStatsForDate("2026-08-01");
+    const result = await history.mergeBackup(
+      [{ date: "2026-08-01", earnedBlocks: 2, focusMinutes: 50, breakMinutes: 0, lastUpdated: 1 }],
+      [session(200, "2026-08-02", "work", 1500)],
+    );
+    expect(result.daysAffected).toBe(1);
+    expect(await history.dayStatsForDate("2026-08-02")).toBeDefined();
+    expect(await history.dayStatsForDate("2026-08-01")).toEqual(before);
+  });
+
+  test("mergeBackup preserves the existing lastUpdated of unchanged day rows", async () => {
+    await history.insertBlock([
+      {
+        row: session(100, "2026-08-01", "work", 1500),
+        delta: { earnedBlocks: 1, focusMinutes: 25, breakMinutes: 0 },
+      },
+    ]);
+    const before = await history.dayStatsForDate("2026-08-01");
+    await history.mergeBackup([], []);
+    const after = await history.dayStatsForDate("2026-08-01");
+    expect(after!.lastUpdated).toBe(before!.lastUpdated);
+  });
 });
 
 describe("CrewDao", () => {
@@ -214,6 +383,21 @@ describe("CrewDao", () => {
     expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
   });
 
+  test("upsertLatest rejects a snapshot published beyond the allowed future skew", async () => {
+    const now = 1_000_000;
+    const tooNew = snapshot("crew-a", "key-1", now + MAX_CREATED_AT_SKEW_SECONDS + 1);
+    expect(await crew.upsertLatest(tooNew, [daily("crew-a", "key-1", "2026-08-01", 25, 1)], now)).toBe(false);
+    expect(await crew.snapshotsForCrew("crew-a")).toEqual([]);
+    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
+  });
+
+  test("upsertLatest accepts a snapshot exactly at the future skew boundary", async () => {
+    const now = 1_000_000;
+    const boundary = snapshot("crew-a", "key-1", now + MAX_CREATED_AT_SKEW_SECONDS);
+    expect(await crew.upsertLatest(boundary, [], now)).toBe(true);
+    expect((await crew.snapshotsForCrew("crew-a"))[0]!.publishedAtEpochSeconds).toBe(now + MAX_CREATED_AT_SKEW_SECONDS);
+  });
+
   test("snapshotsForCrew returns every member of the crew", async () => {
     await crew.upsertLatest(snapshot("crew-a", "key-1", 100), []);
     await crew.upsertLatest(snapshot("crew-a", "key-2", 100), []);
@@ -261,7 +445,7 @@ describe("CrewDao", () => {
     });
   });
 
-  test("updateRelayState overwrites with new non-null values", async () => {
+  test("updateRelayState overwrites with new non-null values and a success clears the error", async () => {
     await crew.updateRelayState("crew-a", "wss://relay1", 100, 1000, "old");
     await crew.updateRelayState("crew-a", "wss://relay1", 200, 2000, null);
     const rows = await crew.relayStates("crew-a");
@@ -270,7 +454,7 @@ describe("CrewDao", () => {
       relayUrl: "wss://relay1",
       lastAttemptEpochSeconds: 200,
       lastSuccessEpochSeconds: 2000,
-      lastError: "old",
+      lastError: null,
     });
   });
 

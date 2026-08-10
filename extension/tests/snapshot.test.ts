@@ -100,8 +100,7 @@ describe("snapshot codec", () => {
         ["2024-01-02", 30, 1],
       ]),
     });
-    const envelope = await buildEnvelope(s, CREW_KEY);
-    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/aggregates/i);
+    await expect(buildEnvelope(s, CREW_KEY)).rejects.toThrow(/aggregates/i);
   });
 
   test("rejects snapshots with duplicate daily aggregate dates", async () => {
@@ -111,8 +110,7 @@ describe("snapshot codec", () => {
         ["2024-01-02", 90, 3],
       ]),
     });
-    const envelope = await buildEnvelope(s, CREW_KEY);
-    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/duplicate/i);
+    await expect(buildEnvelope(s, CREW_KEY)).rejects.toThrow(/duplicate/i);
   });
 
   test("rejects snapshots with more than 30 daily aggregates", async () => {
@@ -121,8 +119,9 @@ describe("snapshot codec", () => {
       0,
       0,
     ]);
-    const envelope = await buildEnvelope(snapshot({ dailyAggregates: aggregates(entries) }), CREW_KEY);
-    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/aggregates/i);
+    await expect(buildEnvelope(snapshot({ dailyAggregates: aggregates(entries) }), CREW_KEY)).rejects.toThrow(
+      /aggregates/i,
+    );
   });
 
   test("rejects envelopes whose JSON exceeds the size bound", async () => {
@@ -132,64 +131,52 @@ describe("snapshot codec", () => {
   });
 
   test("rejects snapshots whose decrypted plaintext exceeds the size bound", async () => {
-    const s = snapshot({ displayName: "x".repeat(32 * 1024) });
-    const envelope = await buildEnvelope(s, CREW_KEY);
-    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/size/i);
+    const s = snapshot({ avatarBase64: "a".repeat(32 * 1024) });
+    await expect(buildEnvelope(s, CREW_KEY)).rejects.toThrow(/size/i);
   });
 
   test("rejects aggregates with malformed dates or counts", async () => {
-    const badDate = await buildEnvelope(
-      snapshot({ dailyAggregates: aggregates([["2024/01/02", 30, 1]]) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(badDate, CREW_KEY)).rejects.toThrow(/aggregate/i);
-    const badCount = await buildEnvelope(
-      snapshot({ dailyAggregates: aggregates([["2024-01-02", -1, 1]]) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(badCount, CREW_KEY)).rejects.toThrow(/aggregate/i);
+    await expect(
+      buildEnvelope(snapshot({ dailyAggregates: aggregates([["2024/01/02", 30, 1]]) }), CREW_KEY),
+    ).rejects.toThrow(/aggregate/i);
+    await expect(
+      buildEnvelope(snapshot({ dailyAggregates: aggregates([["2024-01-02", -1, 1]]) }), CREW_KEY),
+    ).rejects.toThrow(/aggregate/i);
   });
 
   test("rejects aggregates with impossible calendar dates", async () => {
-    const bad = await buildEnvelope(
-      snapshot({ dailyAggregates: aggregates([["2024-02-30", 30, 1]]) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(bad, CREW_KEY)).rejects.toThrow(/aggregate/i);
-    const notLeap = await buildEnvelope(
-      snapshot({ dailyAggregates: aggregates([["2023-02-29", 30, 1]]) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(notLeap, CREW_KEY)).rejects.toThrow(/aggregate/i);
+    await expect(
+      buildEnvelope(snapshot({ dailyAggregates: aggregates([["2024-02-30", 30, 1]]) }), CREW_KEY),
+    ).rejects.toThrow(/aggregate/i);
+    await expect(
+      buildEnvelope(snapshot({ dailyAggregates: aggregates([["2023-02-29", 30, 1]]) }), CREW_KEY),
+    ).rejects.toThrow(/aggregate/i);
   });
 
   test("rejects snapshots with wrong stats bucket lengths", async () => {
-    const badHours = await buildEnvelope(snapshot({ stats: stats({ hourBuckets: Array(23).fill(0) }) }), CREW_KEY);
-    await expect(decryptEnvelope(badHours, CREW_KEY)).rejects.toThrow(/buckets/i);
-    const badWeekdays = await buildEnvelope(
-      snapshot({ stats: stats({ weekdayBuckets: Array(6).fill(0) }) }),
-      CREW_KEY,
+    await expect(buildEnvelope(snapshot({ stats: stats({ hourBuckets: Array(23).fill(0) }) }), CREW_KEY)).rejects.toThrow(
+      /buckets/i,
     );
-    await expect(decryptEnvelope(badWeekdays, CREW_KEY)).rejects.toThrow(/buckets/i);
+    await expect(
+      buildEnvelope(snapshot({ stats: stats({ weekdayBuckets: Array(6).fill(0) }) }), CREW_KEY),
+    ).rejects.toThrow(/buckets/i);
   });
 
   test("rejects snapshots with mismatched or over-long history arrays", async () => {
-    const mismatched = await buildEnvelope(
-      snapshot({ stats: stats({ historyFocusMinutes: [30, 90], historyWorkBlocks: [1] }) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(mismatched, CREW_KEY)).rejects.toThrow(/history/i);
+    await expect(
+      buildEnvelope(snapshot({ stats: stats({ historyFocusMinutes: [30, 90], historyWorkBlocks: [1] }) }), CREW_KEY),
+    ).rejects.toThrow(/history/i);
     const tooLong = Array(121).fill(0) as number[];
-    const overlong = await buildEnvelope(
-      snapshot({ stats: stats({ historyFocusMinutes: tooLong, historyWorkBlocks: [...tooLong] }) }),
-      CREW_KEY,
-    );
-    await expect(decryptEnvelope(overlong, CREW_KEY)).rejects.toThrow(/history/i);
+    await expect(
+      buildEnvelope(
+        snapshot({ stats: stats({ historyFocusMinutes: tooLong, historyWorkBlocks: [...tooLong] }) }),
+        CREW_KEY,
+      ),
+    ).rejects.toThrow(/history/i);
   });
 
   test("rejects snapshots with the wrong version", async () => {
-    const envelope = await buildEnvelope(snapshot({ version: 1 }), CREW_KEY);
-    await expect(decryptEnvelope(envelope, CREW_KEY)).rejects.toThrow(/version/i);
+    await expect(buildEnvelope(snapshot({ version: 1 }), CREW_KEY)).rejects.toThrow(/version/i);
   });
 
   test("rejects invalid envelopes", async () => {

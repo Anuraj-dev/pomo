@@ -1,4 +1,4 @@
-import { prevDate } from "./dateLogic";
+import { isValidDateString, prevDate, type OffsetMinutes } from "./dateLogic";
 import type { Phase } from "./timer";
 
 export function currentStreak(dates: Iterable<string>, todayKey: string, offsetMinutes: number): number {
@@ -15,6 +15,7 @@ export function currentStreak(dates: Iterable<string>, todayKey: string, offsetM
 
 export function bestStreak(dates: Iterable<string>): number {
   const sorted = [...new Set(dates)]
+    .filter(isValidDateString)
     .map((d) => {
       const [y, m, day] = d.split("-").map(Number);
       return Date.UTC(y!, m! - 1, day!);
@@ -65,11 +66,14 @@ export interface BestWeek {
 /**
  * Rank by focus minutes, filtering on work minutes (not completed blocks) so the
  * pre-midnight segment of a split block can still win as the best focus day.
+ * Ties resolve to the later date.
  */
 export function bestDayOf(days: DayStat[]): BestDay | null {
   const candidates = days.filter((day) => day.focusMinutes > 0);
   if (candidates.length === 0) return null;
-  const best = candidates.reduce((a, b) => (b.focusMinutes > a.focusMinutes ? b : a));
+  const best = candidates.reduce((a, b) =>
+    b.focusMinutes > a.focusMinutes || (b.focusMinutes === a.focusMinutes && b.date > a.date) ? b : a
+  );
   return { date: best.date, completed: best.earnedBlocks, minutes: best.focusMinutes };
 }
 
@@ -86,7 +90,7 @@ export function bestWeekOf(days: DayStat[]): BestWeek | null {
   let bestKey: string | null = null;
   let bestMinutes = 0;
   for (const [key, minutes] of minutesByWeek) {
-    if (minutes > bestMinutes) {
+    if (bestKey === null || minutes > bestMinutes || (minutes === bestMinutes && key > bestKey)) {
       bestMinutes = minutes;
       bestKey = key;
     }
@@ -101,23 +105,27 @@ function sundayWeekStart(date: string): string {
   return new Date(Date.UTC(y!, m! - 1, d! - dayOfWeek)).toISOString().slice(0, 10);
 }
 
+function resolveOffset(offsetMinutes: OffsetMinutes, epochSeconds: number): number {
+  return typeof offsetMinutes === "function" ? offsetMinutes(epochSeconds) : offsetMinutes;
+}
+
 export interface RhythmBucketsOptions {
   count?: number;
 }
 
 export function rhythmBuckets(
   sessions: Array<{ start: number; type: Phase; duration: number }>,
-  offsetMinutes: number,
+  offsetMinutes: OffsetMinutes,
   options: RhythmBucketsOptions = {},
 ): number[] {
-  const count = options.count ?? 24;
+  const count = Number.isInteger(options.count) && options.count! >= 1 && options.count! <= 24 ? options.count! : 24;
   const buckets = new Array<number>(count).fill(0);
   for (const session of sessions) {
     if (session.type !== "work") continue;
-    const local = new Date(session.start * 1000 + offsetMinutes * 60000);
-    buckets[local.getUTCHours() % count]! += Math.ceil(session.duration / 60);
+    const local = new Date(session.start * 1000 + resolveOffset(offsetMinutes, session.start) * 60000);
+    buckets[local.getUTCHours() % count]! += session.duration;
   }
-  return buckets;
+  return buckets.map((seconds) => Math.ceil(seconds / 60));
 }
 
 export interface WeekdayBucketsOptions {
@@ -126,24 +134,25 @@ export interface WeekdayBucketsOptions {
 
 export function weekdayBuckets(
   sessions: Array<{ start: number; type: Phase; duration: number }>,
-  offsetMinutes: number,
+  offsetMinutes: OffsetMinutes,
   options: WeekdayBucketsOptions = {},
 ): number[] {
-  const startDay = options.startDay ?? 1;
+  const startDay = Number.isInteger(options.startDay) && options.startDay! >= 0 && options.startDay! <= 6 ? options.startDay! : 1;
   const buckets = new Array<number>(7).fill(0);
   for (const session of sessions) {
     if (session.type !== "work") continue;
-    const local = new Date(session.start * 1000 + offsetMinutes * 60000);
-    buckets[(local.getUTCDay() + 7 - startDay) % 7]! += Math.ceil(session.duration / 60);
+    const local = new Date(session.start * 1000 + resolveOffset(offsetMinutes, session.start) * 60000);
+    buckets[(local.getUTCDay() + 7 - startDay) % 7]! += session.duration;
   }
-  return buckets;
+  return buckets.map((seconds) => Math.ceil(seconds / 60));
 }
 
 export function lastNDays(days: DayStat[], todayKey: string, n: number, offsetMinutes: number): DayStat[] {
+  const count = Number.isFinite(n) ? Math.min(3660, Math.max(0, Math.floor(n))) : 0;
   const byDate = new Map(days.map((day) => [day.date, day]));
   const keys: string[] = [];
   let cursor = todayKey;
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < count; i++) {
     keys.push(cursor);
     cursor = prevDate(cursor, offsetMinutes);
   }

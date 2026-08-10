@@ -168,14 +168,14 @@ describe("TimerEngine — restore from saved state", () => {
     const saved = {
       status: "running" as const,
       phase: "work" as const,
-      nextPhase: "long" as const,
       startTime: NOW - 1500,
       duration: 1500,
       remaining: 0,
       completed: 3,
       goal: 8,
       date: dateStringOf(NOW, OFFSET),
-      lastActionTime: NOW - 1500,
+      lastUpdatedTime: NOW - 1500,
+      revision: 0,
       tag: "Work",
       version: 2,
     };
@@ -218,5 +218,44 @@ describe("TimerEngine — restore from saved state", () => {
     expect(s.phase).toBe("work");
     expect(s.remaining).toBe(1500);
     expect(s.date).toBe(dateStringOf(NOW, OFFSET));
+  });
+
+  test("restore throws for non-finite numeric fields", () => {
+    const base = {
+      status: "stopped" as const,
+      phase: "work" as const,
+      startTime: NOW,
+      duration: 1500,
+      remaining: 0,
+      completed: 0,
+      goal: 8,
+      date: dateStringOf(NOW, OFFSET),
+      lastUpdatedTime: NOW,
+      revision: 0,
+      tag: "Work",
+      version: 2,
+    };
+    for (const duration of [Infinity, NaN]) {
+      expect(() => new TimerEngine(makePorts()).restore({ ...base, duration })).toThrow(/invalid saved duration/);
+    }
+  });
+
+  test("restore throws for an invalid calendar date", () => {
+    const saved = {
+      status: "stopped" as const,
+      phase: "work" as const,
+      startTime: NOW,
+      duration: 1500,
+      remaining: 0,
+      completed: 0,
+      goal: 8,
+      date: "2026-99-99",
+      lastUpdatedTime: NOW,
+      revision: 0,
+      tag: "Work",
+      version: 2,
+    };
+    const engine = new TimerEngine(makePorts());
+    expect(() => engine.restore(saved)).toThrow(/invalid saved date/);
   });
 });
