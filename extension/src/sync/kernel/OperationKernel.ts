@@ -16,7 +16,6 @@ import {
 export interface OperationVerifier {
   verify(signedEnvelope: Uint8Array): Promise<AuthenticatedOperation>;
 }
-
 export interface OperationSigner {
   sign(operation: UnsignedOperation, payload: Uint8Array, canonicalUnsigned: Uint8Array, operationId: string): Promise<Uint8Array>;
 }

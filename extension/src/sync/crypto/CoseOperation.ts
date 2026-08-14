@@ -23,7 +23,6 @@ const EXTERNAL_AAD = utf8ToBytes("Pomo/Operation/1");
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
-
 function asArray(value: CborValue, length: number, name: string): readonly CborValue[] {
   if (!Array.isArray(value) || value.length !== length) throw new Error(`${name} must be a ${length}-item array`);
   return value;

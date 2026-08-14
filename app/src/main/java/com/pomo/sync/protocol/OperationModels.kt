@@ -150,6 +150,11 @@ internal enum class IngestDisposition {
     REJECTED_INVALID,
 }
 
+internal data class OperationReclassification(
+    val operation: AuthenticatedOperation,
+    val disposition: IngestDisposition,
+)
+
 internal data class KernelSummary(
     val heads: Map<String, Pair<Long, ProtocolBytes?>>,
     val gaps: Set<String>,
@@ -158,6 +163,8 @@ internal data class KernelSummary(
     val accepted: Int,
     val pending: Int,
     val quarantined: Int,
+    val rejected: Int,
+    val dispositionCounts: Map<IngestDisposition, Int>,
 )
 
 internal data class CheckpointFeed(

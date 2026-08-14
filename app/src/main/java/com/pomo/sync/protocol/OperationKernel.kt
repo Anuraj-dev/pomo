@@ -8,7 +8,6 @@ internal fun interface OperationSigner {
         operationId: ProtocolBytes,
     ): ByteArray
 }
-
 internal fun interface OperationVerifier {
     /** Decodes and authenticates one raw [COSE_Sign1, fact payload] wire. */
     fun verify(signedEnvelope: ByteArray): AuthenticatedOperation
