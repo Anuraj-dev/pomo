@@ -47,20 +47,28 @@ internal class DirectSyncCoordinator(
             .take(limit)
     }
 
-    fun ingest(envelopes: Collection<SyncEnvelope>, kernelIngest: (ByteArray) -> Unit) {
+    fun ingest(
+        envelopes: Collection<SyncEnvelope>,
+        kernelIngest: (ByteArray) -> Unit,
+    ) {
         envelopes.distinctBy { it.operationId }.forEach { kernelIngest(it.wire.copyOf()) }
     }
 
-    fun acknowledge(ack: DurablePeerAck) {
+    fun acknowledge(
+        ack: DurablePeerAck,
+    ) {
         require(ack.signatureVerified) { "Only signed durable acknowledgments clear obligations" }
         pending.entries.removeIf { (_, envelope) ->
             val head = ack.frontier[envelope.feedKey]
-            head != null &&
-                ((head.sequence == envelope.sequence && head.operationId == envelope.operationId) ||
-                    (head.sequence >= envelope.sequence && envelope.operationId in head.coveredOperationIds))
+            val exact = head != null &&
+                head.sequence == envelope.sequence && head.operationId == envelope.operationId
+            val covered = head != null &&
+                head.sequence >= envelope.sequence && envelope.operationId in head.coveredOperationIds
+            exact || covered
         }
         if (pending.isEmpty()) state = DirectRouteState.LIVE
     }
+
     fun liveObservationTrusted(): Boolean = state == DirectRouteState.LIVE
     fun pendingOperationIds(): Set<String> = pending.keys.toSet()
 

@@ -33,7 +33,11 @@ internal data class MailboxProtection(
 )
 
 internal interface ImmutableMailboxClient {
-    fun createIfAbsent(objectId: String, bytes: ByteArray): Boolean
+    fun createIfAbsent(
+        objectId: String,
+        bytes: ByteArray,
+    ): Boolean
+
     fun get(objectId: String): ByteArray?
 }
 

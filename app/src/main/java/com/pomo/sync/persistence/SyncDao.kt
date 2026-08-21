@@ -83,7 +83,11 @@ internal interface SyncDao {
         "DELETE FROM sync_checkpoint_operations " +
             "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence >= :sequence",
     )
-    fun deleteCheckpointTail(deviceId: String, incarnationId: String, sequence: Long)
+    fun deleteCheckpointTail(
+        deviceId: String,
+        incarnationId: String,
+        sequence: Long,
+    )
 
     @Query("SELECT COUNT(*) FROM sync_checkpoint_operations")
     fun checkpointOperationCount(): Int

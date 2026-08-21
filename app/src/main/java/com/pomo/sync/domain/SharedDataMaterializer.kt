@@ -17,15 +17,16 @@ internal object SharedPreferencesMaterializer {
             .mapValues { (_, values) -> values.minBy { it.operationId } }
 
     fun isDeviceLocal(field: String): Boolean =
-        field in setOf(
-            "theme",
-            "cueMode",
-            "notificationPermission",
-            "navigation",
-            "routeHealth",
-            "selectedCrew",
-            "hiddenMembers",
-        )
+        field in
+            setOf(
+                "theme",
+                "cueMode",
+                "notificationPermission",
+                "navigation",
+                "routeHealth",
+                "selectedCrew",
+                "hiddenMembers",
+            )
 }
 
 internal data class ProfileVersion(
@@ -40,7 +41,11 @@ internal data class ProfileProjection(
 )
 
 internal object ProfileMaterializer {
-    fun apply(current: ProfileProjection, incoming: ProfileVersion, verifiedBlobIds: Set<String>): ProfileProjection =
+    fun apply(
+        current: ProfileProjection,
+        incoming: ProfileVersion,
+        verifiedBlobIds: Set<String>,
+    ): ProfileProjection =
         if (incoming.photoBlobId == null || incoming.photoBlobId in verifiedBlobIds) {
             ProfileProjection(incoming, null)
         } else {
@@ -72,7 +77,10 @@ internal object CrewMembershipMaterializer {
         return CrewMembershipProjection(intents.singleOrNull() == MembershipIntent.JOIN, false, false)
     }
 
-    fun pseudonym(memberSecret: ByteArray, crewId: String): String {
+    fun pseudonym(
+        memberSecret: ByteArray,
+        crewId: String,
+    ): String {
         require(memberSecret.size >= 32 && crewId.isNotBlank())
         val digest =
             java.security.MessageDigest.getInstance("SHA-256").digest(memberSecret + crewId.toByteArray())

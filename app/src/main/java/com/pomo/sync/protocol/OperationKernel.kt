@@ -40,7 +40,10 @@ internal fun interface OperationStore {
     }
 
     /** Atomically persists verified checkpoint state and any accepted trailing Operations. */
-    fun restore(checkpoint: KernelCheckpoint, trailing: List<AuthenticatedOperation>) {
+    fun restore(
+        checkpoint: KernelCheckpoint,
+        trailing: List<AuthenticatedOperation>,
+    ) {
         if (trailing.isNotEmpty()) {
             appendBatch(trailing)
         }
@@ -177,7 +180,8 @@ internal class OperationKernel(
     private fun reject(
         signedEnvelope: ByteArray,
         disposition: IngestDisposition,
-    ): IngestDisposition = if (runCatching { store.reject(signedEnvelope, disposition) }.isSuccess) {
+    ): IngestDisposition =
+        if (runCatching { store.reject(signedEnvelope, disposition) }.isSuccess) {
             record(disposition)
             disposition
         } else {
@@ -361,16 +365,16 @@ internal class OperationKernel(
         StateSnapshot(
             feeds =
                 feeds.mapValuesTo(linkedMapOf()) { (_, feed) ->
-                FeedState(
-                    head = feed.head,
-                    headId = feed.headId,
-                    forkedAt = feed.forkedAt,
-                    accepted = feed.accepted.toMutableMap(),
-                    candidates = feed.candidates.toMutableMap(),
-                    pending = feed.pending.toMutableMap(),
-                    checkpointIds = feed.checkpointIds.toMutableMap(),
-                )
-            },
+                    FeedState(
+                        head = feed.head,
+                        headId = feed.headId,
+                        forkedAt = feed.forkedAt,
+                        accepted = feed.accepted.toMutableMap(),
+                        candidates = feed.candidates.toMutableMap(),
+                        pending = feed.pending.toMutableMap(),
+                        checkpointIds = feed.checkpointIds.toMutableMap(),
+                    )
+                },
             knownIds = knownIds.toMutableSet(),
             quarantined = quarantined.toMutableSet(),
             checkpointPreferences = checkpointPreferences.toMutableMap(),

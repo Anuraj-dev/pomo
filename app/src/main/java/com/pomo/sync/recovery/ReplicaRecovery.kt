@@ -15,6 +15,7 @@ internal data class CheckpointManifest(
     val packIds: List<String>,
     val blobIds: List<String>,
 )
+
 internal data class PackedOperation(
     val operationId: String,
     val feedKey: String,
@@ -56,6 +57,7 @@ internal data class RecoverySource(
     val checkpoint: CheckpointManifest?,
     val operations: List<PackedOperation>,
 )
+
 internal data class RehydrationPlan(
     val checkpoint: CheckpointManifest?,
     val operations: List<PackedOperation>,
@@ -65,7 +67,10 @@ internal data class RehydrationPlan(
 
 internal object Rehydrator {
     fun plan(sources: Collection<RecoverySource>): RehydrationPlan {
-        val checkpoints = sources.mapNotNull { it.checkpoint }.distinctBy { it.checkpointId }.onEach(CheckpointPolicy::validate)
+        val checkpoints =
+            sources.mapNotNull { it.checkpoint }
+                .distinctBy { it.checkpointId }
+                .onEach(CheckpointPolicy::validate)
         val maximal = checkpoints.filter { candidate ->
             checkpoints.none { other -> other !== candidate && dominates(other, candidate) }
         }
@@ -83,15 +88,19 @@ internal object Rehydrator {
             val sequences = values.map { it.sequence }.toSet()
             for (sequence in 1L..(values.maxOfOrNull { it.sequence } ?: 0)) if (sequence !in sequences) gaps += "$feed@$sequence"
         }
-        val provenance = operations.mapValues { (_, copies) ->
-            sources.filter { source ->
-                copies.any { copy -> source.operations.any { it.operationId == copy.operationId } }
-            }.mapTo(linkedSetOf()) { it.sourceId }
-        }
+        val provenance =
+            operations.mapValues { (_, copies) ->
+                sources.filter { source ->
+                    copies.any { copy -> source.operations.any { it.operationId == copy.operationId } }
+                }.mapTo(linkedSetOf()) { it.sourceId }
+            }
         return RehydrationPlan(checkpoint, selected, provenance, gaps)
     }
 
-    private fun dominates(left: CheckpointManifest, right: CheckpointManifest): Boolean {
+    private fun dominates(
+        left: CheckpointManifest,
+        right: CheckpointManifest,
+    ): Boolean {
         val rightHeads = right.frontier.associateBy { it.feedKey }
         return rightHeads.values.all { rightHead ->
             val leftHead = left.frontier.find { it.feedKey == rightHead.feedKey }

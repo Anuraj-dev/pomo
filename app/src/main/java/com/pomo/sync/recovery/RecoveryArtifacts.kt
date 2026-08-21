@@ -18,6 +18,7 @@ internal data class RecoveryArtifact(
     val nonce: ByteArray,
     val ciphertextAndTag: ByteArray,
 )
+
 internal data class RecoveryFileBody(
     val protectedAuthority: ByteArray,
     val recoveryGeneration: Long,
@@ -81,7 +82,10 @@ internal object RecoveryArtifactCodec {
         return seal(RecoveryArtifactKind.DATA_ARCHIVE, canonicalArchive, passphrase, random)
     }
 
-    fun validateArchiveManifest(manifest: RecoveryArchiveManifest, authorityGrantRequested: Boolean) {
+    fun validateArchiveManifest(
+        manifest: RecoveryArchiveManifest,
+        authorityGrantRequested: Boolean,
+    ) {
         require(manifest.archiveId.isNotBlank() && manifest.recoveryGeneration >= 0)
         require(manifest.checkpointIds.isNotEmpty())
         require(
@@ -94,7 +98,10 @@ internal object RecoveryArtifactCodec {
         }
     }
 
-    fun open(artifact: RecoveryArtifact, passphrase: String): ByteArray {
+    fun open(
+        artifact: RecoveryArtifact,
+        passphrase: String,
+    ): ByteArray {
         val key = PomoCrypto.argon2id(passphrase, artifact.salt)
         return try {
             PomoCrypto.decryptAesGcm(

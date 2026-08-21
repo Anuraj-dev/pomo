@@ -45,6 +45,7 @@ internal data class MigrationVerification(
     val projectionRootsMatch: Boolean,
     val domainInvariantsHold: Boolean,
 )
+
 internal data class MigrationPrerequisites(
     val recoveryAnchorId: String?,
     val baselineCaughtUp: Boolean,
@@ -52,6 +53,7 @@ internal data class MigrationPrerequisites(
     val identitiesSelected: Boolean,
     val verification: MigrationVerification,
 )
+
 internal enum class MigrationPhase {
     INVENTORIED,
     PROPOSED,
@@ -59,6 +61,7 @@ internal enum class MigrationPhase {
     ACTIVATED,
     FAILED,
 }
+
 internal data class MigrationActivation(
     val journalId: String,
     val encryptedLegacyArchiveId: String,
@@ -66,7 +69,10 @@ internal data class MigrationActivation(
     val dualWriteRetired: Boolean,
 )
 
-internal fun requireIdentitySelection(sources: Collection<MigrationIdentity>, selectedMemberId: String?) {
+internal fun requireIdentitySelection(
+    sources: Collection<MigrationIdentity>,
+    selectedMemberId: String?,
+) {
     val members = sources.map { it.memberId }.toSet()
     val crews = sources.flatMap { it.crewIds }.toSet()
     require(members.size <= 1 || selectedMemberId in members) {
@@ -98,4 +104,6 @@ internal fun activateMigrationAtomically(
     return MigrationActivation(journalId, archiveId, MigrationPhase.ACTIVATED, dualWriteRetired = true)
 }
 
-internal const val POMO_BACKUP_V1_WARNING = "Legacy import only: pomo-backup v1 may contain sensitive identity and Crew data; it never activates sync authority."
+internal const val POMO_BACKUP_V1_WARNING =
+    "Legacy import only: pomo-backup v1 may contain sensitive identity and Crew data; " +
+        "it never activates sync authority."

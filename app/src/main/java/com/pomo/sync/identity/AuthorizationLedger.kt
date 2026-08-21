@@ -76,8 +76,9 @@ internal class AuthorizationLedger private constructor(
             projection.copy(
                 authorizationEpoch = fact.authorizationEpoch,
                 contentEpoch = fact.contentEpoch,
-                devices = projection.devices +
-                    (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
+                devices =
+                    projection.devices +
+                        (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
                 acceptedFactIds = projection.acceptedFactIds + factId,
             )
         return AuthorityDisposition.ACCEPTED
@@ -125,8 +126,9 @@ internal class AuthorizationLedger private constructor(
             projection.copy(
                 authorizationEpoch = fact.authorizationEpoch,
                 contentEpoch = fact.contentEpoch,
-                devices = projection.devices +
-                    (deviceId to device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)),
+                devices =
+                    projection.devices +
+                        (deviceId to device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)),
                 acceptedFactIds = projection.acceptedFactIds + factId,
             )
         return AuthorityDisposition.ACCEPTED
@@ -186,8 +188,9 @@ internal class AuthorizationLedger private constructor(
                 contentEpoch = fact.contentEpoch,
                 recoveryGeneration = fact.recoveryGeneration,
                 recoveryCertificate = recovery,
-                devices = retired +
-                    (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
+                devices =
+                    retired +
+                        (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
                 acceptedFactIds = projection.acceptedFactIds + factId,
             )
         return AuthorityDisposition.ACCEPTED
