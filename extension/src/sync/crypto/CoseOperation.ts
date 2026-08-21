@@ -33,7 +33,7 @@ function asBytes(value: CborValue, name: string): Uint8Array {
   return value;
 }
 
-function protectedHeaders(deviceId: Uint8Array, suite = POMO_SUITE_1, generation = POMO_SUITE_GENERATION_1): ReadonlyMap<CborKey, CborValue> {
+function protectedHeaders(deviceId: Uint8Array, suite: number = POMO_SUITE_1, generation: number = POMO_SUITE_GENERATION_1): ReadonlyMap<CborKey, CborValue> {
   if (deviceId.length !== 32) throw new Error("COSE Device ID must be 32 bytes");
   return new Map<CborKey, CborValue>([
     [HEADER_ALGORITHM, COSE_ALGORITHM],
@@ -50,7 +50,7 @@ function signatureStructure(protectedBytes: Uint8Array, payload: Uint8Array): Ui
   return encodeCanonicalCbor(["Signature1", protectedBytes, EXTERNAL_AAD, payload]);
 }
 
-export function coseProtectedHeaders(deviceId: Uint8Array, suite = POMO_SUITE_1, generation = POMO_SUITE_GENERATION_1): Uint8Array {
+export function coseProtectedHeaders(deviceId: Uint8Array, suite: number = POMO_SUITE_1, generation: number = POMO_SUITE_GENERATION_1): Uint8Array {
   return encodeCanonicalCbor(protectedHeaders(deviceId, suite, generation));
 }
 
