@@ -36,7 +36,7 @@ async function build() {
   for (const f of ["newtab.html", "popup.html", "sidepanel.html", "crew.html", "offscreen-webrtc.html"]) {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
-  for (const f of ["newtab.css", "popup.css", "sidepanel.css", "crew.css"]) {
+  for (const f of ["newtab.css", "popup.css", "sidepanel.css", "crew.css", "sync.css"]) {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
   cpSync(join(src, "shared", "tokens.css"), join(dist, "tokens.css"));

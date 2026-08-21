@@ -36,6 +36,7 @@ public fun SyncScreen(
     onResumeAdmission: () -> Unit,
     onResumeMigration: () -> Unit,
     onConfirmRecovery: () -> Unit,
+    onExportDiagnostics: () -> Unit,
 ) {
     LazyColumn(
         modifier =
@@ -129,6 +130,17 @@ public fun SyncScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = PomoTokens.colors.onSurfaceFaint,
             )
+        }
+        item {
+            SectionTitle("Diagnostics")
+            Text(
+                "Sanitized local evidence only. No implicit upload or centralized telemetry.",
+                color = PomoTokens.colors.onSurfaceMuted,
+            )
+            Spacer(Modifier.height(8.dp))
+            PomoButton(onClick = onExportDiagnostics, variant = PomoButtonVariant.Tonal) {
+                Text("Export diagnostics")
+            }
         }
     }
 }
