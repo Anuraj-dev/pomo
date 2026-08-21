@@ -203,6 +203,17 @@ describe("OperationKernel four-call seam", () => {
     expect(projection.value("focusDurationMinutes")).toBe("25");
   });
 
+  test("returns a detached authored operation snapshot", async () => {
+    const { kernel, projection } = harness();
+    const result = await kernel.author(request("25"));
+    if (result.status !== "AUTHORED") throw new Error("fixture authoring was blocked");
+
+    result.operation.payload.fill(0);
+    expect(projection.value("focusDurationMinutes")).toBe("25");
+    expect((await kernel.author(request("30"))).status).toBe("AUTHORED");
+    expect(projection.value("focusDurationMinutes")).toBe("30");
+  });
+
   test("serializes overlapping author calls per feed before assigning positions", async () => {
     const { kernel } = harness();
     const [first, second] = await Promise.all([

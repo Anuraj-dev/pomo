@@ -61,6 +61,7 @@ describe("shared Operation corpus", () => {
     expect(() => canonicalUnsignedOperation({ ...operationFromFixture(), suite: 2 })).toThrow(/unsupported/);
     expect(() => canonicalUnsignedOperation({ ...operationFromFixture(), suiteGeneration: 2 })).toThrow(/unsupported/);
     expect(() => canonicalUnsignedOperation({ ...operationFromFixture(), payloadSchema: 2 })).toThrow(/payload schema/);
+    expect(() => canonicalUnsignedOperation({ ...operationFromFixture(), sequence: 2, previousHash: null })).toThrow(/feed-link/);
   });
 
   test("enforces preference text bounds in UTF-8 bytes", () => {

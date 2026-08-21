@@ -136,7 +136,7 @@ export class OperationKernel {
       }
       const disposition = await this.#ingestAuthenticated(authenticated, true);
       if (disposition === "REJECTED_INVALID") throw new Error("locally authored Operation failed ingestion");
-      return { status: "AUTHORED", operation: authenticated, disposition };
+      return { status: "AUTHORED", operation: cloneAuthenticatedOperation(authenticated), disposition };
     } catch {
       return { status: "BLOCKED_PREREQUISITE", missing: new Set(["AUTHORING_COMMIT"]) };
     }
@@ -657,6 +657,19 @@ export class OperationKernel {
     if (ordered.length !== accepted.length) throw new Error("accepted Operation dependency cycle");
     return ordered;
   }
+}
+
+function cloneAuthenticatedOperation(operation: AuthenticatedOperation): AuthenticatedOperation {
+  return {
+    unsigned: {
+      ...operation.unsigned,
+      frontier: operation.unsigned.frontier.map((entry) => ({ ...entry })),
+    },
+    payload: operation.payload.slice(),
+    canonicalUnsigned: operation.canonicalUnsigned.slice(),
+    operationId: operation.operationId,
+    signedEnvelope: operation.signedEnvelope.slice(),
+  };
 }
 
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {

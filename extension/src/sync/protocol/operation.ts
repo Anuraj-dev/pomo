@@ -43,6 +43,9 @@ export function validateUnsignedOperation(operation: UnsignedOperation): void {
   requireHex(operation.incarnationId, INCARNATION_BYTES, "incarnationId");
   requireUint(operation.sequence, "sequence");
   if (operation.sequence < 1) throw new Error("sequence must start at one");
+  if ((operation.sequence === 1) !== (operation.previousHash === null)) {
+    throw new Error("sequence and previousHash feed-link invariant violated");
+  }
   if (operation.previousHash !== null) requireHex(operation.previousHash, HASH_BYTES, "previousHash");
   requireUint(operation.authorizationEpoch, "authorizationEpoch");
   requireUint(operation.payloadSchema, "payloadSchema");
