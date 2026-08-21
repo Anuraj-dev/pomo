@@ -281,8 +281,9 @@ internal class RoomOperationStore(
         val durableHead = dao.head(incoming.deviceId, incoming.incarnationId)
         val effectiveForkAt = minOf(durableHead?.forkedAt ?: incoming.sequence, incoming.sequence)
         dao.quarantineTail(incoming.deviceId, incoming.incarnationId, effectiveForkAt)
+        val checkpointOperationCount = dao.checkpointOperationCount()
         dao.deleteCheckpointTail(incoming.deviceId, incoming.incarnationId, effectiveForkAt)
-        if (dao.checkpointOperationCount() > 0) dao.clearCheckpointProjection()
+        if (dao.checkpointOperationCount() < checkpointOperationCount) dao.clearCheckpointProjection()
         faultInjector.at(SyncCommitBoundary.AFTER_QUARANTINE)
         val prefixSequence = minOf(durableHead?.sequence ?: 0, effectiveForkAt - 1)
         val prefix =
@@ -320,7 +321,10 @@ internal class RoomOperationStore(
                 ),
             )
         }
-        causalMaterializationOrder(dao.acceptedOperations()).forEach { operation ->
+        val checkpointOperationIds = dao.checkpointOperationIds().toSet()
+        causalMaterializationOrder(dao.acceptedOperations().filterNot { operation ->
+            operation.operationId in checkpointOperationIds
+        }).forEach { operation ->
             dao.upsertProjection(
                 SyncPreferenceProjectionEntity(
                     operation.preferenceKey,

@@ -92,6 +92,9 @@ internal interface SyncDao {
     @Query("SELECT COUNT(*) FROM sync_checkpoint_operations")
     fun checkpointOperationCount(): Int
 
+    @Query("SELECT operationId FROM sync_checkpoint_operations")
+    fun checkpointOperationIds(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertCheckpointProjection(projection: SyncCheckpointProjectionEntity)
 

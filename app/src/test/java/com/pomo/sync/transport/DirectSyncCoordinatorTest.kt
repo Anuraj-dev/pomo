@@ -22,7 +22,13 @@ public class DirectSyncCoordinatorTest {
         )
         coordinator.acknowledge(DurablePeerAck("peer", mapOf("feed" to DurablePeerFrontier(256, "wrong-256")), true))
         assertTrue("op-256" in coordinator.pendingOperationIds())
-        coordinator.acknowledge(DurablePeerAck("peer", mapOf("feed" to DurablePeerFrontier(256, "op-256")), true))
+        coordinator.acknowledge(
+            DurablePeerAck(
+                "peer",
+                mapOf("feed" to DurablePeerFrontier(256, "op-256", (1..256).map { "op-$it" }.toSet())),
+                true,
+            ),
+        )
         coordinator.disconnected()
         coordinator.connected()
         assertEquals(44, coordinator.nextBatch().size)

@@ -20,7 +20,10 @@ public class CompatibilityTest {
     public fun readerFirstActivationNeedsIndependentConfirmationAndQuarantinesConcurrency() {
         val proposed = GenerationActivation(2, "frontier", setOf("full"), "full", null, false, emptySet())
         assertEquals(ActivationDecision.PROPOSED, evaluateActivation(proposed, setOf(2)))
-        assertEquals(ActivationDecision.CONFIRMED, evaluateActivation(proposed.copy(confirmerDeviceId = "other"), setOf(2)))
+        assertEquals(
+            ActivationDecision.CONFIRMED,
+            evaluateActivation(proposed.copy(readerReadyDeviceIds = setOf("full", "other"), confirmerDeviceId = "other"), setOf(2)),
+        )
         assertEquals(ActivationDecision.QUARANTINED_CONCURRENT, evaluateActivation(proposed, setOf(2, 3)))
         assertTrue(runCatching { evaluateActivation(proposed.copy(readerReadyDeviceIds = emptySet()), setOf(2)) }.isFailure)
     }
