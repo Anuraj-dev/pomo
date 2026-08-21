@@ -105,12 +105,10 @@ internal object Rehydrator {
         val rightHeads = right.frontier.associateBy { it.feedKey }
         return rightHeads.values.all { rightHead ->
             val leftHead = left.frontier.find { it.feedKey == rightHead.feedKey }
-            leftHead != null &&
-                (leftHead.sequence > rightHead.sequence ||
-                    (
-                        leftHead.sequence == rightHead.sequence &&
-                            leftHead.operationId == rightHead.operationId
-                        ))
+            leftHead?.let { candidate ->
+                candidate.sequence > rightHead.sequence ||
+                    candidate.sequence == rightHead.sequence && candidate.operationId == rightHead.operationId
+            } == true
         }
     }
 }
@@ -137,5 +135,4 @@ internal fun integrityDisposition(failure: IntegrityFailure): SafeModeState =
 internal fun quarantineThresholdExceeded(
     quarantined: Int,
     suspendedFeeds: Int,
-): Boolean =
-    quarantined > 1_000 || suspendedFeeds > 16
+): Boolean = quarantined > 1_000 || suspendedFeeds > 16
