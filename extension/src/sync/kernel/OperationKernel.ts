@@ -363,8 +363,18 @@ export class OperationKernel {
     this.#uncommittedSnapshot = snapshot;
     if (!feedExisted) this.#feeds.set(key, feed);
     this.#knownIds.add(incoming.operationId);
-    this.#quarantineFork(feed, incoming.unsigned.sequence, conflictingId, incoming);
-    const reclassifications = this.#quarantineUnavailableDependents();
+    const transitioned = new Set<string>();
+    const sameFeedReclassifications = this.#quarantineFork(
+      feed,
+      incoming.unsigned.sequence,
+      conflictingId,
+      incoming,
+      transitioned,
+    );
+    const reclassifications = [
+      ...sameFeedReclassifications,
+      ...this.#quarantineUnavailableDependents(transitioned),
+    ];
     let activateMaterialization: () => void;
     try {
       activateMaterialization = this.materializer.prepareReplace(
@@ -528,9 +538,8 @@ export class OperationKernel {
     return true;
   }
 
-  #quarantineUnavailableDependents(): OperationJournalEntry[] {
+  #quarantineUnavailableDependents(transitioned = new Set<string>()): OperationJournalEntry[] {
     const transitions: OperationJournalEntry[] = [];
-    const transitioned = new Set<string>();
     while (true) {
       const accepted = [...this.#feeds.values()].flatMap((feed) => [...feed.accepted.values()]);
       const acceptedById = new Map(accepted.map((operation) => [operation.operationId, operation]));
@@ -580,7 +589,13 @@ export class OperationKernel {
     feed.headHash = feed.accepted.get(feed.head)?.operationId ?? feed.checkpointIds.get(feed.head) ?? null;
   }
 
-  #quarantineFork(feed: FeedState, sequence: number, existingId: string, incoming: AuthenticatedOperation): void {
+  #quarantineFork(
+    feed: FeedState,
+    sequence: number,
+    existingId: string,
+    incoming: AuthenticatedOperation,
+    transitioned: Set<string>,
+  ): OperationJournalEntry[] {
     feed.forkedAt = feed.forkedAt === null ? sequence : Math.min(feed.forkedAt, sequence);
     this.#quarantined.add(existingId);
     this.#quarantined.add(incoming.operationId);
@@ -591,10 +606,23 @@ export class OperationKernel {
       invalidatedCheckpoint = true;
     }
     if (invalidatedCheckpoint) this.#checkpointPreferences.clear();
-    for (const [position, operation] of feed.accepted) if (position >= feed.forkedAt) { feed.accepted.delete(position); this.#quarantined.add(operation.operationId); }
-    for (const [position, operation] of feed.pending) if (position >= feed.forkedAt) { feed.pending.delete(position); this.#quarantined.add(operation.operationId); }
+    const transitions: OperationJournalEntry[] = [];
+    for (const [position, operation] of feed.candidates) if (position >= feed.forkedAt) {
+      this.#quarantined.add(operation.operationId);
+      transitioned.add(operation.operationId);
+      transitions.push({ operation, disposition: "QUARANTINED_FORK", localAuthor: false });
+    }
+    for (const [position, operation] of feed.accepted) if (position >= feed.forkedAt) {
+      feed.accepted.delete(position);
+      this.#quarantined.add(operation.operationId);
+    }
+    for (const [position, operation] of feed.pending) if (position >= feed.forkedAt) {
+      feed.pending.delete(position);
+      this.#quarantined.add(operation.operationId);
+    }
     feed.head = Math.min(feed.head, feed.forkedAt - 1);
     feed.headHash = feed.accepted.get(feed.head)?.operationId ?? feed.checkpointIds.get(feed.head) ?? null;
+    return transitions;
   }
 
   #checkpointPreferenceEntries(): readonly { readonly key: string; readonly value: string }[] {

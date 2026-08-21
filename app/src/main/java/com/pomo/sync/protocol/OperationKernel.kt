@@ -103,6 +103,7 @@ internal class OperationKernel(
         if (runCatching { validateAuthenticated(signedEnvelope, authenticated) }.isFailure) {
             return IngestDisposition.REJECTED_INVALID
         }
+        if (authenticated.operationId in knownIds) return IngestDisposition.DUPLICATE
         if (runCatching { store.append(authenticated) }.isFailure) return IngestDisposition.REJECTED_INVALID
         return ingestAuthenticated(authenticated)
     }

@@ -9,6 +9,8 @@ import java.security.MessageDigest
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Signature
+import java.security.interfaces.ECKey
+import java.security.spec.ECFieldFp
 import java.text.Normalizer
 import javax.crypto.Cipher
 import javax.crypto.Mac
@@ -24,6 +26,27 @@ internal object PomoCrypto {
     private val p256Order: BigInteger =
         BigInteger(
             "ffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551",
+            16,
+        )
+    private val p256Prime =
+        BigInteger(
+            "ffffffff00000001000000000000000000000000ffffffffffffffffffffffff",
+            16,
+        )
+    private val p256A = p256Prime.subtract(BigInteger.valueOf(3))
+    private val p256B =
+        BigInteger(
+            "5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b",
+            16,
+        )
+    private val p256GeneratorX =
+        BigInteger(
+            "6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296",
+            16,
+        )
+    private val p256GeneratorY =
+        BigInteger(
+            "4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5",
             16,
         )
     private val p256HalfOrder: BigInteger = p256Order.shiftRight(1)
@@ -103,6 +126,7 @@ internal object PomoCrypto {
         privateKey: PrivateKey,
         message: ByteArray,
     ): ByteArray {
+        requireP256Key(privateKey)
         val signer = Signature.getInstance("SHA256withECDSA")
         signer.initSign(privateKey)
         signer.update(message)
@@ -116,6 +140,7 @@ internal object PomoCrypto {
         message: ByteArray,
         rawSignature: ByteArray,
     ) {
+        requireP256Key(publicKey)
         require(rawSignature.size == PomoSuite.RAW_P256_SIGNATURE_BYTES) { "ESP256 signature must be 64 bytes" }
         val r = BigInteger(1, rawSignature.copyOfRange(0, 32))
         val s = BigInteger(1, rawSignature.copyOfRange(32, 64))
@@ -125,6 +150,22 @@ internal object PomoCrypto {
         verifier.initVerify(publicKey)
         verifier.update(message)
         require(verifier.verify(encodeDerSignature(r, s))) { "Invalid ESP256 signature" }
+    }
+
+    private fun requireP256Key(key: Any) {
+        val parameters = (key as? ECKey)?.params ?: error("ESP256 requires an EC key")
+        val field =
+            parameters.curve.field as? ECFieldFp
+                ?: error("ESP256 requires a prime-field P-256 key")
+        require(
+            field.p == p256Prime &&
+                parameters.curve.a == p256A &&
+                parameters.curve.b == p256B &&
+                parameters.generator.affineX == p256GeneratorX &&
+                parameters.generator.affineY == p256GeneratorY &&
+                parameters.order == p256Order &&
+                parameters.cofactor == 1,
+        ) { "ESP256 requires secp256r1" }
     }
 
     fun argon2id(

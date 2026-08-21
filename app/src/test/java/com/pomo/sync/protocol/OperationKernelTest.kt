@@ -26,6 +26,7 @@ public class OperationKernelTest {
         assertEquals(IngestDisposition.ACCEPTED, authored.disposition)
         assertEquals(1, stored.size)
         assertEquals(IngestDisposition.DUPLICATE, kernel.ingest(authored.value.signedEnvelope))
+        assertEquals(1, stored.size)
         assertEquals("bell", kernel.materializedPreference("timer.sound"))
         assertEquals(1, kernel.summarize().accepted)
     }

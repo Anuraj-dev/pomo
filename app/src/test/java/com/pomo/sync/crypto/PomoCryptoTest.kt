@@ -65,6 +65,17 @@ public class PomoCryptoTest {
     }
 
     @Test
+    public fun rejectsNonP256EcKeysForEsp256() {
+        val generator = KeyPairGenerator.getInstance("EC")
+        generator.initialize(ECGenParameterSpec("secp384r1"))
+        val pair = generator.generateKeyPair()
+        val message = "message".toByteArray()
+
+        assertThrowsAny { PomoCrypto.signP256LowS(pair.private, message) }
+        assertThrowsAny { PomoCrypto.verifyP256LowS(pair.public, message, ByteArray(64)) }
+    }
+
+    @Test
     public fun recoveryArgon2RejectsInvalidPassphraseTextBeforeDerivation() {
         val salt = ByteArray(16)
 
