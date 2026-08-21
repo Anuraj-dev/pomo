@@ -105,9 +105,31 @@ internal class OperationKernel(
         if (runCatching { validateAuthenticated(signedEnvelope, authenticated) }.isFailure) {
             return IngestDisposition.REJECTED_INVALID
         }
+        if (authenticated.operation.suite != PomoSuite.ID ||
+            authenticated.operation.suiteGeneration != PomoSuite.INITIAL_GENERATION
+        ) {
+            return IngestDisposition.REJECTED_INVALID
+        }
         if (authenticated.operationId in knownIds) return IngestDisposition.DUPLICATE
+        if (!isIngestible(authenticated)) return IngestDisposition.REJECTED_INVALID
         if (runCatching { store.append(authenticated) }.isFailure) return IngestDisposition.REJECTED_INVALID
         return ingestAuthenticated(authenticated)
+    }
+
+    private fun isIngestible(authenticated: AuthenticatedOperation): Boolean {
+        val operation = authenticated.operation
+        val key = feedKey(operation.deviceId, operation.incarnationId)
+        val feed = feeds[key] ?: FeedState()
+        val checkpointId = feed.checkpointIds[operation.sequence]
+        val existing = feed.candidates[operation.sequence]
+        if ((checkpointId != null && checkpointId != authenticated.operationId) ||
+            (existing != null && existing.operationId != authenticated.operationId)
+        ) {
+            return true
+        }
+        if (feed.forkedAt?.let { operation.sequence >= it } == true) return true
+        if (operation.sequence == feed.head + 1 && operation.previousOperationId != feed.headId) return false
+        return operation.sequence > feed.head
     }
 
     private fun ingestAuthenticated(authenticated: AuthenticatedOperation): IngestDisposition {

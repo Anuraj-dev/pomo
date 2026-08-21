@@ -41,6 +41,20 @@ public class OperationKernelTest {
     }
 
     @Test
+    public fun rejectedFeedContinuityDoesNotEnterDurableStore() {
+        val stored = mutableListOf<AuthenticatedOperation>()
+        val kernel = kernel(OperationStore { operations -> stored += operations })
+        val firstPayload = payload("bell")
+        val first = authenticated(operation(1, null, firstPayload), firstPayload)
+        val invalidPayload = payload("chime")
+        val invalid = authenticated(operation(2, id(9), invalidPayload), invalidPayload)
+
+        assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(first.signedEnvelope))
+        assertEquals(IngestDisposition.REJECTED_INVALID, kernel.ingest(invalid.signedEnvelope))
+        assertEquals(listOf(first.operationId), stored.map { it.operationId })
+    }
+
+    @Test
     public fun quarantinedForkRewindsAndRematerializes() {
         val bell = payload("bell")
         val kernel = kernel()
