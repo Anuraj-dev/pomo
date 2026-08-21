@@ -336,7 +336,7 @@ describe("OperationKernel four-call seam", () => {
       .filter(({ disposition }) => disposition === "QUARANTINED_FORK")
       .map(({ id }) => id);
     expect(quarantinedIds).toContain(first.operation.operationId);
-    expect(quarantinedIds).toContain(bytesToHex(conflicting));
+    expect(quarantinedIds).toContain(new TextDecoder().decode(conflicting));
     expect(kernel.summarize()).toMatchObject({ accepted: 0, pending: 0, quarantined: 2 });
     expect(projection.value("focusDurationMinutes")).toBeUndefined();
   });
