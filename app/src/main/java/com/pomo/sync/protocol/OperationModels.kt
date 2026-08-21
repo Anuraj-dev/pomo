@@ -148,11 +148,18 @@ internal enum class IngestDisposition {
     PENDING_CAUSAL,
     QUARANTINED_FORK,
     REJECTED_INVALID,
+    REJECTED_UNSUPPORTED_SUITE,
 }
 
 internal data class OperationReclassification(
     val operation: AuthenticatedOperation,
     val disposition: IngestDisposition,
+)
+
+internal data class OperationCommit(
+    val operation: AuthenticatedOperation,
+    val disposition: IngestDisposition,
+    val localAuthor: Boolean,
 )
 
 internal data class KernelSummary(

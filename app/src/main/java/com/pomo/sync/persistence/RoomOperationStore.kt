@@ -4,7 +4,7 @@ import com.pomo.db.AppDatabase
 import com.pomo.sync.protocol.AuthenticatedOperation
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.OperationCodec
-import com.pomo.sync.protocol.OperationReclassification
+import com.pomo.sync.protocol.OperationCommit
 import com.pomo.sync.protocol.OperationStore
 import com.pomo.sync.protocol.PreferenceValue
 
@@ -39,20 +39,18 @@ internal class RoomOperationStore(
 ) : OperationStore {
     private val dao: SyncDao = database.syncDao()
 
-    override fun commit(
-        operation: AuthenticatedOperation,
-        disposition: IngestDisposition,
-        localAuthor: Boolean,
-        reclassifications: List<OperationReclassification>,
-    ) {
+    override fun commitBatch(commits: List<OperationCommit>) {
         database.runInTransaction {
-            commitInTransaction(operation, disposition, localAuthor, transitionPending = false)
-            reclassifications.forEach { transition ->
+            commits.forEach { commit ->
+                val existing = dao.operation(commit.operation.operationId.toString())
+                val transitionPending =
+                    existing?.disposition == IngestDisposition.PENDING_GAP.name ||
+                        existing?.disposition == IngestDisposition.PENDING_CAUSAL.name
                 commitInTransaction(
-                    transition.operation,
-                    transition.disposition,
-                    localAuthor = false,
-                    transitionPending = true,
+                    commit.operation,
+                    commit.disposition,
+                    commit.localAuthor,
+                    transitionPending = transitionPending,
                 )
             }
         }

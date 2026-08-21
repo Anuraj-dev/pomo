@@ -2,6 +2,7 @@ import { canonicalUnsignedOperation, assertOperationIdentity, compareBytes, oper
 import { hexToBytes } from "../../shared/hex";
 import {
   OperationKind,
+  OPERATION_DISPOSITIONS,
   POMO_SUITE_1,
   POMO_SUITE_GENERATION_1,
   type AuthenticatedOperation,
@@ -9,6 +10,7 @@ import {
   type FrontierEntry,
   type KernelSummary,
   type OperationDisposition,
+  type RejectedDisposition,
   type UnsignedOperation,
   type VerifiedCheckpoint,
 } from "../protocol/types";
@@ -23,6 +25,7 @@ export interface OperationSigner {
 export interface OperationJournal {
   /** Implementations must commit every entry or none of them. */
   recordBatch(entries: readonly OperationJournalEntry[]): Promise<void>;
+  recordRejected?(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void>;
 }
 
 export interface OperationJournalEntry {
@@ -83,6 +86,9 @@ export class OperationKernel {
   readonly #knownIds = new Set<string>();
   readonly #quarantined = new Set<string>();
   readonly #checkpointPreferences = new Map<string, string>();
+  readonly #dispositionCounts = new Map<OperationDisposition, number>(
+    OPERATION_DISPOSITIONS.map((disposition) => [disposition, 0] as const),
+  );
   #mutationTail: Promise<void> = Promise.resolve();
   #uncommittedSnapshot: KernelStateSnapshot | null = null;
 
@@ -154,8 +160,22 @@ export class OperationKernel {
   async #ingest(signedEnvelope: Uint8Array, localAuthor: boolean): Promise<OperationDisposition> {
     let operation: AuthenticatedOperation;
     try {
-      operation = await this.#authenticate(signedEnvelope);
+      operation = await this.verifier.verify(signedEnvelope);
+      if (!equalBytes(operation.signedEnvelope, signedEnvelope)) throw new Error("verifier changed signed envelope");
     } catch {
+      await this.#recordRejected(signedEnvelope, "REJECTED_INVALID");
+      return "REJECTED_INVALID";
+    }
+    if (operation.unsigned.suite !== POMO_SUITE_1 ||
+        operation.unsigned.suiteGeneration !== POMO_SUITE_GENERATION_1) {
+      await this.#recordRejected(signedEnvelope, "REJECTED_UNSUPPORTED_SUITE");
+      return "REJECTED_UNSUPPORTED_SUITE";
+    }
+    try {
+      await assertOperationIdentity(operation.unsigned, operation.payload, operation.canonicalUnsigned, operation.operationId);
+      this.materializer.validate(operation);
+    } catch {
+      await this.#recordRejected(signedEnvelope, "REJECTED_INVALID");
       return "REJECTED_INVALID";
     }
     return this.#ingestAuthenticated(operation, localAuthor);
@@ -171,7 +191,7 @@ export class OperationKernel {
 
   async #ingestAuthenticated(operation: AuthenticatedOperation, localAuthor: boolean): Promise<OperationDisposition> {
     if (this.#knownIds.has(operation.operationId)) {
-      await this.journal.recordBatch([{ operation, disposition: "DUPLICATE", localAuthor }]);
+      await this.#recordBatch([{ operation, disposition: "DUPLICATE", localAuthor }]);
       return "DUPLICATE";
     }
     const key = this.#feedKey(operation.unsigned);
@@ -189,27 +209,27 @@ export class OperationKernel {
     let disposition: OperationDisposition;
     if (feed.forkedAt !== null && operation.unsigned.sequence >= feed.forkedAt) {
       disposition = "QUARANTINED_FORK";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       this.#quarantined.add(operation.operationId);
     } else if (operation.unsigned.sequence <= feed.head) {
       disposition = "REJECTED_INVALID";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
     } else if (operation.unsigned.sequence !== feed.head + 1) {
       disposition = "PENDING_GAP";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       feed.pending.set(operation.unsigned.sequence, operation);
     } else if (operation.unsigned.previousHash !== feed.headHash) {
       disposition = "REJECTED_INVALID";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
     } else if (!this.#causalReady(operation)) {
       disposition = "PENDING_CAUSAL";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
@@ -229,7 +249,7 @@ export class OperationKernel {
           this.#checkpointPreferenceEntries(),
           this.#acceptedInMaterializationOrder(),
         );
-        await this.journal.recordBatch([{ operation, disposition, localAuthor }, ...transitions]);
+        await this.#recordBatch([{ operation, disposition, localAuthor }, ...transitions]);
       } catch (error) {
         this.#restoreState(snapshot);
         this.#uncommittedSnapshot = null;
@@ -260,7 +280,16 @@ export class OperationKernel {
       }
       if (feed.forkedAt !== null) forks.add(`${key}@${feed.forkedAt}`);
     }
-    return { heads, gaps, causalWaits, forks, accepted, pending, quarantined: visibleQuarantined.size };
+    return {
+      heads,
+      gaps,
+      causalWaits,
+      forks,
+      accepted,
+      pending,
+      quarantined: visibleQuarantined.size,
+      dispositionCounts: new Map(this.#dispositionCounts),
+    };
   }
 
   restore(checkpoint: VerifiedCheckpoint, trailing: readonly Uint8Array[]): Promise<"RESTORED" | "REJECTED_CHECKPOINT"> {
@@ -319,7 +348,7 @@ export class OperationKernel {
     }
     try {
       if (trailingOperations.length > 0) {
-        await this.journal.recordBatch(trailingOperations.map((operation) => ({
+        await this.#recordBatch(trailingOperations.map((operation) => ({
           operation,
           disposition: "ACCEPTED" as const,
           localAuthor: false,
@@ -338,6 +367,20 @@ export class OperationKernel {
     this.#checkpointPreferences.clear();
     for (const [key, value] of staged.#checkpointPreferences) this.#checkpointPreferences.set(key, value);
     return "RESTORED";
+  }
+
+  async #recordBatch(entries: readonly OperationJournalEntry[]): Promise<void> {
+    await this.journal.recordBatch(entries);
+    for (const entry of entries) this.#recordDisposition(entry.disposition);
+  }
+
+  async #recordRejected(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void> {
+    await this.journal.recordRejected?.(rawWire.slice(), disposition);
+    this.#recordDisposition(disposition);
+  }
+
+  #recordDisposition(disposition: OperationDisposition): void {
+    this.#dispositionCounts.set(disposition, this.#dispositionCounts.get(disposition)! + 1);
   }
 
   #cloneFeed(feed: FeedState): FeedState {
@@ -388,7 +431,7 @@ export class OperationKernel {
         this.#checkpointPreferenceEntries(),
         this.#acceptedInMaterializationOrder(),
       );
-      await this.journal.recordBatch([
+      await this.#recordBatch([
         { operation: incoming, disposition: "QUARANTINED_FORK", localAuthor },
         ...reclassifications,
       ]);
