@@ -93,7 +93,7 @@ internal object RecoveryArtifactCodec {
                 manifest.checkpointIds.size + manifest.packIds.size + manifest.blobIds.size,
         )
         require(manifest.manifestDigest.size == 32)
-        require(!authorityGrantRequested || !manifest.credentialProof.isNullOrEmpty()) {
+        require(!authorityGrantRequested || manifest.credentialProof?.isNotEmpty() == true) {
             "Archive data never grants Recovery authority without credentials"
         }
     }
