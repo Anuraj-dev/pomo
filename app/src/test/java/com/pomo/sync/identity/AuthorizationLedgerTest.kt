@@ -160,11 +160,13 @@ public class AuthorizationLedgerTest {
     private fun epoch(value: Long): ContentEpochAdvance =
         ContentEpochAdvance(id((50 + value).toInt()), value, emptyList(), id(60), emptyList())
 
-    private fun certificate(seed: Int): DeviceCertificate =
-        DeviceCertificate(PomoSuite.ID, key(seed), key(seed + 1))
+    private fun certificate(seed: Int): DeviceCertificate {
+        return DeviceCertificate(PomoSuite.ID, key(seed), key(seed + 1))
+    }
 
-    private fun recovery(seed: Int): RecoveryCertificate =
-        RecoveryCertificate(PomoSuite.ID, key(seed), key(seed + 1))
+    private fun recovery(seed: Int): RecoveryCertificate {
+        return RecoveryCertificate(PomoSuite.ID, key(seed), key(seed + 1))
+    }
 
     private fun key(seed: Int): ByteArray = ByteArray(65) { index -> if (index == 0) 4 else seed.toByte() }
 

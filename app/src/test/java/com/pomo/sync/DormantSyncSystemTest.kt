@@ -11,7 +11,10 @@ public class DormantSyncSystemTest {
         var received: ByteArray? = null
         val system =
             DormantSyncSystem(
-                ingress = AuthenticatedOperationIngress { wire -> received = wire; "ACCEPTED" },
+                ingress = AuthenticatedOperationIngress { wire ->
+                    received = wire
+                    "ACCEPTED"
+                },
                 mode = SyncActivationMode(productionActivated = false, testArtifact = true),
             )
         system.startTestArtifact()

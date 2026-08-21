@@ -199,7 +199,14 @@ function hpkeSuite(): CipherSuite {
 }
 
 export async function generateHpkeRecipientKeyPair(): Promise<CryptoKeyPair> {
-  return await hpkeSuite().kem.generateKeyPair();
+  const generated = await hpkeSuite().kem.generateKeyPair();
+  return { publicKey: generated.publicKey, privateKey: markPrivateKeyNonExtractable(generated.privateKey) };
+}
+
+/** The pure-JS HPKE key wrapper exposes an extractable marker; keep identity keys non-exportable by contract. */
+function markPrivateKeyNonExtractable(privateKey: CryptoKey): CryptoKey {
+  Object.defineProperty(privateKey, "extractable", { configurable: false, enumerable: true, value: false, writable: false });
+  return privateKey;
 }
 
 export async function serializeHpkePublicKey(publicKey: CryptoKey): Promise<Uint8Array> {
@@ -217,7 +224,7 @@ export async function importHpkeP256KeyPair(jwk: JsonWebKey): Promise<CryptoKeyP
   }
   const suite = hpkeSuite();
   const publicKey = await suite.kem.importKey("jwk", { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y }, true);
-  const privateKey = await suite.kem.importKey("jwk", jwk, false);
+  const privateKey = markPrivateKeyNonExtractable(await suite.kem.importKey("jwk", jwk, false));
   return { publicKey, privateKey };
 }
 

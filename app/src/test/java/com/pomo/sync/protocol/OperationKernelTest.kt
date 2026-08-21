@@ -65,7 +65,10 @@ public class OperationKernelTest {
         assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(first.signedEnvelope))
         assertEquals(IngestDisposition.REJECTED_INVALID, kernel.ingest(invalid.signedEnvelope))
         assertEquals(listOf(IngestDisposition.ACCEPTED, IngestDisposition.REJECTED_INVALID), stored.map { it.disposition })
-        assertEquals(listOf(first.operationId), stored.filter { it.disposition == IngestDisposition.ACCEPTED }.map { it.operation.operationId })
+        assertEquals(
+            listOf(first.operationId),
+            stored.filter { it.disposition == IngestDisposition.ACCEPTED }.map { it.operation.operationId },
+        )
     }
 
     @Test

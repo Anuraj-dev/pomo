@@ -390,7 +390,7 @@ describe("dormant IndexedDB Device-feed persistence", () => {
     ]);
     const winner = [authored.operation, second, third, fourth]
       .sort((left, right) => left.operationId < right.operationId ? -1 : left.operationId > right.operationId ? 1 : 0)
-      .at(-1)!;
+      .at(0)!;
     expect(restarted.preferences).toEqual([projection(winner, values.get(winner.operationId)!)]);
     expect(visible.value("focusDurationMinutes")).toBe(values.get(winner.operationId));
 

@@ -45,8 +45,14 @@ public class HistoryMaterializerTest {
         val materializer = TagMaterializer(work.tagId)
         var state = mapOf(work.tagId to work, study.tagId to study)
         var default = study.tagId
-        (materializer.apply(state, study.copy(name = "Deep work"), default)).also { (next, selected) -> state = next; default = selected }
-        (materializer.apply(state, state.getValue(study.tagId).copy(archived = true), default)).also { (next, selected) -> state = next; default = selected }
+        (materializer.apply(state, study.copy(name = "Deep work"), default)).also { (next, selected) ->
+            state = next
+            default = selected
+        }
+        (materializer.apply(state, state.getValue(study.tagId).copy(archived = true), default)).also { (next, selected) ->
+            state = next
+            default = selected
+        }
         assertEquals(work.tagId, default)
         assertEquals("Deep work", state.getValue(study.tagId).name)
         assertTrue(DestructiveHistoryGuard.authorize(setOf("a"), emptySet()))
@@ -54,5 +60,14 @@ public class HistoryMaterializerTest {
     }
 
     private fun block(id: String, elapsed: Long, tagId: String, tagName: String): HistoryBlock =
-        HistoryBlock(id, "phase-$id", 1_755_734_400_000, elapsed, HistoryOutcome.COMPLETED, tagId, tagName, "2026-08-21")
+        HistoryBlock(
+            id,
+            "phase-$id",
+            1_755_734_400_000,
+            elapsed,
+            HistoryOutcome.COMPLETED,
+            tagId,
+            tagName,
+            "2026-08-21",
+        )
 }

@@ -571,7 +571,12 @@ describe("OperationKernel four-call seam", () => {
     expect(afterDrain).toMatchObject({ accepted: 1, pending: 0, quarantined: 0 });
 
     expect(await kernel.ingest(invalidSecond)).toBe("REJECTED_INVALID");
-    expect(kernel.summarize()).toEqual(afterDrain);
+    expect(kernel.summarize()).toMatchObject({
+      accepted: afterDrain.accepted,
+      pending: afterDrain.pending,
+      quarantined: afterDrain.quarantined,
+    });
+    expect(kernel.summarize().dispositionCounts.get("REJECTED_INVALID")).toBe(2);
   });
 
   test("rejects non-canonical checkpoint preference projections without changing active state", async () => {

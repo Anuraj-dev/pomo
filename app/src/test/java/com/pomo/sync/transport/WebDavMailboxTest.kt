@@ -26,11 +26,15 @@ public class WebDavMailboxTest {
     }
 
     private class MemoryMailbox(val objects: MutableMap<String, ByteArray> = linkedMapOf()) : ImmutableMailboxClient {
-        override fun createIfAbsent(objectId: String, bytes: ByteArray): Boolean {
+        override fun createIfAbsent(
+            objectId: String,
+            bytes: ByteArray,
+        ): Boolean {
             if (objectId in objects) return false
             objects[objectId] = bytes.copyOf()
             return true
         }
+
         override fun get(objectId: String): ByteArray? = objects[objectId]?.copyOf()
     }
 

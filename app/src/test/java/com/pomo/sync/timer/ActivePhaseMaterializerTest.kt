@@ -36,6 +36,12 @@ public class ActivePhaseMaterializerTest {
         assertTrue(ActivePhaseMaterializer.materialize(listOf(start, uncertain)).timeUncertain)
     }
 
-    private fun fact(id: String, action: TimerAction, parents: Set<String>, owner: String, claim: String): TimerFact =
+    private fun fact(
+        id: String,
+        action: TimerAction,
+        parents: Set<String>,
+        owner: String,
+        claim: String,
+    ): TimerFact =
         TimerFact(id, "phase-1", action, parents, owner, claim, plan, 0)
 }

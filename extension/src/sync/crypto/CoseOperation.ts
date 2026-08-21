@@ -1,6 +1,6 @@
 import { utf8ToBytes } from "../../shared/bytes";
 import { hexToBytes } from "../../shared/hex";
-import { assertOperationIdentity, decodeUnsignedOperation, decodeUnsignedOperationForVerification, operationId } from "../protocol/operation";
+import { assertOperationIdentity, assertOperationIdentityForVerification, decodeUnsignedOperation, decodeUnsignedOperationForVerification, operationId } from "../protocol/operation";
 import { CborTag, decodeCanonicalCbor, encodeCanonicalCbor, type CborKey, type CborValue } from "../protocol/cbor";
 import { POMO_SUITE_1, POMO_SUITE_GENERATION_1, type AuthenticatedOperation, type UnsignedOperation } from "../protocol/types";
 import { signP256LowS, verifyP256LowS } from "./PomoCrypto";
@@ -149,7 +149,7 @@ export class CoseOperationVerifier implements OperationVerifier {
       operationId: id,
       signedEnvelope: wire.slice(),
     };
-    await assertOperationIdentity(unsigned, payload, decoded.canonicalUnsigned, id);
+    await assertOperationIdentityForVerification(unsigned, payload, decoded.canonicalUnsigned, id);
     return authenticated;
   }
 }

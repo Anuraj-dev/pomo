@@ -357,11 +357,13 @@ export class IndexedDbOperationDao {
     accepted.sort(compareOperationIds);
     const winners = new Map<string, SyncPreferenceRow>();
     for (const operation of accepted) {
-      winners.set(operation.preferenceKey, {
-        key: operation.preferenceKey,
-        value: operation.preferenceValue,
-        operationId: operation.operationId,
-      });
+      if (!winners.has(operation.preferenceKey)) {
+        winners.set(operation.preferenceKey, {
+          key: operation.preferenceKey,
+          value: operation.preferenceValue,
+          operationId: operation.operationId,
+        });
+      }
     }
     const preferences = transaction.objectStore(SYNC_PREFERENCE_STORE);
     await req(preferences.clear());
