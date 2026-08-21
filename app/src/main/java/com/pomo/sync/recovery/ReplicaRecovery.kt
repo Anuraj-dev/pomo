@@ -71,9 +71,10 @@ internal object Rehydrator {
             sources.mapNotNull { it.checkpoint }
                 .distinctBy { it.checkpointId }
                 .onEach(CheckpointPolicy::validate)
-        val maximal = checkpoints.filter { candidate ->
-            checkpoints.none { other -> other !== candidate && dominates(other, candidate) }
-        }
+        val maximal =
+            checkpoints.filter { candidate ->
+                checkpoints.none { other -> other !== candidate && dominates(other, candidate) }
+            }
         require(maximal.size <= 1) { "recovery checkpoints are incomparable" }
         val checkpoint = maximal.singleOrNull()
         val operations = sources.flatMap { it.operations }.groupBy { it.operationId }
@@ -106,7 +107,10 @@ internal object Rehydrator {
             val leftHead = left.frontier.find { it.feedKey == rightHead.feedKey }
             leftHead != null &&
                 (leftHead.sequence > rightHead.sequence ||
-                    (leftHead.sequence == rightHead.sequence && leftHead.operationId == rightHead.operationId))
+                    (
+                        leftHead.sequence == rightHead.sequence &&
+                            leftHead.operationId == rightHead.operationId
+                        ))
         }
     }
 }
@@ -130,5 +134,8 @@ internal fun integrityDisposition(failure: IntegrityFailure): SafeModeState =
         IntegrityFailure.JOURNAL_CORRUPT, IntegrityFailure.DEVICE_KEY_MISSING -> SafeModeState(true, true, true, true)
     }
 
-internal fun quarantineThresholdExceeded(quarantined: Int, suspendedFeeds: Int): Boolean =
+internal fun quarantineThresholdExceeded(
+    quarantined: Int,
+    suspendedFeeds: Int,
+): Boolean =
     quarantined > 1_000 || suspendedFeeds > 16

@@ -33,7 +33,10 @@ internal data class UnknownAuthenticatedFact(
     val retainedForForwarding: Boolean = true,
 )
 
-internal fun compatibilityMode(profile: CompatibilityProfile, baseline: AuthoringBaseline): CompatibilityMode {
+internal fun compatibilityMode(
+    profile: CompatibilityProfile,
+    baseline: AuthoringBaseline,
+): CompatibilityMode {
     if (
         !profile.authenticated ||
         baseline.suiteGeneration !in profile.suiteGenerations ||
@@ -66,7 +69,10 @@ internal data class GenerationActivation(
     val explicitlyLimitedDeviceIds: Set<String>,
 )
 
-internal fun evaluateActivation(value: GenerationActivation, concurrentGenerations: Set<Long>): ActivationDecision {
+internal fun evaluateActivation(
+    value: GenerationActivation,
+    concurrentGenerations: Set<Long>,
+): ActivationDecision {
     require(value.frontierId.isNotBlank() && value.proposerDeviceId in value.readerReadyDeviceIds) {
         "reader support must ship before proposal"
     }
@@ -89,7 +95,10 @@ internal fun evaluateActivation(value: GenerationActivation, concurrentGeneratio
     }
 }
 
-internal fun oldBuildDataDisposition(isSynchronizedHistory: Boolean, laterIndependentData: Boolean): String =
+internal fun oldBuildDataDisposition(
+    isSynchronizedHistory: Boolean,
+    laterIndependentData: Boolean,
+): String =
     when {
         isSynchronizedHistory -> "READ_ONLY"
         laterIndependentData -> "EXPLICIT_IMPORT_REQUIRED"
