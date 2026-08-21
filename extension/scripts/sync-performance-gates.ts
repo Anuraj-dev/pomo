@@ -5,7 +5,8 @@ import { SharedPreferenceProjection, encodeSharedPreferenceFact } from "../src/s
 import type { AuthenticatedOperation } from "../src/sync/protocol/types";
 
 const now = (): number => performance.now();
-const BENCHMARK_BATCH_SIZE = 32;
+const BENCHMARK_OPERATION_COUNT = 10_000;
+const BENCHMARK_BATCH_SIZE = 256;
 const percentile = (values: readonly number[], fraction: number): number => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))]!;
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const memberId = "01".repeat(32);
@@ -33,7 +34,7 @@ const authoringProjection = new SharedPreferenceProjection();
 const authoringKernel = new OperationKernel(verifier, signer, journal, authoringProjection);
 const localSamples: number[] = [];
 const authored: AuthenticatedOperation[] = [];
-for (let index = 0; index < 1_000; index++) {
+for (let index = 0; index < BENCHMARK_OPERATION_COUNT; index++) {
   const start = now();
   const result = await authoringKernel.author(authorRequest(index));
   if (result.status !== "AUTHORED") throw new Error("benchmark authoring was blocked");
@@ -55,6 +56,7 @@ const backlogMs = now() - backlogStart; const throughput = backlog.length / (bac
 const checkpointStart = now(); replayProjection.prepareReplace([{ key: "checkpoint", value: "0" }], authored); const checkpointMs = now() - checkpointStart;
 const cachedStart = now(); parseSyncUiState(DORMANT_SYNC_UI_STATE); const cachedStatusMs = now() - cachedStart;
 const metrics = {
+  operationCount: backlog.length,
   localAuthoringP95Ms: percentile(localSamples, .95), localAuthoringP99Ms: percentile(localSamples, .99), backlogMs, throughputOperationsPerSecond: throughput,
   maximumEnvelopeBatch: BENCHMARK_BATCH_SIZE, maximumBatchBytes, incrementalMemoryCeilingBytes: 64 * 1024 * 1024, checkpointProjectionMs: checkpointMs,
   maximumBlockingSliceMs: blockingMaximumMs, timerFrameBudgetMs: 16.7, cachedStatusMs,

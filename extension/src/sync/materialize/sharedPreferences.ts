@@ -103,6 +103,17 @@ export class SharedPreferenceProjection {
       for (const [key, value] of staged) this.#values.set(key, value);
     };
   }
+
+  prepareAccepted(operations: readonly AuthenticatedOperation[]): () => void {
+    const updates = operations.map((operation) => {
+      this.validate(operation);
+      const fact = decodeSharedPreferenceFact(operation.payload);
+      return [fact.key, fact.value] as const;
+    });
+    return () => {
+      for (const [key, value] of updates) this.#values.set(key, value);
+    };
+  }
 }
 
 function compareUtf8(left: string, right: string): number {

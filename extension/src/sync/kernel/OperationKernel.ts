@@ -37,6 +37,8 @@ export interface OperationJournalEntry {
 
 export interface OperationMaterializer {
   validate(operation: AuthenticatedOperation): void;
+  /** Validate and stage accepted append-only Operations without rebuilding the full projection. */
+  prepareAccepted?(operations: readonly AuthenticatedOperation[]): () => void;
   /** Validate and stage without changing visible state; the returned activation must be synchronous and infallible. */
   prepareReplace(
     checkpointPreferences: readonly { readonly key: string; readonly value: string }[],
@@ -82,6 +84,24 @@ interface KernelStateSnapshot {
   readonly checkpointPreferences: Map<string, string>;
 }
 
+interface AppendFeedUndo {
+  readonly feed: FeedState;
+  readonly sequence: number;
+  readonly accepted: AuthenticatedOperation | undefined;
+  readonly pending: AuthenticatedOperation | undefined;
+  readonly candidate: AuthenticatedOperation | undefined;
+  readonly head: number;
+  readonly headHash: string | null;
+}
+
+interface AppendMutation {
+  readonly feedsCreated: FeedKey[];
+  readonly feedChanges: AppendFeedUndo[];
+  readonly feedChangeKeys: WeakMap<FeedState, Set<number>>;
+  readonly knownAdded: string[];
+  readonly knownRemoved: string[];
+}
+
 export class OperationKernel {
   readonly #feeds = new Map<FeedKey, FeedState>();
   readonly #knownIds = new Set<string>();
@@ -92,6 +112,7 @@ export class OperationKernel {
   );
   #mutationTail: Promise<void> = Promise.resolve();
   #uncommittedSnapshot: KernelStateSnapshot | null = null;
+  #appendMutation: AppendMutation | null = null;
 
   constructor(
     private readonly verifier: OperationVerifier,
@@ -237,32 +258,77 @@ export class OperationKernel {
       feed.pending.set(operation.unsigned.sequence, operation);
     } else {
       disposition = "ACCEPTED";
-      const snapshot = this.#captureState();
+      const appendMutation: AppendMutation | null = this.materializer.prepareAccepted === undefined ? null : {
+        feedsCreated: [], feedChanges: [], feedChangeKeys: new WeakMap(), knownAdded: [], knownRemoved: [],
+      } satisfies AppendMutation;
+      this.#appendMutation = appendMutation;
+      const snapshot = appendMutation === null ? this.#captureState() : null;
       this.#uncommittedSnapshot = snapshot;
-      if (existingFeed === undefined) this.#feeds.set(key, feed);
+      if (existingFeed === undefined) {
+        this.#feeds.set(key, feed);
+        appendMutation?.feedsCreated.push(key);
+      }
+      this.#recordAppendFeedChange(feed, operation.unsigned.sequence);
       this.#knownIds.add(operation.operationId);
+      appendMutation?.knownAdded.push(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       this.#accept(feed, operation);
       const transitions = this.#drainAll();
       let activateMaterialization: () => void;
       try {
-        activateMaterialization = this.materializer.prepareReplace(
+        const accepted = [operation, ...transitions.filter(({ disposition }) => disposition === "ACCEPTED").map(({ operation: acceptedOperation }) => acceptedOperation)];
+        activateMaterialization = this.materializer.prepareAccepted?.(accepted) ?? this.materializer.prepareReplace(
           this.#checkpointPreferenceEntries(),
           this.#acceptedInMaterializationOrder(),
         );
         await this.#recordBatch([{ operation, disposition, localAuthor }, ...transitions]);
       } catch (error) {
-        this.#restoreState(snapshot);
+        if (snapshot === null) this.#rollbackAppendMutation(appendMutation!);
+        else this.#restoreState(snapshot);
+        this.#appendMutation = null;
         this.#uncommittedSnapshot = null;
         throw error;
       }
       activateMaterialization();
+      this.#appendMutation = null;
       this.#uncommittedSnapshot = null;
     }
     return disposition;
   }
 
   summarize(): KernelSummary {
+    const mutation = this.#appendMutation;
+    if (mutation !== null) {
+      const currentChanges = mutation.feedChanges.map((change) => ({
+        ...change,
+        accepted: change.feed.accepted.get(change.sequence),
+        pending: change.feed.pending.get(change.sequence),
+        candidate: change.feed.candidates.get(change.sequence),
+        head: change.feed.head,
+        headHash: change.feed.headHash,
+      }));
+      const createdFeeds = mutation.feedsCreated.map((key) => [key, this.#feeds.get(key)!] as const);
+      this.#rollbackAppendMutation(mutation);
+      const summary = this.#summarizeCurrent();
+      for (const [key, feed] of createdFeeds) this.#feeds.set(key, feed);
+      for (const change of currentChanges) {
+        if (change.accepted === undefined) change.feed.accepted.delete(change.sequence);
+        else change.feed.accepted.set(change.sequence, change.accepted);
+        if (change.pending === undefined) change.feed.pending.delete(change.sequence);
+        else change.feed.pending.set(change.sequence, change.pending);
+        if (change.candidate === undefined) change.feed.candidates.delete(change.sequence);
+        else change.feed.candidates.set(change.sequence, change.candidate);
+        change.feed.head = change.head;
+        change.feed.headHash = change.headHash;
+      }
+      for (const id of mutation.knownAdded) this.#knownIds.add(id);
+      for (const id of mutation.knownRemoved) this.#knownIds.delete(id);
+      return summary;
+    }
+    return this.#summarizeCurrent();
+  }
+
+  #summarizeCurrent(): KernelSummary {
     const visibleFeeds = this.#uncommittedSnapshot?.feeds ?? this.#feeds;
     const visibleQuarantined = this.#uncommittedSnapshot?.quarantined ?? this.#quarantined;
     const heads = new Map<FeedKey, { sequence: number; headHash: string | null }>();
@@ -522,6 +588,7 @@ export class OperationKernel {
   }
 
   #accept(feed: FeedState, operation: AuthenticatedOperation): void {
+    this.#recordAppendFeedChange(feed, operation.unsigned.sequence);
     feed.pending.delete(operation.unsigned.sequence);
     feed.accepted.set(operation.unsigned.sequence, operation);
     feed.head = operation.unsigned.sequence;
@@ -544,12 +611,15 @@ export class OperationKernel {
       for (const feed of this.#feeds.values()) {
         const next = feed.pending.get(feed.head + 1);
         if (next !== undefined && next.unsigned.previousHash !== feed.headHash) {
+          this.#recordAppendFeedChange(feed, next.unsigned.sequence);
           feed.pending.delete(next.unsigned.sequence);
           feed.candidates.delete(next.unsigned.sequence);
           this.#knownIds.delete(next.operationId);
+          this.#appendMutation?.knownRemoved.push(next.operationId);
           transitions.push({ operation: next, disposition: "REJECTED_INVALID", localAuthor: false });
           advanced = true;
         } else if (next !== undefined && this.#causalReady(next)) {
+          this.#recordAppendFeedChange(feed, next.unsigned.sequence);
           this.#accept(feed, next);
           transitions.push({ operation: next, disposition: "ACCEPTED", localAuthor: false });
           advanced = true;
@@ -557,6 +627,40 @@ export class OperationKernel {
       }
     }
     return transitions;
+  }
+
+  #recordAppendFeedChange(feed: FeedState, sequence: number): void {
+    const mutation = this.#appendMutation;
+    if (mutation === null) return;
+    const changedSequences = mutation.feedChangeKeys.get(feed) ?? new Set<number>();
+    if (changedSequences.has(sequence)) return;
+    changedSequences.add(sequence);
+    mutation.feedChangeKeys.set(feed, changedSequences);
+    mutation.feedChanges.push({
+      feed,
+      sequence,
+      accepted: feed.accepted.get(sequence),
+      pending: feed.pending.get(sequence),
+      candidate: feed.candidates.get(sequence),
+      head: feed.head,
+      headHash: feed.headHash,
+    });
+  }
+
+  #rollbackAppendMutation(mutation: AppendMutation): void {
+    for (const change of [...mutation.feedChanges].reverse()) {
+      if (change.accepted === undefined) change.feed.accepted.delete(change.sequence);
+      else change.feed.accepted.set(change.sequence, change.accepted);
+      if (change.pending === undefined) change.feed.pending.delete(change.sequence);
+      else change.feed.pending.set(change.sequence, change.pending);
+      if (change.candidate === undefined) change.feed.candidates.delete(change.sequence);
+      else change.feed.candidates.set(change.sequence, change.candidate);
+      change.feed.head = change.head;
+      change.feed.headHash = change.headHash;
+    }
+    for (const id of mutation.knownAdded) this.#knownIds.delete(id);
+    for (const id of mutation.knownRemoved) this.#knownIds.add(id);
+    for (const key of mutation.feedsCreated) this.#feeds.delete(key);
   }
 
   #dependenciesSatisfied(

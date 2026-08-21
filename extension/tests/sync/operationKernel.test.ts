@@ -92,6 +92,14 @@ class ControllableMaterializer implements OperationMaterializer {
     this.projection.validate(operation);
   }
 
+  prepareAccepted(operations: readonly AuthenticatedOperation[]): () => void {
+    if (this.failNextPreparation) {
+      this.failNextPreparation = false;
+      throw new Error("staged projection rejected");
+    }
+    return this.projection.prepareAccepted(operations);
+  }
+
   prepareReplace(
     checkpointPreferences: readonly { readonly key: string; readonly value: string }[],
     operations: readonly AuthenticatedOperation[],

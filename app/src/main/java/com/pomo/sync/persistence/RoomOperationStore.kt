@@ -72,9 +72,14 @@ internal class RoomOperationStore(
             val retainedOperationIds =
                 checkpoint.feeds.flatMap { it.coveredOperationIds }.map { it.toString() }.toSet() +
                     trailing.map { it.operationId.toString() }
+            val rebuildableDispositions =
+                setOf(
+                    IngestDisposition.ACCEPTED.name,
+                    IngestDisposition.PENDING_GAP.name,
+                    IngestDisposition.PENDING_CAUSAL.name,
+                )
             dao.allOperations()
-                .filter { it.operationId !in retainedOperationIds &&
-                    it.disposition in setOf(IngestDisposition.ACCEPTED.name, IngestDisposition.PENDING_GAP.name, IngestDisposition.PENDING_CAUSAL.name) }
+                .filter { it.operationId !in retainedOperationIds && it.disposition in rebuildableDispositions }
                 .forEach { dao.updateDisposition(it.operationId, IngestDisposition.QUARANTINED_FORK.name) }
             dao.clearHeads()
             dao.clearCheckpointOperations()
