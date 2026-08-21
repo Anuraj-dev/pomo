@@ -37,7 +37,8 @@ export function materializeHistory(facts: readonly HistoryFact[]): MaterializedH
     const settlements = blockFacts.filter((fact) => fact.kind === "SETTLE");
     if (creates.length !== 1 || settlements.length > 1) { conflicts.add(blockId); continue; }
     const settlement = settlements[0];
-    if (settlement?.kind === "SETTLE" && [...settlement.selectedFactIds].some((id) => !byId.has(id))) {
+    const localFactIds = new Set(blockFacts.map((fact) => fact.factId));
+    if (settlement?.kind === "SETTLE" && [...settlement.selectedFactIds].some((id) => !localFactIds.has(id))) {
       conflicts.add(blockId); continue;
     }
     if (settlement === undefined && (corrections.length > 1 || (tombstones.length > 0 && corrections.length > 0))) {

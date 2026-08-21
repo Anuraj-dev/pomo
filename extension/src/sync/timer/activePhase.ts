@@ -33,9 +33,21 @@ export function materializeActivePhase(input: readonly TimerFact[]): ActivePhase
   if (new Set(facts.map((fact) => fact.phaseId)).size !== 1) throw new Error("Projection must target one identified phase");
   const accepted = new Map<string, TimerFact>();
   const pending = new Set<string>();
+  const ancestry = new Map<string, boolean>();
+  const isCausallyReady = (operationId: string, visiting: ReadonlySet<string> = new Set()): boolean => {
+    const cached = ancestry.get(operationId);
+    if (cached !== undefined) return cached;
+    if (visiting.has(operationId)) return false;
+    const fact = unique.get(operationId);
+    if (fact === undefined) return false;
+    const nextVisiting = new Set(visiting).add(operationId);
+    const ready = [...fact.parentHeads].every((parentId) => isCausallyReady(parentId, nextVisiting));
+    ancestry.set(operationId, ready);
+    return ready;
+  };
   for (const fact of facts) {
-    if ([...fact.parentHeads].some((id) => !unique.has(id))) pending.add(fact.operationId);
-    else accepted.set(fact.operationId, fact);
+    if (isCausallyReady(fact.operationId)) accepted.set(fact.operationId, fact);
+    else pending.add(fact.operationId);
   }
   const starts = [...accepted.values()].filter((fact) => fact.action === "START");
   if (starts.length === 0) throw new Error("Active phase requires Start");

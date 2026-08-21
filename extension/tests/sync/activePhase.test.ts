@@ -30,4 +30,13 @@ describe("causal Active phase materialization", () => {
     const pause = { ...fact("pause", "PAUSE", ["start"], "android", "claim-a"), timeUncertain: true };
     expect(materializeActivePhase([start, pause]).timeUncertain).toBeTrue();
   });
+
+  test("keeps descendants pending when an ancestor is still causally incomplete", () => {
+    const start = fact("start", "START", [], "android", "claim-a");
+    const pendingAncestor = fact("z-ancestor", "PAUSE", ["missing"], "android", "claim-a");
+    const descendant = fact("a-descendant", "RESUME", ["z-ancestor"], "android", "claim-a");
+    const projection = materializeActivePhase([descendant, pendingAncestor, start]);
+    expect(projection.pending).toEqual(new Set(["z-ancestor", "a-descendant"]));
+    expect(projection.heads).toEqual(new Set(["start"]));
+  });
 });

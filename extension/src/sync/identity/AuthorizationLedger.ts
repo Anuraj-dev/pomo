@@ -88,6 +88,7 @@ export class AuthorizationLedger {
   markReady(input: {
     readonly factId: string;
     readonly memberId: string;
+    readonly issuerDeviceId: string;
     readonly deviceId: string;
     readonly authorizationEpoch: number;
     readonly contentEpoch: number;
@@ -97,7 +98,7 @@ export class AuthorizationLedger {
     const preflight = this.#preflight(input.factId, input.memberId, input.ledgerFrontier);
     if (preflight !== null) return preflight;
     const device = this.#devices.get(input.deviceId);
-    if (device === undefined || !device.authorized || input.baselineFrontier.length === 0 ||
+    if (input.issuerDeviceId !== input.deviceId || device === undefined || !device.authorized || input.baselineFrontier.length === 0 ||
         input.authorizationEpoch !== this.#authorizationEpoch || input.contentEpoch !== this.#contentEpoch) {
       return "REJECTED_INVALID";
     }

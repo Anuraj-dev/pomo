@@ -8,6 +8,7 @@ import com.pomo.sync.crypto.CoseKernelVerifier
 import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
 import com.pomo.sync.protocol.CheckpointVerifier
+import com.pomo.sync.protocol.FeedFrontier
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.OperationCodec
 import com.pomo.sync.protocol.OperationKernel
@@ -178,6 +179,41 @@ public class RoomOperationStoreTest {
             assertEquals(first.operationId.toString(), restarted.heads.single().operationId)
             assertEquals(3L, restarted.heads.single().forkedAt)
             assertEquals("bell", restarted.projection.single().preferenceValue)
+        }
+    }
+
+    @Test
+    public fun forkPersistsQuarantineOfAcceptedCrossFeedDependents() {
+        database().use { database ->
+            val store = RoomOperationStore(database)
+            val kernel = kernel(store)
+            val dependency = authenticated(sequence = 1, previous = null, value = "dependency")
+            val dependent =
+                authenticated(
+                    sequence = 1,
+                    previous = null,
+                    value = "dependent",
+                    device = 4,
+                    frontier =
+                        listOf(
+                            FeedFrontier(
+                                id(2),
+                                ProtocolBytes.of(ByteArray(16) { 3 }, 16),
+                                1,
+                                dependency.operationId,
+                            ),
+                        ),
+                )
+            val alternate = authenticated(sequence = 1, previous = null, value = "alternate")
+
+            assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(dependency.signedEnvelope))
+            assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(dependent.signedEnvelope))
+            assertEquals(IngestDisposition.QUARANTINED_FORK, kernel.ingest(alternate.signedEnvelope))
+
+            val restarted = RoomOperationStore(database).restartSnapshot()
+            assertEquals(3, restarted.operations.count { it.disposition == IngestDisposition.QUARANTINED_FORK.name })
+            assertTrue(restarted.projection.isEmpty())
+            assertTrue(restarted.heads.all { it.sequence == 0L && it.forkedAt == 1L })
         }
     }
 
@@ -386,6 +422,7 @@ public class RoomOperationStoreTest {
         value: String,
         device: Byte = 2,
         incarnation: Byte = 3,
+        frontier: List<FeedFrontier> = emptyList(),
     ): AuthenticatedOperation {
         val payload = OperationCodec.encodePreference(PreferenceSet("timer.sound", PreferenceValue.Text(value)))
         val operation =
@@ -395,7 +432,7 @@ public class RoomOperationStoreTest {
                 incarnationId = ProtocolBytes.of(ByteArray(16) { incarnation }, 16),
                 sequence = sequence,
                 previousOperationId = previous,
-                frontier = emptyList(),
+                frontier = frontier,
                 authorizationEpoch = 1,
                 payloadHash = OperationCodec.payloadHash(payload),
             )

@@ -186,8 +186,9 @@ internal class OperationKernel(
             (existing != null && existing.operationId != authenticated.operationId)
         ) {
             knownIds += authenticated.operationId
-            quarantineFork(feed, operation.sequence, authenticated, existing?.operationId ?: checkpointId)
-            return IngestResult(IngestDisposition.QUARANTINED_FORK)
+            val reclassifications =
+                quarantineFork(feed, operation.sequence, authenticated, existing?.operationId ?: checkpointId)
+            return IngestResult(IngestDisposition.QUARANTINED_FORK, reclassifications)
         }
         if (feed.forkedAt?.let { operation.sequence >= it } == true) {
             feeds.putIfAbsent(key, feed)
@@ -465,7 +466,7 @@ internal class OperationKernel(
         sequence: Long,
         incoming: AuthenticatedOperation,
         conflictingId: ProtocolBytes?,
-    ) {
+    ): List<OperationReclassification> {
         feed.forkedAt = minOf(feed.forkedAt ?: sequence, sequence)
         quarantined += incoming.operationId
         conflictingId?.let(quarantined::add)
@@ -479,11 +480,13 @@ internal class OperationKernel(
         feed.pending.keys.removeAll { it >= sequence }
         feed.head = minOf(feed.head, sequence - 1)
         feed.headId = feed.accepted[feed.head]?.operationId ?: feed.checkpointIds[feed.head]
-        quarantineInvalidatedDependents()
+        val reclassifications = quarantineInvalidatedDependents()
         rematerialize()
+        return reclassifications
     }
 
-    private fun quarantineInvalidatedDependents() {
+    private fun quarantineInvalidatedDependents(): List<OperationReclassification> {
+        val reclassifications = mutableListOf<OperationReclassification>()
         var changed: Boolean
         do {
             changed = false
@@ -495,8 +498,15 @@ internal class OperationKernel(
                 feed.candidates.filterKeys { it >= invalidSequence }.values.forEach {
                     quarantined += it.operationId
                 }
-                feed.accepted.filterKeys { it >= invalidSequence }.values.forEach { quarantined += it.operationId }
-                feed.pending.filterKeys { it >= invalidSequence }.values.forEach { quarantined += it.first.operationId }
+                feed.accepted.filterKeys { it >= invalidSequence }.values.forEach {
+                    quarantined += it.operationId
+                    reclassifications += OperationReclassification(it, IngestDisposition.QUARANTINED_FORK)
+                }
+                feed.pending.filterKeys { it >= invalidSequence }.values.forEach {
+                    quarantined += it.first.operationId
+                    reclassifications +=
+                        OperationReclassification(it.first, IngestDisposition.QUARANTINED_FORK)
+                }
                 feed.accepted.keys.removeAll { it >= invalidSequence }
                 feed.pending.keys.removeAll { it >= invalidSequence }
                 feed.head = invalidSequence - 1
@@ -504,6 +514,7 @@ internal class OperationKernel(
                 changed = true
             }
         } while (changed)
+        return reclassifications
     }
 
     private fun sequenceWithInvalidatedDependency(feed: FeedState): Long? =

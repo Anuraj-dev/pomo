@@ -75,6 +75,7 @@ describe("Member Identity and causal authorization", () => {
     expect(ledger.markReady({
       factId: "a1",
       memberId: "00".repeat(32),
+      issuerDeviceId: first.deviceId,
       deviceId: first.deviceId,
       authorizationEpoch: 1,
       contentEpoch: 1,
@@ -91,6 +92,16 @@ describe("Member Identity and causal authorization", () => {
       ledgerFrontier: new Set(["a1"]),
     })).toBe("ACCEPTED");
     expect(ledger.snapshot().devices.get(joining.deviceId)?.deviceReady).toBeFalse();
+    expect(ledger.markReady({
+      factId: "a2-ready",
+      memberId: "00".repeat(32),
+      issuerDeviceId: first.deviceId,
+      deviceId: joining.deviceId,
+      authorizationEpoch: 2,
+      contentEpoch: 2,
+      baselineFrontier: frontier,
+      ledgerFrontier: new Set(["a1"]),
+    })).toBe("REJECTED_INVALID");
     expect(ledger.revoke({
       factId: "a3",
       memberId: "00".repeat(32),

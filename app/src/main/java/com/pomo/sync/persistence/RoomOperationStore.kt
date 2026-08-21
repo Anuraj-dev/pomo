@@ -131,23 +131,28 @@ internal class RoomOperationStore(
     ) {
         val operationId = authenticated.operationId.toString()
         val existing = dao.operation(operationId)
+        val reclassifyingAcceptedFork =
+            existing?.disposition == IngestDisposition.ACCEPTED.name &&
+                disposition == IngestDisposition.QUARANTINED_FORK
         if (existing != null) {
             validateSameOperation(existing, authenticated)
-            if (!transitionPending) {
+            if (!transitionPending && !reclassifyingAcceptedFork) {
                 dao.insertDisposition(event(authenticated, IngestDisposition.DUPLICATE))
                 faultInjector.at(SyncCommitBoundary.AFTER_DISPOSITION)
                 faultInjector.at(SyncCommitBoundary.BEFORE_COMMIT)
                 return
             }
-            require(
-                existing.disposition == IngestDisposition.PENDING_GAP.name ||
-                    existing.disposition == IngestDisposition.PENDING_CAUSAL.name,
-            ) { "Only a persisted Pending Operation can transition" }
-            require(
-                disposition != IngestDisposition.PENDING_GAP &&
-                    disposition != IngestDisposition.PENDING_CAUSAL &&
-                    disposition != IngestDisposition.DUPLICATE,
-            ) { "Pending transition must resolve to a terminal disposition" }
+            if (transitionPending) {
+                require(
+                    existing.disposition == IngestDisposition.PENDING_GAP.name ||
+                        existing.disposition == IngestDisposition.PENDING_CAUSAL.name,
+                ) { "Only a persisted Pending Operation can transition" }
+                require(
+                    disposition != IngestDisposition.PENDING_GAP &&
+                        disposition != IngestDisposition.PENDING_CAUSAL &&
+                        disposition != IngestDisposition.DUPLICATE,
+                ) { "Pending transition must resolve to a terminal disposition" }
+            }
         } else {
             require(!transitionPending) { "Cannot transition an unknown Pending Operation" }
         }
@@ -156,7 +161,8 @@ internal class RoomOperationStore(
             !effectiveLocalAuthor ||
                 disposition == IngestDisposition.ACCEPTED ||
                 disposition == IngestDisposition.PENDING_GAP ||
-                disposition == IngestDisposition.PENDING_CAUSAL,
+                disposition == IngestDisposition.PENDING_CAUSAL ||
+                (reclassifyingAcceptedFork && disposition == IngestDisposition.QUARANTINED_FORK),
         ) {
             "Local Operation must be Accepted or Pending"
         }

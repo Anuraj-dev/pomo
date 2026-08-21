@@ -20,12 +20,19 @@ async function handle(message: RouteMessage): Promise<unknown> {
     peer.ondatachannel = (event) => bind(message.routeId, state, event.channel);
     peer.onicecandidate = (event) => { if (event.candidate !== null) void chrome.runtime.sendMessage({ type: "POMO_WEBRTC_LOCAL_CANDIDATE", routeId: message.routeId, candidate: event.candidate.toJSON() }); };
     peer.onconnectionstatechange = () => { void chrome.runtime.sendMessage({ type: "POMO_WEBRTC_STATE", routeId: message.routeId, state: peer.connectionState }); };
-    if (message.remoteDescription === undefined) {
-      bind(message.routeId, state, peer.createDataChannel("pomo-sync", { ordered: true }));
-      await peer.setLocalDescription(await peer.createOffer());
-    } else {
-      await peer.setRemoteDescription(message.remoteDescription);
-      await peer.setLocalDescription(await peer.createAnswer());
+    try {
+      if (message.remoteDescription === undefined) {
+        bind(message.routeId, state, peer.createDataChannel("pomo-sync", { ordered: true }));
+        await peer.setLocalDescription(await peer.createOffer());
+      } else {
+        await peer.setRemoteDescription(message.remoteDescription);
+        await peer.setLocalDescription(await peer.createAnswer());
+      }
+    } catch (error) {
+      state.channel?.close();
+      peer.close();
+      routes.delete(message.routeId);
+      throw error;
     }
     return { ok: true, description: peer.localDescription };
   }

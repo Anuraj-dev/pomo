@@ -51,6 +51,18 @@ describe("identified History and stable Session tags", () => {
     expect(dailyTotals(projection).get("2026-08-21")).toEqual({ elapsedMillis: 90_000, completed: 1 });
   });
 
+  test("rejects settlement selections from another history block", () => {
+    const first = block("stable-a", 60_000);
+    const second = block("stable-b", 30_000);
+    const projection = materializeHistory([
+      { kind: "CREATE" as const, factId: "a-create", blockId: first.blockId, block: first },
+      { kind: "CREATE" as const, factId: "b-create", blockId: second.blockId, block: second },
+      { kind: "SETTLE" as const, factId: "a-settle", blockId: first.blockId, selectedFactIds: new Set(["a-create", "b-create"]) },
+    ]);
+    expect(projection.conflicts).toContain(first.blockId);
+    expect(projection.visible.has(first.blockId)).toBeFalse();
+  });
+
   test("preserves Tag IDs and independently confirms broad destructive scope", () => {
     const work = { tagId: "tag-work", name: "Work", paletteSlot: 0, archived: false, mergedInto: null };
     const study = { tagId: "tag-study", name: "Study", paletteSlot: 1, archived: false, mergedInto: null };
