@@ -29,9 +29,19 @@ export interface RehydrationPlan {
 }
 
 export function planRehydration(sources: readonly RecoverySource[]): RehydrationPlan {
-  const checkpoints = sources.flatMap((source) => source.checkpoint === null ? [] : [source.checkpoint]);
+  const checkpoints = [...new Map(sources.flatMap((source) => source.checkpoint === null ? [] : [[source.checkpoint.checkpointId, source.checkpoint] as const])).values()];
   checkpoints.forEach(validateCheckpoint);
-  checkpoints.sort((left, right) => left.frontier.reduce((sum, head) => sum + head.sequence, 0) - right.frontier.reduce((sum, head) => sum + head.sequence, 0) || left.checkpointId.localeCompare(right.checkpointId));
+  const dominates = (left: CheckpointManifest, right: CheckpointManifest): boolean => {
+    const rightHeads = new Map(right.frontier.map((head) => [head.feedKey, head]));
+    return [...rightHeads.values()].every((rightHead) => {
+      const leftHead = left.frontier.find((head) => head.feedKey === rightHead.feedKey);
+      return leftHead !== undefined && (leftHead.sequence > rightHead.sequence ||
+        (leftHead.sequence === rightHead.sequence && leftHead.operationId === rightHead.operationId));
+    });
+  };
+  const maximal = checkpoints.filter((candidate) => checkpoints.every((other) => other === candidate || !dominates(other, candidate)));
+  if (maximal.length > 1) throw new Error("recovery checkpoints are incomparable");
+  checkpoints.splice(0, checkpoints.length, ...maximal);
   const copies = new Map<string, Array<{ sourceId: string; operation: PackedOperation }>>();
   for (const source of sources) for (const operation of source.operations) copies.set(operation.operationId, [...(copies.get(operation.operationId) ?? []), { sourceId: source.sourceId, operation }]);
   const operations: PackedOperation[] = [];

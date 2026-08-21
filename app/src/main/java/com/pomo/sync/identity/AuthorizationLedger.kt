@@ -32,6 +32,7 @@ internal data class AuthorizationProjection(
 
 internal class AuthorizationLedger private constructor(
     private var projection: AuthorizationProjection,
+    private val firstDeviceId: ProtocolBytes,
 ) {
     fun snapshot(): AuthorizationProjection = projection.copy(
         devices = projection.devices.toMap(),
@@ -87,8 +88,14 @@ internal class AuthorizationLedger private constructor(
     ): AuthorityDisposition {
         val deviceId = fact.subjectDeviceId ?: return AuthorityDisposition.REJECTED_INVALID
         val device = projection.devices[deviceId] ?: return AuthorityDisposition.REJECTED_INVALID
+        val expectedBaselineDevices =
+            projection.devices.filter { (knownDeviceId, knownDevice) ->
+                knownDevice.authorized && (knownDeviceId != deviceId || knownDeviceId == firstDeviceId)
+            }.keys
+        val baselineDevices = fact.baselineFrontier.map { it.deviceId }.toSet()
         if (issuerDeviceId != deviceId || !device.authorized || fact.authorizationEpoch != projection.authorizationEpoch ||
-            fact.contentEpoch != projection.contentEpoch || fact.baselineFrontier.isEmpty()
+            fact.contentEpoch != projection.contentEpoch || fact.baselineFrontier.isEmpty() ||
+            baselineDevices.size != fact.baselineFrontier.size || baselineDevices != expectedBaselineDevices
         ) {
             return AuthorityDisposition.REJECTED_INVALID
         }
@@ -199,6 +206,7 @@ internal class AuthorizationLedger private constructor(
                     devices = mapOf(firstId to DeviceAuthorityProjection(first, true, false, 1, null)),
                     acceptedFactIds = emptySet(),
                 ),
+                firstId,
             )
         }
     }

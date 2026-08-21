@@ -1,9 +1,9 @@
 package com.pomo.sync.diagnostics
 
-import java.io.ByteArrayOutputStream
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.io.ByteArrayOutputStream
 
 public class DiagnosticExportTest {
     @Test
@@ -26,6 +26,7 @@ public class DiagnosticExportTest {
         assertTrue(text.contains("device-1") && text.contains("operation-1"))
         assertFalse(text.contains("stable-device") || text.contains("stable-operation"))
     }
+
     @Test
     public fun rejectsPlaintextAndSupportsCancellation() {
         assertTrue(
@@ -40,12 +41,16 @@ public class DiagnosticExportTest {
                 )
             }.isFailure,
         )
-        val result = DiagnosticExporter.export(
-            generateSequence { DiagnosticEvent(1, EvidenceArea.PERFORMANCE, "sample", mapOf("durationMs" to "1")) },
+        val result =
+            DiagnosticExporter.export(
+                generateSequence {
+                    DiagnosticEvent(1, EvidenceArea.PERFORMANCE, "sample", mapOf("durationMs" to "1"))
+                },
             ByteArrayOutputStream(),
-        ) { true }
+            ) { true }
         assertTrue(result.cancelled)
     }
+
     @Test
     public fun recorderIsBounded() {
         val recorder = DiagnosticRecorder(2)

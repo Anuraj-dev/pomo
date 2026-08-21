@@ -22,6 +22,14 @@ describe("Checkpoints, packs, rehydration, and Safe mode", () => {
     expect(() => validateJournalPack(pack, new Set(["a"]))).toThrow(/replaceable/);
   });
 
+  test("rejects incomparable checkpoint frontiers instead of selecting one", () => {
+    const other = { ...checkpoint, checkpointId: "other", frontier: [{ feedKey: "b", sequence: 2, operationId: "b2" }] };
+    expect(() => planRehydration([
+      { sourceId: "first", checkpoint, operations: [] },
+      { sourceId: "second", checkpoint: other, operations: [] },
+    ])).toThrow(/incomparable/);
+  });
+
   test("rebuilds projections but seals the incarnation for journal or key corruption", () => {
     expect(integrityDisposition("PROJECTION_CORRUPT")).toEqual({ active: false, incarnationSealed: false, inspectionAllowed: true, exportAllowed: true });
     expect(integrityDisposition("JOURNAL_CORRUPT").incarnationSealed).toBeTrue();

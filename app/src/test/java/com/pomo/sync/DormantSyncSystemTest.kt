@@ -9,14 +9,13 @@ public class DormantSyncSystemTest {
     @Test
     public fun testArtifactRoutesEveryEnvelopeThroughAuthenticatedKernelIngress() {
         var received: ByteArray? = null
-        val system =
-            DormantSyncSystem(
-                ingress = AuthenticatedOperationIngress { wire ->
-                    received = wire
-                    "ACCEPTED"
-                },
-                mode = SyncActivationMode(productionActivated = false, testArtifact = true),
-            )
+        val system = DormantSyncSystem(
+            ingress = AuthenticatedOperationIngress { wire ->
+                received = wire
+                "ACCEPTED"
+            },
+            mode = SyncActivationMode(productionActivated = false, testArtifact = true),
+        )
         system.startTestArtifact()
         val source = byteArrayOf(1, 2, 3)
         assertEquals("ACCEPTED", system.ingestFromReplica(source))

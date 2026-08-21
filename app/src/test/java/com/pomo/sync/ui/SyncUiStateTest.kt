@@ -12,6 +12,7 @@ public class SyncUiStateTest {
         assertEquals(safe.copy(retryPending = true), scheduleOrdinaryDrain(safe))
         assertFalse(timerControlsAllowed(safe))
     }
+
     @Test
     public fun unrelatedConflictAndDormantSyncKeepTimerUsable() {
         assertTrue(timerControlsAllowed(SyncUiState.Dormant))

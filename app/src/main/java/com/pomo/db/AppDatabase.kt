@@ -7,9 +7,9 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.pomo.sync.persistence.SyncDao
 import com.pomo.sync.persistence.SyncCheckpointOperationEntity
 import com.pomo.sync.persistence.SyncCheckpointProjectionEntity
+import com.pomo.sync.persistence.SyncDao
 import com.pomo.sync.persistence.SyncDispositionEventEntity
 import com.pomo.sync.persistence.SyncFeedHeadEntity
 import com.pomo.sync.persistence.SyncOperationEntity

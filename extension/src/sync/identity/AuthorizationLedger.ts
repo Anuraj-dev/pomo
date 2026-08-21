@@ -34,9 +34,11 @@ export class AuthorizationLedger {
   #contentEpoch = 1;
   #recoveryGeneration = 1;
   #recovery: RecoveryCertificate;
+  readonly #firstDeviceId: string;
 
   constructor(private readonly genesis: GenesisRecord) {
     this.#recovery = genesis.recovery;
+    this.#firstDeviceId = genesis.firstDevice.deviceId;
     this.#devices.set(genesis.firstDevice.deviceId, {
       certificate: genesis.firstDevice,
       authorized: true,
@@ -98,7 +100,14 @@ export class AuthorizationLedger {
     const preflight = this.#preflight(input.factId, input.memberId, input.ledgerFrontier);
     if (preflight !== null) return preflight;
     const device = this.#devices.get(input.deviceId);
+    const expectedBaselineDevices = [...this.#devices]
+      .filter(([deviceId, value]) => value.authorized && (deviceId !== input.deviceId || deviceId === this.#firstDeviceId))
+      .map(([deviceId]) => deviceId);
+    const baselineDevices = input.baselineFrontier.map((entry) => entry.deviceId);
     if (input.issuerDeviceId !== input.deviceId || device === undefined || !device.authorized || input.baselineFrontier.length === 0 ||
+        baselineDevices.length !== new Set(baselineDevices).size ||
+        baselineDevices.length !== expectedBaselineDevices.length ||
+        expectedBaselineDevices.some((deviceId) => !baselineDevices.includes(deviceId)) ||
         input.authorizationEpoch !== this.#authorizationEpoch || input.contentEpoch !== this.#contentEpoch) {
       return "REJECTED_INVALID";
     }

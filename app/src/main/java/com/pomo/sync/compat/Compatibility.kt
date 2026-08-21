@@ -37,6 +37,11 @@ internal fun evaluateActivation(value: GenerationActivation, concurrentGeneratio
     require(value.frontierId.isNotBlank() && value.proposerDeviceId in value.readerReadyDeviceIds) { "reader support must ship before proposal" }
     if (concurrentGenerations.any { it != value.generation }) return ActivationDecision.QUARANTINED_CONCURRENT
     require(value.confirmerDeviceId != value.proposerDeviceId || value.confirmedByRecovery) { "another Full device or Recovery must confirm" }
+    require(
+        value.confirmerDeviceId == null ||
+            value.confirmerDeviceId in value.readerReadyDeviceIds ||
+            value.confirmedByRecovery,
+    ) { "confirmer must be a reader-ready Full device or Recovery" }
     if (value.confirmerDeviceId == null && !value.confirmedByRecovery) return ActivationDecision.PROPOSED
     return if (value.explicitlyLimitedDeviceIds.isEmpty()) ActivationDecision.CONFIRMED else ActivationDecision.LIMITED_NAMED_DEVICES
 }

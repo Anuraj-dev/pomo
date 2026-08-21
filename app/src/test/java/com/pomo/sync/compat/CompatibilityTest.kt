@@ -15,6 +15,7 @@ public class CompatibilityTest {
         assertEquals(CompatibilityMode.LIMITED_FORWARD_ONLY, compatibilityMode(current.copy(writableSchemas = emptySet()), baseline))
         assertEquals(CompatibilityMode.BLOCKED_AUTHORITY, compatibilityMode(current.copy(suiteGenerations = setOf(1)), baseline))
     }
+
     @Test
     public fun readerFirstActivationNeedsIndependentConfirmationAndQuarantinesConcurrency() {
         val proposed = GenerationActivation(2, "frontier", setOf("full"), "full", null, false, emptySet())
@@ -23,6 +24,7 @@ public class CompatibilityTest {
         assertEquals(ActivationDecision.QUARANTINED_CONCURRENT, evaluateActivation(proposed, setOf(2, 3)))
         assertTrue(runCatching { evaluateActivation(proposed.copy(readerReadyDeviceIds = emptySet()), setOf(2)) }.isFailure)
     }
+
     @Test
     public fun oldBuildsAreReadOnlyAndIndependentFactsNeedImport() {
         assertEquals("READ_ONLY", oldBuildDataDisposition(true, false))

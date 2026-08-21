@@ -42,6 +42,5 @@ public class ActivePhaseMaterializerTest {
         parents: Set<String>,
         owner: String,
         claim: String,
-    ): TimerFact =
-        TimerFact(id, "phase-1", action, parents, owner, claim, plan, 0)
+    ): TimerFact = TimerFact(id, "phase-1", action, parents, owner, claim, plan, 0)
 }

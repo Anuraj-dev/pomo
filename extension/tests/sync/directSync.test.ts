@@ -11,7 +11,15 @@ describe("authenticated direct Replica synchronization", () => {
     expect(() => coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "op-256" }]]), signatureVerified: false })).toThrow(/signed/);
     coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "wrong-256" }]]), signatureVerified: true });
     expect(coordinator.pendingOperationIds()).toContain("op-256");
-    coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "op-256" }]]), signatureVerified: true });
+    coordinator.acknowledge({
+      peerDeviceId: "peer",
+      frontier: new Map([["feed", {
+        sequence: 256,
+        operationId: "op-256",
+        coveredOperationIds: new Set(Array.from({ length: 256 }, (_, index) => `op-${index + 1}`)),
+      }]]),
+      signatureVerified: true,
+    });
     coordinator.disconnected(); coordinator.connected();
     expect(coordinator.nextBatch()).toHaveLength(44);
     coordinator.acknowledge({

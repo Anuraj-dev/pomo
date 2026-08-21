@@ -4,8 +4,13 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 public class LegacyMigrationTest {
-    private val ready =
-        MigrationPrerequisites("anchor", true, LegacyTimerState.PARKED, true, MigrationVerification(2, 2, true, true))
+    private val ready = MigrationPrerequisites(
+        "anchor",
+        true,
+        LegacyTimerState.PARKED,
+        true,
+        MigrationVerification(2, 2, true, true),
+    )
 
     @Test
     public fun inventoryRequiresDispositionForEveryDurableItem() {

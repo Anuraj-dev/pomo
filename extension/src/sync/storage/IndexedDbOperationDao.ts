@@ -196,7 +196,8 @@ export class IndexedDbOperationDao {
         }
 
         const existingPending = existing?.disposition === "PENDING_GAP" || existing?.disposition === "PENDING_CAUSAL";
-        if (existing !== undefined && !existingPending) {
+        const reclassifyingAcceptedFork = existing?.disposition === "ACCEPTED" && input.disposition === "QUARANTINED_FORK";
+        if (existing !== undefined && !existingPending && !reclassifyingAcceptedFork) {
           await this.#recordDisposition(dispositions, row, "DUPLICATE");
           crash(injectCrash, "AFTER_DISPOSITION");
           results.push("DUPLICATE");

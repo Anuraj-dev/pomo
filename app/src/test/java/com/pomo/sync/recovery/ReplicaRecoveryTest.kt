@@ -8,21 +8,30 @@ import org.junit.Test
 public class ReplicaRecoveryTest {
     @Test
     public fun unionsVerifiedSourcesWithProvenanceAndListsExactGaps() {
-        val checkpoint = CheckpointManifest(
-            "cp",
-            "RECOVERY",
-            listOf(FrontierHead("a", 1, "a1")),
-            1,
-            "root",
-            listOf("pack"),
-            emptyList(),
-        )
+        val checkpoint =
+            CheckpointManifest(
+                "cp",
+                "RECOVERY",
+                listOf(FrontierHead("a", 1, "a1")),
+                1,
+                "root",
+                listOf("pack"),
+                emptyList(),
+            )
         val a1 = PackedOperation("a1", "a", 1, byteArrayOf(1))
         val a3 = PackedOperation("a3", "a", 3, byteArrayOf(3))
         val plan = Rehydrator.plan(
             listOf(
-                RecoverySource("device", checkpoint, listOf(a1)),
-                RecoverySource("mailbox", checkpoint, listOf(a1, a3)),
+                RecoverySource(
+                    "device",
+                    checkpoint,
+                    listOf(a1),
+                ),
+                RecoverySource(
+                    "mailbox",
+                    checkpoint,
+                    listOf(a1, a3),
+                ),
             ),
         )
         assertEquals(setOf("device", "mailbox"), plan.sourceByOperation.getValue("a1"))

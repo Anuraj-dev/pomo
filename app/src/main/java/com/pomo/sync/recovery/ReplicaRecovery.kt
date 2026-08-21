@@ -43,8 +43,12 @@ internal data class RehydrationPlan(
 
 internal object Rehydrator {
     fun plan(sources: Collection<RecoverySource>): RehydrationPlan {
-        val checkpoints = sources.mapNotNull { it.checkpoint }.onEach(CheckpointPolicy::validate)
-        val checkpoint = checkpoints.maxWithOrNull(compareBy<CheckpointManifest> { it.frontier.sumOf { head -> head.sequence } }.thenBy { it.checkpointId })
+        val checkpoints = sources.mapNotNull { it.checkpoint }.distinctBy { it.checkpointId }.onEach(CheckpointPolicy::validate)
+        val maximal = checkpoints.filter { candidate ->
+            checkpoints.none { other -> other !== candidate && dominates(other, candidate) }
+        }
+        require(maximal.size <= 1) { "recovery checkpoints are incomparable" }
+        val checkpoint = maximal.singleOrNull()
         val operations = sources.flatMap { it.operations }.groupBy { it.operationId }
         operations.forEach { (_, copies) -> require(copies.map { it.wire.toList() }.distinct().size == 1) { "Operation ID collision" } }
         val selected = operations.values.map { it.first() }.sortedWith(compareBy<PackedOperation> { it.feedKey }.thenBy { it.sequence })
@@ -57,6 +61,16 @@ internal object Rehydrator {
             sources.filter { source -> copies.any { copy -> source.operations.any { it.operationId == copy.operationId } } }.mapTo(linkedSetOf()) { it.sourceId }
         }
         return RehydrationPlan(checkpoint, selected, provenance, gaps)
+    }
+
+    private fun dominates(left: CheckpointManifest, right: CheckpointManifest): Boolean {
+        val rightHeads = right.frontier.associateBy { it.feedKey }
+        return rightHeads.values.all { rightHead ->
+            val leftHead = left.frontier.find { it.feedKey == rightHead.feedKey }
+            leftHead != null &&
+                (leftHead.sequence > rightHead.sequence ||
+                    (leftHead.sequence == rightHead.sequence && leftHead.operationId == rightHead.operationId))
+        }
     }
 }
 

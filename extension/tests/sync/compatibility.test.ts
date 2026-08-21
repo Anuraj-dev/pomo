@@ -12,7 +12,8 @@ describe("authenticated compatibility and reader-first activation", () => {
   test("ships readers first, independently confirms, and quarantines concurrent activation", () => {
     const proposed = { generation: 2, frontierId: "frontier", readerReadyDeviceIds: new Set(["full"]), proposerDeviceId: "full", confirmerDeviceId: null, confirmedByRecovery: false, explicitlyLimitedDeviceIds: new Set<string>() };
     expect(evaluateActivation(proposed, new Set([2]))).toBe("PROPOSED");
-    expect(evaluateActivation({ ...proposed, confirmerDeviceId: "other" }, new Set([2]))).toBe("CONFIRMED");
+    expect(evaluateActivation({ ...proposed, confirmerDeviceId: "other", readerReadyDeviceIds: new Set(["full", "other"]) }, new Set([2]))).toBe("CONFIRMED");
+    expect(() => evaluateActivation({ ...proposed, confirmerDeviceId: "unknown" }, new Set([2]))).toThrow(/confirmer/);
     expect(evaluateActivation(proposed, new Set([2, 3]))).toBe("QUARANTINED_CONCURRENT");
     expect(() => evaluateActivation({ ...proposed, readerReadyDeviceIds: new Set<string>() }, new Set([2]))).toThrow(/reader support/);
   });

@@ -9,18 +9,20 @@ import org.junit.Test
 public class RecoveryArtifactsTest {
     @Test
     public fun artifactsAreEncryptedBoundedAndCorruptionFailsClosed() {
-        val file = RecoveryArtifactCodec.sealFile(
-            RecoveryFileBody(byteArrayOf(1, 2), 4, listOf("a@3"), listOf("cap"), listOf("mail")),
-            "correct horse",
-        )
+        val file =
+            RecoveryArtifactCodec.sealFile(
+                RecoveryFileBody(byteArrayOf(1, 2), 4, listOf("a@3"), listOf("cap"), listOf("mail")),
+                "correct horse",
+            )
         assertTrue(RecoveryArtifactCodec.open(file, "correct horse").isNotEmpty())
         val corrupt = file.copy(
             ciphertextAndTag = file.ciphertextAndTag.copyOf().also { it[0] = (it[0].toInt() xor 1).toByte() },
         )
         assertTrue(runCatching { RecoveryArtifactCodec.open(corrupt, "correct horse") }.isFailure)
-        val archiveBytes = DeterministicCbor.encode(
-            CborValue.Array(listOf(CborValue.Integer(1), CborValue.Text("manifest"))),
-        )
+        val archiveBytes =
+            DeterministicCbor.encode(
+                CborValue.Array(listOf(CborValue.Integer(1), CborValue.Text("manifest"))),
+            )
         assertArrayEquals(
             archiveBytes,
             RecoveryArtifactCodec.open(RecoveryArtifactCodec.sealArchive(archiveBytes, "correct horse"), "correct horse"),

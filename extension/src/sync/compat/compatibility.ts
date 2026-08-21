@@ -13,6 +13,9 @@ export function evaluateActivation(value: GenerationActivation, concurrentGenera
   if (value.frontierId.length === 0 || !value.readerReadyDeviceIds.has(value.proposerDeviceId)) throw new Error("reader support must ship before proposal");
   if ([...concurrentGenerations].some((generation) => generation !== value.generation)) return "QUARANTINED_CONCURRENT";
   if (value.confirmerDeviceId === value.proposerDeviceId && !value.confirmedByRecovery) throw new Error("another Full device or Recovery must confirm");
+  if (value.confirmerDeviceId !== null && !value.readerReadyDeviceIds.has(value.confirmerDeviceId) && !value.confirmedByRecovery) {
+    throw new Error("confirmer must be a reader-ready Full device or Recovery");
+  }
   if (value.confirmerDeviceId === null && !value.confirmedByRecovery) return "PROPOSED";
   return value.explicitlyLimitedDeviceIds.size === 0 ? "CONFIRMED" : "LIMITED_NAMED_DEVICES";
 }

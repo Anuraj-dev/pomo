@@ -45,11 +45,11 @@ public class HistoryMaterializerTest {
         val materializer = TagMaterializer(work.tagId)
         var state = mapOf(work.tagId to work, study.tagId to study)
         var default = study.tagId
-        (materializer.apply(state, study.copy(name = "Deep work"), default)).also { (next, selected) ->
+        materializer.apply(state, study.copy(name = "Deep work"), default).also { (next, selected) ->
             state = next
             default = selected
         }
-        (materializer.apply(state, state.getValue(study.tagId).copy(archived = true), default)).also { (next, selected) ->
+        materializer.apply(state, state.getValue(study.tagId).copy(archived = true), default).also { (next, selected) ->
             state = next
             default = selected
         }
