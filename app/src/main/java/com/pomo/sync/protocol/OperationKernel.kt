@@ -44,6 +44,12 @@ internal class OperationKernel(
         val checkpointIds: MutableMap<Long, ProtocolBytes> = linkedMapOf(),
     )
 
+    private data class CheckpointHead(
+        val feedKey: String,
+        val sequence: Long,
+        val operationId: ProtocolBytes,
+    )
+
     private val feeds: MutableMap<String, FeedState> = linkedMapOf()
     private val knownIds: MutableSet<ProtocolBytes> = linkedSetOf()
     private val quarantined: MutableSet<ProtocolBytes> = linkedSetOf()
@@ -92,7 +98,7 @@ internal class OperationKernel(
             ) {
                 "Locally authored Operation failed ingestion"
             }
-            AuthorResult.Authored(authenticated, disposition)
+            AuthorResult.Authored(detachedCopy(authenticated), disposition)
         }.getOrElse { AuthorResult.Blocked(setOf("AUTHORING_COMMIT")) }
     }
 
@@ -252,6 +258,10 @@ internal class OperationKernel(
         staged.feeds.values.forEach { staged.knownIds += it.checkpointIds.values }
         staged.checkpointPreferences.putAll(restoredPreferences)
         staged.rematerialize()
+        val checkpointFrontier =
+            restored.mapNotNull { (key, feed) ->
+                feed.headId?.let { CheckpointHead(key, feed.head, it) }
+            }
         val acceptedTrailing = mutableListOf<AuthenticatedOperation>()
         for (wire in trailing) {
             val authenticated =
@@ -262,6 +272,10 @@ internal class OperationKernel(
                 return RestoreResult.REJECTED_CHECKPOINT
             }
             acceptedTrailing += authenticated
+        }
+        val acceptedById = staged.feeds.values.flatMap { it.accepted.values }.associateBy { it.operationId }
+        if (acceptedTrailing.any { !dominatesCheckpointFrontier(it, checkpointFrontier, acceptedById) }) {
+            return RestoreResult.REJECTED_CHECKPOINT
         }
         val newlyDurableTrailing =
             staged.causalMaterializationOrder().filter { it.operationId !in existingKnownIds }
@@ -496,6 +510,54 @@ internal class OperationKernel(
         }
         return ordered
     }
+
+    private fun dominatesCheckpointFrontier(
+        operation: AuthenticatedOperation,
+        checkpointFrontier: List<CheckpointHead>,
+        acceptedById: Map<ProtocolBytes, AuthenticatedOperation>,
+    ): Boolean = checkpointFrontier.all { target ->
+        reachesCheckpointHead(operation, target, acceptedById, linkedSetOf())
+    }
+
+    private fun reachesCheckpointHead(
+        operation: AuthenticatedOperation,
+        target: CheckpointHead,
+        acceptedById: Map<ProtocolBytes, AuthenticatedOperation>,
+        visited: MutableSet<ProtocolBytes>,
+    ): Boolean {
+        if (!visited.add(operation.operationId)) return false
+        val unsigned = operation.operation
+        if (feedKey(unsigned.deviceId, unsigned.incarnationId) == target.feedKey &&
+            unsigned.sequence > target.sequence
+        ) {
+            return true
+        }
+        if (unsigned.frontier.any {
+                feedKey(it.deviceId, it.incarnationId) == target.feedKey &&
+                    it.sequence == target.sequence &&
+                    it.headOperationId == target.operationId
+            }
+        ) {
+            return true
+        }
+        unsigned.previousOperationId?.let { acceptedById[it] }?.let {
+            if (reachesCheckpointHead(it, target, acceptedById, visited)) return true
+        }
+        return unsigned.frontier.any { dependency ->
+            acceptedById[dependency.headOperationId]?.let {
+                reachesCheckpointHead(it, target, acceptedById, visited)
+            } == true
+        }
+    }
+
+    private fun detachedCopy(authenticated: AuthenticatedOperation): AuthenticatedOperation =
+        AuthenticatedOperation(
+            operation = authenticated.operation.copy(frontier = authenticated.operation.frontier.map { it.copy() }),
+            canonicalUnsigned = authenticated.canonicalUnsigned.copyOf(),
+            operationId = authenticated.operationId,
+            canonicalPayload = authenticated.canonicalPayload.copyOf(),
+            signedEnvelope = authenticated.signedEnvelope.copyOf(),
+        )
 
     private fun compareBytes(
         left: ByteArray,

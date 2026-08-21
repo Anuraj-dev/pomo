@@ -32,6 +32,19 @@ public class OperationKernelTest {
     }
 
     @Test
+    public fun authoredOperationIsDetachedFromRetainedKernelState() {
+        val kernel = kernel()
+        val authored = kernel.author(authorRequest("bell")) as AuthorResult.Authored
+        authored.value.canonicalPayload[authored.value.canonicalPayload.lastIndex] = 'x'.code.toByte()
+        val secondPayload = OperationCodec.encodePreference(PreferenceSet("timer.color", PreferenceValue.Text("blue")))
+        val second = authenticated(operation(1, null, secondPayload, deviceId = id(3)), secondPayload)
+
+        assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(second.signedEnvelope))
+        assertEquals("bell", kernel.materializedPreference("timer.sound"))
+        assertEquals("blue", kernel.materializedPreference("timer.color"))
+    }
+
+    @Test
     public fun durableStoreFailureCannotMutateKernelState() {
         val kernel = kernel(OperationStore { throw IllegalStateException("disk unavailable") })
         val wire = authenticated(operation(1, null, payload("bell")), payload("bell")).signedEnvelope
@@ -408,6 +421,29 @@ public class OperationKernelTest {
         assertEquals(RestoreResult.RESTORED, kernel.restore(checkpoint, listOf(trailing.signedEnvelope)))
         assertEquals("chime", kernel.materializedPreference("timer.sound"))
         assertEquals(2, kernel.summarize().accepted)
+    }
+
+    @Test
+    public fun restoreRejectsConcurrentTrailingOperationWithoutCheckpointFrontier() {
+        val coveredId = id(7)
+        val checkpoint =
+            KernelCheckpoint(
+                PomoSuite.ID,
+                PomoSuite.INITIAL_GENERATION,
+                listOf(CheckpointFeed(id(2), incarnation(), listOf(coveredId))),
+                listOf(CheckpointPreference("timer.sound", "bell")),
+            )
+        val trailingPayload = payload("chime")
+        val trailing = authenticated(operation(1, null, trailingPayload, deviceId = id(3)), trailingPayload)
+        val persisted = mutableListOf<AuthenticatedOperation>()
+        val kernel = kernel(OperationStore { operations -> persisted += operations })
+
+        assertEquals(
+            RestoreResult.REJECTED_CHECKPOINT,
+            kernel.restore(checkpoint, listOf(trailing.signedEnvelope)),
+        )
+        assertTrue(persisted.isEmpty())
+        assertTrue(kernel.summarize().heads.isEmpty())
     }
 
     @Test
