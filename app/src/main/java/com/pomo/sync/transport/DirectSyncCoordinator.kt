@@ -1,6 +1,12 @@
 package com.pomo.sync.transport
 
-internal data class SyncEnvelope(val operationId: String, val feedKey: String, val sequence: Long, val wire: ByteArray)
+internal data class SyncEnvelope(
+    val operationId: String,
+    val feedKey: String,
+    val sequence: Long,
+    val wire: ByteArray,
+)
+
 internal data class DurablePeerFrontier(
     val sequence: Long,
     val operationId: String,
@@ -12,7 +18,12 @@ internal data class DurablePeerAck(
     val frontier: Map<String, DurablePeerFrontier>,
     val signatureVerified: Boolean,
 )
-internal enum class DirectRouteState { OFFLINE, CATCHING_UP, LIVE }
+
+internal enum class DirectRouteState {
+    OFFLINE,
+    CATCHING_UP,
+    LIVE,
+}
 
 internal class DirectSyncCoordinator(
     obligations: Collection<SyncEnvelope>,
@@ -21,15 +32,25 @@ internal class DirectSyncCoordinator(
     var state: DirectRouteState = DirectRouteState.OFFLINE
         private set
 
-    fun connected() { state = DirectRouteState.CATCHING_UP }
-    fun disconnected() { state = DirectRouteState.OFFLINE }
+    fun connected() {
+        state = DirectRouteState.CATCHING_UP
+    }
+
+    fun disconnected() {
+        state = DirectRouteState.OFFLINE
+    }
+
     fun nextBatch(limit: Int = MAX_BATCH): List<SyncEnvelope> {
         require(limit in 1..MAX_BATCH)
-        return pending.values.sortedWith(compareBy<SyncEnvelope> { it.feedKey }.thenBy { it.sequence }).take(limit)
+        return pending.values
+            .sortedWith(compareBy<SyncEnvelope> { it.feedKey }.thenBy { it.sequence })
+            .take(limit)
     }
+
     fun ingest(envelopes: Collection<SyncEnvelope>, kernelIngest: (ByteArray) -> Unit) {
         envelopes.distinctBy { it.operationId }.forEach { kernelIngest(it.wire.copyOf()) }
     }
+
     fun acknowledge(ack: DurablePeerAck) {
         require(ack.signatureVerified) { "Only signed durable acknowledgments clear obligations" }
         pending.entries.removeIf { (_, envelope) ->
@@ -43,5 +64,7 @@ internal class DirectSyncCoordinator(
     fun liveObservationTrusted(): Boolean = state == DirectRouteState.LIVE
     fun pendingOperationIds(): Set<String> = pending.keys.toSet()
 
-    companion object { const val MAX_BATCH: Int = 256 }
+    companion object {
+        const val MAX_BATCH: Int = 256
+    }
 }

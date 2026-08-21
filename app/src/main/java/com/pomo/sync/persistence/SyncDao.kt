@@ -19,7 +19,11 @@ internal interface SyncDao {
             "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence = :sequence " +
             "ORDER BY operationId ASC",
     )
-    fun operationsAt(deviceId: String, incarnationId: String, sequence: Long): List<SyncOperationEntity>
+    fun operationsAt(
+        deviceId: String,
+        incarnationId: String,
+        sequence: Long,
+    ): List<SyncOperationEntity>
 
     @Query(
         "SELECT * FROM sync_operations " +
@@ -35,16 +39,27 @@ internal interface SyncDao {
             "WHERE deviceId = :deviceId AND incarnationId = :incarnationId " +
             "AND sequence = :sequence AND disposition = 'ACCEPTED' ORDER BY operationId ASC LIMIT 1",
     )
-    fun acceptedAt(deviceId: String, incarnationId: String, sequence: Long): SyncOperationEntity?
+    fun acceptedAt(
+        deviceId: String,
+        incarnationId: String,
+        sequence: Long,
+    ): SyncOperationEntity?
 
     @Query(
         "UPDATE sync_operations SET disposition = 'QUARANTINED_FORK' " +
             "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence >= :sequence",
     )
-    fun quarantineTail(deviceId: String, incarnationId: String, sequence: Long)
+    fun quarantineTail(
+        deviceId: String,
+        incarnationId: String,
+        sequence: Long,
+    )
 
     @Query("UPDATE sync_operations SET disposition = :disposition WHERE operationId = :operationId")
-    fun updateDisposition(operationId: String, disposition: String): Int
+    fun updateDisposition(
+        operationId: String,
+        disposition: String,
+    ): Int
 
     @Query("DELETE FROM sync_operations WHERE operationId = :operationId")
     fun deleteOperation(operationId: String): Int
@@ -53,7 +68,10 @@ internal interface SyncDao {
     fun upsertHead(head: SyncFeedHeadEntity)
 
     @Query("SELECT * FROM sync_feed_heads WHERE deviceId = :deviceId AND incarnationId = :incarnationId")
-    fun head(deviceId: String, incarnationId: String): SyncFeedHeadEntity?
+    fun head(
+        deviceId: String,
+        incarnationId: String,
+    ): SyncFeedHeadEntity?
 
     @Query("SELECT * FROM sync_feed_heads ORDER BY deviceId ASC, incarnationId ASC")
     fun allHeads(): List<SyncFeedHeadEntity>

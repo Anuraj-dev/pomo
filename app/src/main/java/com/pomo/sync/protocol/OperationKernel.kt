@@ -8,6 +8,7 @@ internal fun interface OperationSigner {
         operationId: ProtocolBytes,
     ): ByteArray
 }
+
 internal fun interface OperationVerifier {
     /** Decodes and authenticates one raw [COSE_Sign1, fact payload] wire. */
     fun verify(signedEnvelope: ByteArray): AuthenticatedOperation
@@ -29,7 +30,10 @@ internal fun interface OperationStore {
         )
     }
 
-    fun reject(signedEnvelope: ByteArray, disposition: IngestDisposition) {}
+    fun reject(
+        signedEnvelope: ByteArray,
+        disposition: IngestDisposition,
+    ) {}
 
     fun appendBatch(operations: List<AuthenticatedOperation>) {
         commitBatch(operations.map { OperationCommit(it, IngestDisposition.ACCEPTED, false) })
@@ -37,7 +41,9 @@ internal fun interface OperationStore {
 
     /** Atomically persists verified checkpoint state and any accepted trailing Operations. */
     fun restore(checkpoint: KernelCheckpoint, trailing: List<AuthenticatedOperation>) {
-        if (trailing.isNotEmpty()) appendBatch(trailing)
+        if (trailing.isNotEmpty()) {
+            appendBatch(trailing)
+        }
     }
 }
 
@@ -168,8 +174,10 @@ internal class OperationKernel(
         }
     }
 
-    private fun reject(signedEnvelope: ByteArray, disposition: IngestDisposition): IngestDisposition =
-        if (runCatching { store.reject(signedEnvelope, disposition) }.isSuccess) {
+    private fun reject(
+        signedEnvelope: ByteArray,
+        disposition: IngestDisposition,
+    ): IngestDisposition = if (runCatching { store.reject(signedEnvelope, disposition) }.isSuccess) {
             record(disposition)
             disposition
         } else {
@@ -351,7 +359,8 @@ internal class OperationKernel(
 
     private fun captureState(): StateSnapshot =
         StateSnapshot(
-            feeds = feeds.mapValuesTo(linkedMapOf()) { (_, feed) ->
+            feeds =
+                feeds.mapValuesTo(linkedMapOf()) { (_, feed) ->
                 FeedState(
                     head = feed.head,
                     headId = feed.headId,

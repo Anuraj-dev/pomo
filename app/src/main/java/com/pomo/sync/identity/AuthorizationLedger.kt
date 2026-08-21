@@ -34,10 +34,11 @@ internal class AuthorizationLedger private constructor(
     private var projection: AuthorizationProjection,
     private val firstDeviceId: ProtocolBytes,
 ) {
-    fun snapshot(): AuthorizationProjection = projection.copy(
-        devices = projection.devices.toMap(),
-        acceptedFactIds = projection.acceptedFactIds.toSet(),
-    )
+    fun snapshot(): AuthorizationProjection =
+        projection.copy(
+            devices = projection.devices.toMap(),
+            acceptedFactIds = projection.acceptedFactIds.toSet(),
+        )
 
     fun apply(
         fact: AuthorityFact,
@@ -71,13 +72,14 @@ internal class AuthorizationLedger private constructor(
             return AuthorityDisposition.REJECTED_INVALID
         }
         if (!validEpochAdvance(fact)) return AuthorityDisposition.REJECTED_INVALID
-        projection = projection.copy(
-            authorizationEpoch = fact.authorizationEpoch,
-            contentEpoch = fact.contentEpoch,
-            devices = projection.devices +
-                (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
-            acceptedFactIds = projection.acceptedFactIds + factId,
-        )
+        projection =
+            projection.copy(
+                authorizationEpoch = fact.authorizationEpoch,
+                contentEpoch = fact.contentEpoch,
+                devices = projection.devices +
+                    (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
+                acceptedFactIds = projection.acceptedFactIds + factId,
+            )
         return AuthorityDisposition.ACCEPTED
     }
 
@@ -99,10 +101,11 @@ internal class AuthorizationLedger private constructor(
         ) {
             return AuthorityDisposition.REJECTED_INVALID
         }
-        projection = projection.copy(
-            devices = projection.devices + (deviceId to device.copy(deviceReady = true)),
-            acceptedFactIds = projection.acceptedFactIds + factId,
-        )
+        projection =
+            projection.copy(
+                devices = projection.devices + (deviceId to device.copy(deviceReady = true)),
+                acceptedFactIds = projection.acceptedFactIds + factId,
+            )
         return AuthorityDisposition.ACCEPTED
     }
 
@@ -118,13 +121,14 @@ internal class AuthorizationLedger private constructor(
         ) {
             return AuthorityDisposition.REJECTED_INVALID
         }
-        projection = projection.copy(
-            authorizationEpoch = fact.authorizationEpoch,
-            contentEpoch = fact.contentEpoch,
-            devices = projection.devices +
-                (deviceId to device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)),
-            acceptedFactIds = projection.acceptedFactIds + factId,
-        )
+        projection =
+            projection.copy(
+                authorizationEpoch = fact.authorizationEpoch,
+                contentEpoch = fact.contentEpoch,
+                devices = projection.devices +
+                    (deviceId to device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)),
+                acceptedFactIds = projection.acceptedFactIds + factId,
+            )
         return AuthorityDisposition.ACCEPTED
     }
 
@@ -149,11 +153,12 @@ internal class AuthorizationLedger private constructor(
             }
         val certificate = fact.recoveryCertificate
         if (!authorityValid || certificate == null) return AuthorityDisposition.REJECTED_INVALID
-        projection = projection.copy(
-            recoveryGeneration = fact.recoveryGeneration,
-            recoveryCertificate = certificate,
-            acceptedFactIds = projection.acceptedFactIds + factId,
-        )
+        projection =
+            projection.copy(
+                recoveryGeneration = fact.recoveryGeneration,
+                recoveryCertificate = certificate,
+                acceptedFactIds = projection.acceptedFactIds + factId,
+            )
         return AuthorityDisposition.ACCEPTED
     }
 
@@ -171,18 +176,20 @@ internal class AuthorizationLedger private constructor(
         val deviceId = IdentityCodec.deviceId(certificate)
         val recovery = fact.recoveryCertificate ?: return AuthorityDisposition.REJECTED_INVALID
         if (fact.subjectDeviceId != deviceId) return AuthorityDisposition.REJECTED_INVALID
-        val retired = projection.devices.mapValues { (_, device) ->
-            device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)
-        }
-        projection = projection.copy(
-            authorizationEpoch = fact.authorizationEpoch,
-            contentEpoch = fact.contentEpoch,
-            recoveryGeneration = fact.recoveryGeneration,
-            recoveryCertificate = recovery,
-            devices = retired +
-                (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
-            acceptedFactIds = projection.acceptedFactIds + factId,
-        )
+        val retired =
+            projection.devices.mapValues { (_, device) ->
+                device.copy(authorized = false, deviceReady = false, revokedAtEpoch = fact.authorizationEpoch)
+            }
+        projection =
+            projection.copy(
+                authorizationEpoch = fact.authorizationEpoch,
+                contentEpoch = fact.contentEpoch,
+                recoveryGeneration = fact.recoveryGeneration,
+                recoveryCertificate = recovery,
+                devices = retired +
+                    (deviceId to DeviceAuthorityProjection(certificate, true, false, fact.authorizationEpoch, null)),
+                acceptedFactIds = projection.acceptedFactIds + factId,
+            )
         return AuthorityDisposition.ACCEPTED
     }
 

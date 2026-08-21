@@ -60,7 +60,10 @@ internal object OperationCodec {
     }
 
     fun decodeUnsigned(canonicalUnsigned: ByteArray): UnsignedOperation =
-        decodeUnsigned(canonicalUnsigned, allowUnsupportedSuite = false)
+        decodeUnsigned(
+            canonicalUnsigned,
+            allowUnsupportedSuite = false,
+        )
 
     internal fun decodeUnsignedForVerification(canonicalUnsigned: ByteArray): UnsignedOperation =
         decodeUnsigned(canonicalUnsigned, allowUnsupportedSuite = true)

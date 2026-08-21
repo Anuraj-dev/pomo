@@ -25,7 +25,10 @@ internal object IdentityCodec {
     }
 
     fun deviceId(certificate: DeviceCertificate): ProtocolBytes =
-        domainId("Pomo Device ID", encodeDeviceCertificate(certificate))
+        domainId(
+            "Pomo Device ID",
+            encodeDeviceCertificate(certificate),
+        )
 
     fun encodeRecoveryCertificate(certificate: RecoveryCertificate): ByteArray {
         requireCertificate(certificate.suite, certificate.signingPublicKey, certificate.agreementPublicKey)
@@ -42,7 +45,10 @@ internal object IdentityCodec {
     }
 
     fun recoveryId(certificate: RecoveryCertificate): ProtocolBytes =
-        domainId("Pomo Recovery ID", encodeRecoveryCertificate(certificate))
+        domainId(
+            "Pomo Recovery ID",
+            encodeRecoveryCertificate(certificate),
+        )
 
     fun encodeGenesis(genesis: MemberGenesis): ByteArray {
         require(genesis.suite == PomoSuite.ID)

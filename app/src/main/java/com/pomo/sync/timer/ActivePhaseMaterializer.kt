@@ -1,9 +1,29 @@
 package com.pomo.sync.timer
 
-internal enum class PhaseKind { WORK, SHORT_BREAK, LONG_BREAK }
-internal enum class TimerAction { START, PAUSE, RESUME, EXTEND, SKIP, RESET, COMPLETE, HANDOFF, PROVISIONAL_TAKEOVER, SETTLE }
+internal enum class PhaseKind {
+    WORK,
+    SHORT_BREAK,
+    LONG_BREAK,
+}
 
-internal data class PhasePlan(val kind: PhaseKind, val durationMillis: Long, val tagId: String?)
+internal enum class TimerAction {
+    START,
+    PAUSE,
+    RESUME,
+    EXTEND,
+    SKIP,
+    RESET,
+    COMPLETE,
+    HANDOFF,
+    PROVISIONAL_TAKEOVER,
+    SETTLE,
+}
+
+internal data class PhasePlan(
+    val kind: PhaseKind,
+    val durationMillis: Long,
+    val tagId: String?,
+)
 internal data class TimerFact(
     val operationId: String,
     val phaseId: String,
@@ -38,7 +58,9 @@ internal data class TimerCommandRequest(
 internal object ActivePhaseMaterializer {
     fun materialize(input: Collection<TimerFact>): ActivePhaseProjection {
         val facts = input.distinctBy { it.operationId }.sortedBy { it.operationId }
-        if (facts.isEmpty()) return ActivePhaseProjection(null, null, emptySet(), null, false, emptySet(), false, emptySet())
+        if (facts.isEmpty()) {
+            return ActivePhaseProjection(null, null, emptySet(), null, false, emptySet(), false, emptySet())
+        }
         require(facts.map { it.phaseId }.distinct().size == 1) { "Projection must target one identified phase" }
         val byId = facts.associateBy { it.operationId }
         val accepted = linkedMapOf<String, TimerFact>()
@@ -54,8 +76,9 @@ internal object ActivePhaseMaterializer {
             require(fact.elapsedMillis >= 0)
             if (fact.action == TimerAction.SETTLE) require(fact.parentHeads.size >= 2)
             if (fact.action in normalOwnerActions) {
-                val parent = fact.parentHeads.singleOrNull()?.let(accepted::get)
-                    ?: error("Normal Timer command requires one exact command head")
+                val parent =
+                    fact.parentHeads.singleOrNull()?.let(accepted::get)
+                        ?: error("Normal Timer command requires one exact command head")
                 require(fact.ownerDeviceId == parent.ownerDeviceId && fact.ownershipClaimId == parent.ownershipClaimId) {
                     "Only the uncontested owner may author a normal Timer command"
                 }
@@ -81,5 +104,12 @@ internal object ActivePhaseMaterializer {
     }
 
     private val normalOwnerActions =
-        setOf(TimerAction.PAUSE, TimerAction.RESUME, TimerAction.EXTEND, TimerAction.SKIP, TimerAction.RESET, TimerAction.COMPLETE)
+        setOf(
+            TimerAction.PAUSE,
+            TimerAction.RESUME,
+            TimerAction.EXTEND,
+            TimerAction.SKIP,
+            TimerAction.RESET,
+            TimerAction.COMPLETE,
+        )
 }

@@ -2,7 +2,13 @@ package com.pomo.sync.transport
 
 import com.pomo.sync.crypto.PomoCrypto
 
-internal data class MailboxObject(val objectId: String, val bytes: ByteArray, val sha256: String, val size: Long)
+internal data class MailboxObject(
+    val objectId: String,
+    val bytes: ByteArray,
+    val sha256: String,
+    val size: Long,
+)
+
 internal data class MailboxManifest(
     val manifestId: String,
     val checkpointId: String,
@@ -10,8 +16,21 @@ internal data class MailboxManifest(
     val operationIds: List<String>,
     val blobIds: List<String>,
 )
-internal enum class MailboxFailure { CORS, QUOTA, CREDENTIAL, ROLLBACK, MISSING_OBJECT, NETWORK }
-internal data class MailboxProtection(val mailboxId: String, val protected: Boolean, val failure: MailboxFailure?)
+
+internal enum class MailboxFailure {
+    CORS,
+    QUOTA,
+    CREDENTIAL,
+    ROLLBACK,
+    MISSING_OBJECT,
+    NETWORK,
+}
+
+internal data class MailboxProtection(
+    val mailboxId: String,
+    val protected: Boolean,
+    val failure: MailboxFailure?,
+)
 
 internal interface ImmutableMailboxClient {
     fun createIfAbsent(objectId: String, bytes: ByteArray): Boolean
@@ -41,7 +60,11 @@ internal class WebDavMailbox(
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }
 
-internal fun repairMailbox(source: ImmutableMailboxClient, target: ImmutableMailboxClient, objectIds: Collection<String>): Set<String> {
+internal fun repairMailbox(
+    source: ImmutableMailboxClient,
+    target: ImmutableMailboxClient,
+    objectIds: Collection<String>,
+): Set<String> {
     val repaired = linkedSetOf<String>()
     objectIds.forEach { id -> source.get(id)?.let { if (target.createIfAbsent(id, it.copyOf())) repaired += id } }
     return repaired

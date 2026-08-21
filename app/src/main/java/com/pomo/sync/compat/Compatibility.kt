@@ -11,18 +11,51 @@ internal data class CompatibilityProfile(
     val safeStorageGeneration: Int,
     val authenticated: Boolean,
 )
-internal data class AuthoringBaseline(val schema: Int, val materializer: Int, val checkpoint: Int, val suiteGeneration: Long, val recoveryFormat: Int, val storageGeneration: Int)
-internal enum class CompatibilityMode { READY, LIMITED_FORWARD_ONLY, BLOCKED_AUTHORITY }
-internal data class UnknownAuthenticatedFact(val operationId: String, val canonicalWire: ByteArray, val retainedForForwarding: Boolean = true)
+
+internal data class AuthoringBaseline(
+    val schema: Int,
+    val materializer: Int,
+    val checkpoint: Int,
+    val suiteGeneration: Long,
+    val recoveryFormat: Int,
+    val storageGeneration: Int,
+)
+
+internal enum class CompatibilityMode {
+    READY,
+    LIMITED_FORWARD_ONLY,
+    BLOCKED_AUTHORITY,
+}
+
+internal data class UnknownAuthenticatedFact(
+    val operationId: String,
+    val canonicalWire: ByteArray,
+    val retainedForForwarding: Boolean = true,
+)
 
 internal fun compatibilityMode(profile: CompatibilityProfile, baseline: AuthoringBaseline): CompatibilityMode {
-    if (!profile.authenticated || baseline.suiteGeneration !in profile.suiteGenerations || baseline.recoveryFormat !in profile.recoveryFormats) return CompatibilityMode.BLOCKED_AUTHORITY
-    val ready = baseline.schema in profile.writableSchemas && baseline.materializer in profile.materializers &&
-        baseline.checkpoint in profile.checkpointFormats && profile.safeStorageGeneration >= baseline.storageGeneration
+    if (
+        !profile.authenticated ||
+        baseline.suiteGeneration !in profile.suiteGenerations ||
+        baseline.recoveryFormat !in profile.recoveryFormats
+    ) {
+        return CompatibilityMode.BLOCKED_AUTHORITY
+    }
+    val ready =
+        baseline.schema in profile.writableSchemas &&
+            baseline.materializer in profile.materializers &&
+            baseline.checkpoint in profile.checkpointFormats &&
+            profile.safeStorageGeneration >= baseline.storageGeneration
     return if (ready) CompatibilityMode.READY else CompatibilityMode.LIMITED_FORWARD_ONLY
 }
 
-internal enum class ActivationDecision { PROPOSED, CONFIRMED, LIMITED_NAMED_DEVICES, QUARANTINED_CONCURRENT }
+internal enum class ActivationDecision {
+    PROPOSED,
+    CONFIRMED,
+    LIMITED_NAMED_DEVICES,
+    QUARANTINED_CONCURRENT,
+}
+
 internal data class GenerationActivation(
     val generation: Long,
     val frontierId: String,
@@ -34,20 +67,31 @@ internal data class GenerationActivation(
 )
 
 internal fun evaluateActivation(value: GenerationActivation, concurrentGenerations: Set<Long>): ActivationDecision {
-    require(value.frontierId.isNotBlank() && value.proposerDeviceId in value.readerReadyDeviceIds) { "reader support must ship before proposal" }
+    require(value.frontierId.isNotBlank() && value.proposerDeviceId in value.readerReadyDeviceIds) {
+        "reader support must ship before proposal"
+    }
     if (concurrentGenerations.any { it != value.generation }) return ActivationDecision.QUARANTINED_CONCURRENT
-    require(value.confirmerDeviceId != value.proposerDeviceId || value.confirmedByRecovery) { "another Full device or Recovery must confirm" }
+    require(value.confirmerDeviceId != value.proposerDeviceId || value.confirmedByRecovery) {
+        "another Full device or Recovery must confirm"
+    }
     require(
         value.confirmerDeviceId == null ||
             value.confirmerDeviceId in value.readerReadyDeviceIds ||
             value.confirmedByRecovery,
-    ) { "confirmer must be a reader-ready Full device or Recovery" }
+    ) {
+        "confirmer must be a reader-ready Full device or Recovery"
+    }
     if (value.confirmerDeviceId == null && !value.confirmedByRecovery) return ActivationDecision.PROPOSED
-    return if (value.explicitlyLimitedDeviceIds.isEmpty()) ActivationDecision.CONFIRMED else ActivationDecision.LIMITED_NAMED_DEVICES
+    return if (value.explicitlyLimitedDeviceIds.isEmpty()) {
+        ActivationDecision.CONFIRMED
+    } else {
+        ActivationDecision.LIMITED_NAMED_DEVICES
+    }
 }
 
-internal fun oldBuildDataDisposition(isSynchronizedHistory: Boolean, laterIndependentData: Boolean): String = when {
-    isSynchronizedHistory -> "READ_ONLY"
-    laterIndependentData -> "EXPLICIT_IMPORT_REQUIRED"
-    else -> "LOCAL_ONLY"
-}
+internal fun oldBuildDataDisposition(isSynchronizedHistory: Boolean, laterIndependentData: Boolean): String =
+    when {
+        isSynchronizedHistory -> "READ_ONLY"
+        laterIndependentData -> "EXPLICIT_IMPORT_REQUIRED"
+        else -> "LOCAL_ONLY"
+    }

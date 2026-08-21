@@ -3,8 +3,8 @@ package com.pomo.sync.persistence
 import com.pomo.db.AppDatabase
 import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
-import com.pomo.sync.protocol.KernelCheckpoint
 import com.pomo.sync.protocol.IngestDisposition
+import com.pomo.sync.protocol.KernelCheckpoint
 import com.pomo.sync.protocol.OperationCodec
 import com.pomo.sync.protocol.OperationCommit
 import com.pomo.sync.protocol.OperationStore
@@ -64,7 +64,10 @@ internal class RoomOperationStore(
         }
     }
 
-    override fun restore(checkpoint: KernelCheckpoint, trailing: List<AuthenticatedOperation>) {
+    override fun restore(
+        checkpoint: KernelCheckpoint,
+        trailing: List<AuthenticatedOperation>,
+    ) {
         database.runInTransaction {
             checkpoint.feeds.forEach { feed ->
                 val deviceId = feed.deviceId.toString()
@@ -330,15 +333,17 @@ internal class RoomOperationStore(
 
     private fun causalMaterializationOrder(operations: List<SyncOperationEntity>): List<SyncOperationEntity> {
         val byId = operations.associateBy { it.operationId }
-        val dependencies = operations.associate { operation ->
-            val parsed = runCatching { CoseOperationWire.unsignedOperation(operation.signedWire) }.getOrNull()
-            operation.operationId to buildSet {
-                operation.previousOperationId?.takeIf(byId::containsKey)?.let(::add)
-                parsed?.frontier?.map { it.headOperationId.toString() }
-                    ?.filter(byId::containsKey)
-                    ?.forEach(::add)
+        val dependencies =
+            operations.associate { operation ->
+                val parsed = runCatching { CoseOperationWire.unsignedOperation(operation.signedWire) }.getOrNull()
+                operation.operationId to
+                    buildSet {
+                        operation.previousOperationId?.takeIf(byId::containsKey)?.let(::add)
+                        parsed?.frontier?.map { it.headOperationId.toString() }
+                            ?.filter(byId::containsKey)
+                            ?.forEach(::add)
+                    }
             }
-        }
         val indegree = dependencies.mapValues { (_, required) -> required.size }.toMutableMap()
         val dependents = mutableMapOf<String, MutableList<String>>()
         dependencies.forEach { (operationId, required) ->

@@ -59,12 +59,16 @@ internal object DiagnosticRedaction {
             "sourceKind",
             "formatVersion",
         )
-    private val forbidden = Regex("(?i)(key|secret|token|credential|capability|recovery|profile|photo|tag|history|payload|content|member)")
+    private val forbidden =
+        Regex("(?i)(key|secret|token|credential|capability|recovery|profile|photo|tag|history|payload|content|member)")
+
     fun requireSafe(event: DiagnosticEvent) {
         require(event.event.length in 1..80 && !forbidden.containsMatchIn(event.event))
         require(event.fields.size <= 24)
         event.fields.forEach { (key, value) ->
-            require(key in allowedFields && value.length <= 120 && !forbidden.containsMatchIn(value)) { "Diagnostic field is not export-safe" }
+            require(key in allowedFields && value.length <= 120 && !forbidden.containsMatchIn(value)) {
+                "Diagnostic field is not export-safe"
+            }
         }
     }
 }

@@ -21,9 +21,22 @@ internal sealed interface HistoryFact {
         override val blockId: String = block.blockId
     }
 
-    data class Correct(override val factId: String, override val blockId: String, val replacement: HistoryBlock) : HistoryFact
-    data class Tombstone(override val factId: String, override val blockId: String) : HistoryFact
-    data class Settle(override val factId: String, override val blockId: String, val selectedFactIds: Set<String>) : HistoryFact
+    data class Correct(
+        override val factId: String,
+        override val blockId: String,
+        val replacement: HistoryBlock,
+    ) : HistoryFact
+
+    data class Tombstone(
+        override val factId: String,
+        override val blockId: String,
+    ) : HistoryFact
+
+    data class Settle(
+        override val factId: String,
+        override val blockId: String,
+        val selectedFactIds: Set<String>,
+    ) : HistoryFact
 }
 
 internal data class MaterializedHistory(
@@ -80,7 +93,11 @@ internal data class SessionTag(
 )
 
 internal class TagMaterializer(private val workTagId: String) {
-    fun apply(current: Map<String, SessionTag>, next: SessionTag, defaultTagId: String): Pair<Map<String, SessionTag>, String> {
+    fun apply(
+        current: Map<String, SessionTag>,
+        next: SessionTag,
+        defaultTagId: String,
+    ): Pair<Map<String, SessionTag>, String> {
         require(next.name.isNotBlank() && next.paletteSlot >= 0)
         require(next.tagId != workTagId || !next.archived && next.mergedInto == null) { "Work tag is permanent" }
         next.mergedInto?.let { require(it in current && it != next.tagId) }
@@ -93,7 +110,10 @@ internal class TagMaterializer(private val workTagId: String) {
 internal object DestructiveHistoryGuard {
     const val INDEPENDENT_CONFIRMATION_THRESHOLD: Int = 10
 
-    fun authorize(targetBlockIds: Set<String>, confirmationScope: Set<String>): Boolean =
+    fun authorize(
+        targetBlockIds: Set<String>,
+        confirmationScope: Set<String>,
+    ): Boolean =
         targetBlockIds.isNotEmpty() &&
             (targetBlockIds.size < INDEPENDENT_CONFIRMATION_THRESHOLD || targetBlockIds == confirmationScope)
 }
