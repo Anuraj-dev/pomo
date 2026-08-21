@@ -34,6 +34,11 @@ internal fun interface OperationStore {
     fun appendBatch(operations: List<AuthenticatedOperation>) {
         commitBatch(operations.map { OperationCommit(it, IngestDisposition.ACCEPTED, false) })
     }
+
+    /** Atomically persists verified checkpoint state and any accepted trailing Operations. */
+    fun restore(checkpoint: KernelCheckpoint, trailing: List<AuthenticatedOperation>) {
+        if (trailing.isNotEmpty()) appendBatch(trailing)
+    }
 }
 
 internal fun interface CheckpointVerifier {
@@ -325,9 +330,7 @@ internal class OperationKernel(
         }
         val newlyDurableTrailing =
             staged.causalMaterializationOrder().filter { it.operationId !in existingKnownIds }
-        if (newlyDurableTrailing.isNotEmpty() &&
-            runCatching { store.appendBatch(newlyDurableTrailing) }.isFailure
-        ) {
+        if (runCatching { store.restore(checkpoint, newlyDurableTrailing) }.isFailure) {
             return RestoreResult.REJECTED_CHECKPOINT
         }
         feeds.clear()

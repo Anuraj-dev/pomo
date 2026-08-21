@@ -39,6 +39,21 @@ internal data class SyncFeedHeadEntity(
     val forkedAt: Long?,
 )
 
+@Entity(tableName = "sync_checkpoint_operations", primaryKeys = ["deviceId", "incarnationId", "sequence"])
+internal data class SyncCheckpointOperationEntity(
+    val deviceId: String,
+    val incarnationId: String,
+    val sequence: Long,
+    val operationId: String,
+)
+
+@Entity(tableName = "sync_checkpoint_projection")
+internal data class SyncCheckpointProjectionEntity(
+    @PrimaryKey
+    val preferenceKey: String,
+    val preferenceValue: String,
+)
+
 @Entity(tableName = "sync_preference_projection")
 internal data class SyncPreferenceProjectionEntity(
     @PrimaryKey

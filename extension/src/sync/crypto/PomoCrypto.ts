@@ -200,13 +200,15 @@ function hpkeSuite(): CipherSuite {
 
 export async function generateHpkeRecipientKeyPair(): Promise<CryptoKeyPair> {
   const generated = await hpkeSuite().kem.generateKeyPair();
-  return { publicKey: generated.publicKey, privateKey: markPrivateKeyNonExtractable(generated.privateKey) };
-}
-
-/** The pure-JS HPKE key wrapper exposes an extractable marker; keep identity keys non-exportable by contract. */
-function markPrivateKeyNonExtractable(privateKey: CryptoKey): CryptoKey {
-  Object.defineProperty(privateKey, "extractable", { configurable: false, enumerable: true, value: false, writable: false });
-  return privateKey;
+  const privateJwk = await crypto.subtle.exportKey("jwk", generated.privateKey);
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    privateJwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
+  return { publicKey: generated.publicKey, privateKey };
 }
 
 export async function serializeHpkePublicKey(publicKey: CryptoKey): Promise<Uint8Array> {
@@ -224,7 +226,13 @@ export async function importHpkeP256KeyPair(jwk: JsonWebKey): Promise<CryptoKeyP
   }
   const suite = hpkeSuite();
   const publicKey = await suite.kem.importKey("jwk", { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y }, true);
-  const privateKey = markPrivateKeyNonExtractable(await suite.kem.importKey("jwk", jwk, false));
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
   return { publicKey, privateKey };
 }
 

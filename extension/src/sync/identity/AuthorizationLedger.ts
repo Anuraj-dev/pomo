@@ -135,6 +135,32 @@ export class AuthorizationLedger {
     return "ACCEPTED";
   }
 
+  recoveryRotate(input: {
+    readonly factId: string;
+    readonly memberId: string;
+    readonly issuerDeviceId: string;
+    readonly recoveryVerified: boolean;
+    readonly recoveryGeneration: number;
+    readonly recoveryRotateMode: "NORMAL" | "EMERGENCY_DEVICE_ROTATION";
+    readonly recovery: RecoveryCertificate;
+    readonly ledgerFrontier: ReadonlySet<string>;
+  }): AuthorityDisposition {
+    const preflight = this.#preflight(input.factId, input.memberId, input.ledgerFrontier);
+    if (preflight !== null) return preflight;
+    if (input.recoveryGeneration !== this.#recoveryGeneration + 1) {
+      return input.recoveryGeneration === this.#recoveryGeneration ?
+        "QUARANTINED_CONCURRENT_AUTHORITY" : "REJECTED_STALE_RECOVERY";
+    }
+    const issuerReady = this.#authorizedAndReady(input.issuerDeviceId);
+    const authorityValid = input.recoveryRotateMode === "NORMAL" ?
+      input.recoveryVerified && issuerReady : !input.recoveryVerified && issuerReady;
+    if (!authorityValid) return "REJECTED_INVALID";
+    this.#recoveryGeneration = input.recoveryGeneration;
+    this.#recovery = input.recovery;
+    this.#accepted.add(input.factId);
+    return "ACCEPTED";
+  }
+
   recoveryReset(input: {
     readonly factId: string;
     readonly memberId: string;

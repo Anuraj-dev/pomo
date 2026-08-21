@@ -60,6 +60,7 @@ describe("Member Identity and causal authorization", () => {
     const recoveryAuthority = await generateLocalRecoveryAuthority();
     expect(device.signingPrivateKey.extractable).toBeFalse();
     expect(device.agreementPrivateKey.extractable).toBeFalse();
+    await expect(crypto.subtle.exportKey("jwk", device.agreementPrivateKey)).rejects.toThrow();
     expect(device.certificate.signingPublicKey).not.toEqual(device.certificate.agreementPublicKey);
 
     const first = await memberGenesis(recoveryAuthority.certificate, device.certificate);
@@ -91,6 +92,18 @@ describe("Member Identity and causal authorization", () => {
       contentEpoch: 2,
       ledgerFrontier: new Set(["a1"]),
     })).toBe("ACCEPTED");
+    const rotatedRecovery = recovery("55".repeat(32));
+    expect(ledger.recoveryRotate({
+      factId: "a2-rotate",
+      memberId: "00".repeat(32),
+      issuerDeviceId: first.deviceId,
+      recoveryVerified: true,
+      recoveryGeneration: 2,
+      recoveryRotateMode: "NORMAL",
+      recovery: rotatedRecovery,
+      ledgerFrontier: new Set(["a1", "a2"]),
+    })).toBe("ACCEPTED");
+    expect(ledger.snapshot().recoveryGeneration).toBe(2);
     expect(ledger.snapshot().devices.get(joining.deviceId)?.deviceReady).toBeFalse();
     expect(ledger.markReady({
       factId: "a2-ready",

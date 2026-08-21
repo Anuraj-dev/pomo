@@ -58,6 +58,27 @@ internal interface SyncDao {
     @Query("SELECT * FROM sync_feed_heads ORDER BY deviceId ASC, incarnationId ASC")
     fun allHeads(): List<SyncFeedHeadEntity>
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertCheckpointOperations(operations: List<SyncCheckpointOperationEntity>)
+
+    @Query(
+        "DELETE FROM sync_checkpoint_operations " +
+            "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence >= :sequence",
+    )
+    fun deleteCheckpointTail(deviceId: String, incarnationId: String, sequence: Long)
+
+    @Query("SELECT COUNT(*) FROM sync_checkpoint_operations")
+    fun checkpointOperationCount(): Int
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertCheckpointProjection(projection: SyncCheckpointProjectionEntity)
+
+    @Query("DELETE FROM sync_checkpoint_projection")
+    fun clearCheckpointProjection()
+
+    @Query("SELECT * FROM sync_checkpoint_projection ORDER BY preferenceKey ASC")
+    fun checkpointProjection(): List<SyncCheckpointProjectionEntity>
+
     @Upsert
     fun upsertProjection(projection: SyncPreferenceProjectionEntity)
 

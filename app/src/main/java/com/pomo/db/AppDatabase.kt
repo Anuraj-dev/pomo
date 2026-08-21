@@ -8,6 +8,8 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.pomo.sync.persistence.SyncDao
+import com.pomo.sync.persistence.SyncCheckpointOperationEntity
+import com.pomo.sync.persistence.SyncCheckpointProjectionEntity
 import com.pomo.sync.persistence.SyncDispositionEventEntity
 import com.pomo.sync.persistence.SyncFeedHeadEntity
 import com.pomo.sync.persistence.SyncOperationEntity
@@ -27,8 +29,10 @@ import com.pomo.sync.persistence.SyncPreferenceProjectionEntity
         SyncPreferenceProjectionEntity::class,
         SyncOutboxEntity::class,
         SyncDispositionEventEntity::class,
+        SyncCheckpointOperationEntity::class,
+        SyncCheckpointProjectionEntity::class,
     ],
-    version = 8,
+    version = 9,
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
@@ -59,6 +63,7 @@ public abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_5_6)
                 .addMigrations(MIGRATION_6_7)
                 .addMigrations(MIGRATION_7_8)
+                .addMigrations(MIGRATION_8_9)
                 .build()
         }
 
@@ -188,7 +193,32 @@ public abstract class AppDatabase : RoomDatabase() {
                 "CREATE INDEX IF NOT EXISTS `index_sync_disposition_events_disposition` " +
                     "ON `sync_disposition_events` (`disposition`)",
             )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sync_checkpoint_operations` (" +
+                    "`deviceId` TEXT NOT NULL, `incarnationId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, " +
+                    "`operationId` TEXT NOT NULL, PRIMARY KEY(`deviceId`, `incarnationId`, `sequence`))",
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sync_checkpoint_projection` (" +
+                    "`preferenceKey` TEXT NOT NULL, `preferenceValue` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`preferenceKey`))",
+            )
         }
+
+        public val MIGRATION_8_9: Migration =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `sync_checkpoint_operations` (" +
+                            "`deviceId` TEXT NOT NULL, `incarnationId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, " +
+                            "`operationId` TEXT NOT NULL, PRIMARY KEY(`deviceId`, `incarnationId`, `sequence`))",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `sync_checkpoint_projection` (" +
+                            "`preferenceKey` TEXT NOT NULL, `preferenceValue` TEXT NOT NULL, PRIMARY KEY(`preferenceKey`))",
+                    )
+                }
+            }
 
         private fun createCrewTables(db: SupportSQLiteDatabase) {
             db.execSQL(

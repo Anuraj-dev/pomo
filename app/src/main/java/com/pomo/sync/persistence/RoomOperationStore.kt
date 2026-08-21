@@ -3,6 +3,7 @@ package com.pomo.sync.persistence
 import com.pomo.db.AppDatabase
 import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
+import com.pomo.sync.protocol.KernelCheckpoint
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.OperationCodec
 import com.pomo.sync.protocol.OperationCommit
@@ -60,6 +61,45 @@ internal class RoomOperationStore(
                     transitionPending = transitionPending,
                 )
             }
+        }
+    }
+
+    override fun restore(checkpoint: KernelCheckpoint, trailing: List<AuthenticatedOperation>) {
+        database.runInTransaction {
+            checkpoint.feeds.forEach { feed ->
+                val deviceId = feed.deviceId.toString()
+                val incarnationId = feed.incarnationId.toString()
+                dao.deleteCheckpointTail(deviceId, incarnationId, 1)
+                dao.insertCheckpointOperations(
+                    feed.coveredOperationIds.mapIndexed { index, operationId ->
+                        SyncCheckpointOperationEntity(deviceId, incarnationId, index + 1L, operationId.toString())
+                    },
+                )
+                dao.upsertHead(
+                    SyncFeedHeadEntity(
+                        deviceId,
+                        incarnationId,
+                        feed.coveredOperationIds.size.toLong(),
+                        feed.coveredOperationIds.lastOrNull()?.toString(),
+                        forkedAt = null,
+                    ),
+                )
+            }
+            dao.clearCheckpointProjection()
+            checkpoint.materializedPreferences.forEach { preference ->
+                dao.insertCheckpointProjection(
+                    SyncCheckpointProjectionEntity(preference.key, preference.value),
+                )
+            }
+            trailing.forEach { operation ->
+                commitInTransaction(
+                    operation,
+                    IngestDisposition.ACCEPTED,
+                    localAuthor = false,
+                    transitionPending = false,
+                )
+            }
+            rebuildProjection()
         }
     }
 
@@ -238,6 +278,8 @@ internal class RoomOperationStore(
         val durableHead = dao.head(incoming.deviceId, incoming.incarnationId)
         val effectiveForkAt = minOf(durableHead?.forkedAt ?: incoming.sequence, incoming.sequence)
         dao.quarantineTail(incoming.deviceId, incoming.incarnationId, effectiveForkAt)
+        dao.deleteCheckpointTail(incoming.deviceId, incoming.incarnationId, effectiveForkAt)
+        if (dao.checkpointOperationCount() > 0) dao.clearCheckpointProjection()
         faultInjector.at(SyncCommitBoundary.AFTER_QUARANTINE)
         val prefixSequence = minOf(durableHead?.sequence ?: 0, effectiveForkAt - 1)
         val prefix =
@@ -266,6 +308,15 @@ internal class RoomOperationStore(
     private fun rebuildProjection() {
         dao.clearProjection()
         faultInjector.at(SyncCommitBoundary.AFTER_PROJECTION_CLEAR)
+        dao.checkpointProjection().forEach { projection ->
+            dao.upsertProjection(
+                SyncPreferenceProjectionEntity(
+                    projection.preferenceKey,
+                    projection.preferenceValue,
+                    operationId = "checkpoint:${projection.preferenceKey}",
+                ),
+            )
+        }
         causalMaterializationOrder(dao.acceptedOperations()).forEach { operation ->
             dao.upsertProjection(
                 SyncPreferenceProjectionEntity(

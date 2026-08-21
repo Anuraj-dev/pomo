@@ -7,24 +7,8 @@ import {
   sha256,
 } from "../crypto/PomoCrypto";
 import { POMO_SUITE_1, POMO_SUITE_GENERATION_1, type FrontierEntry } from "../protocol/types";
-
-export interface DeviceCertificate {
-  readonly version: 1;
-  readonly suite: typeof POMO_SUITE_1;
-  readonly signingPublicKey: Uint8Array;
-  readonly agreementPublicKey: Uint8Array;
-  readonly canonical: Uint8Array;
-  readonly deviceId: string;
-}
-
-export interface RecoveryCertificate {
-  readonly version: 1;
-  readonly suite: typeof POMO_SUITE_1;
-  readonly signingPublicKey: Uint8Array;
-  readonly agreementPublicKey: Uint8Array;
-  readonly canonical: Uint8Array;
-  readonly recoveryId: string;
-}
+import type { DeviceCertificate, RecoveryCertificate } from "./types";
+export type { DeviceCertificate, RecoveryCertificate } from "./types";
 
 export interface LocalDeviceIdentity {
   readonly certificate: DeviceCertificate;
@@ -45,7 +29,7 @@ export interface MemberGenesis {
   readonly recoveryGeneration: 1;
   readonly recovery: RecoveryCertificate;
   readonly firstDevice: DeviceCertificate;
-  readonly canonical: Uint8Array;
+  readonly canonicalBody: Uint8Array;
   readonly memberId: string;
 }
 
@@ -100,14 +84,14 @@ export async function deviceCertificate(
   requirePublicKey(signingPublicKey, "signing public key");
   requirePublicKey(agreementPublicKey, "agreement public key");
   if (equalBytes(signingPublicKey, agreementPublicKey)) throw new Error("Device signing and agreement authorities must be distinct");
-  const canonical = encodeCanonicalCbor([1, POMO_SUITE_1, signingPublicKey, agreementPublicKey]);
-  const deviceId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Device ID", 1, canonical])));
+  const canonicalBody = encodeCanonicalCbor([1, POMO_SUITE_1, signingPublicKey, agreementPublicKey]);
+  const deviceId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Device ID", 1, canonicalBody])));
   return {
     version: 1,
     suite: POMO_SUITE_1,
     signingPublicKey: signingPublicKey.slice(),
     agreementPublicKey: agreementPublicKey.slice(),
-    canonical,
+    canonicalBody,
     deviceId,
   };
 }
@@ -119,14 +103,14 @@ export async function recoveryCertificate(
   requirePublicKey(signingPublicKey, "Recovery signing public key");
   requirePublicKey(agreementPublicKey, "Recovery agreement public key");
   if (equalBytes(signingPublicKey, agreementPublicKey)) throw new Error("Recovery signing and agreement authorities must be distinct");
-  const canonical = encodeCanonicalCbor([1, POMO_SUITE_1, signingPublicKey, agreementPublicKey]);
-  const recoveryId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Recovery ID", 1, canonical])));
+  const canonicalBody = encodeCanonicalCbor([1, POMO_SUITE_1, signingPublicKey, agreementPublicKey]);
+  const recoveryId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Recovery ID", 1, canonicalBody])));
   return {
     version: 1,
     suite: POMO_SUITE_1,
     signingPublicKey: signingPublicKey.slice(),
     agreementPublicKey: agreementPublicKey.slice(),
-    canonical,
+    canonicalBody,
     recoveryId,
   };
 }
@@ -162,15 +146,15 @@ export async function memberGenesis(
   if (checkedRecovery.recoveryId !== recovery.recoveryId || checkedDevice.deviceId !== firstDevice.deviceId) {
     throw new Error("Genesis certificate fingerprint mismatch");
   }
-  const canonical = encodeCanonicalCbor([
+  const canonicalBody = encodeCanonicalCbor([
     1,
     POMO_SUITE_1,
     POMO_SUITE_GENERATION_1,
     1,
-    recovery.canonical,
-    firstDevice.canonical,
+    recovery.canonicalBody,
+    firstDevice.canonicalBody,
   ]);
-  const memberId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Member ID", 1, canonical])));
+  const memberId = bytesToHex(await sha256(encodeCanonicalCbor(["Pomo Member ID", 1, canonicalBody])));
   return {
     version: 1,
     suite: POMO_SUITE_1,
@@ -178,7 +162,7 @@ export async function memberGenesis(
     recoveryGeneration: 1,
     recovery,
     firstDevice,
-    canonical,
+    canonicalBody,
     memberId,
   };
 }
@@ -195,7 +179,7 @@ export async function admissionTranscriptHash(
     1,
     hexToBytes(memberId),
     hexToBytes(admissionId),
-    certificate.canonical,
+    certificate.canonicalBody,
   ])));
 }
 
