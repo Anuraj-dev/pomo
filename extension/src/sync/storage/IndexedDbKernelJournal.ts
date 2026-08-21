@@ -1,4 +1,5 @@
 import type { OperationJournal, OperationJournalEntry } from "../kernel/OperationKernel";
+import type { VerifiedCheckpoint } from "../protocol/types";
 import type { RejectedDisposition } from "../protocol/types";
 import { IndexedDbOperationDao } from "./IndexedDbOperationDao";
 
@@ -16,5 +17,9 @@ export class IndexedDbKernelJournal implements OperationJournal {
 
   async recordRejected(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void> {
     await this.dao.recordRejected(rawWire, disposition);
+  }
+
+  async recordCheckpoint(checkpoint: VerifiedCheckpoint, entries: readonly OperationJournalEntry[]): Promise<void> {
+    await this.dao.restore(checkpoint, entries.map(({ operation, disposition, localAuthor }) => ({ operation, disposition, localAuthor })));
   }
 }

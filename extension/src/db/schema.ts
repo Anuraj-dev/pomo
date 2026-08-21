@@ -1,6 +1,6 @@
 export const DB_NAME = "pomo";
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export const SYNC_OPERATION_STORE = "syncOperations";
 export const SYNC_FEED_HEAD_STORE = "syncFeedHeads";
@@ -13,6 +13,8 @@ export const SYNC_LOCAL_DEVICE_KEY_STORE = "syncLocalDeviceKeys";
 export const SYNC_ADMISSION_STORE = "syncAdmissions";
 export const SYNC_AUTHORIZATION_EVENT_STORE = "syncAuthorizationEvents";
 export const SYNC_CONTENT_EPOCH_STORE = "syncContentEpochs";
+export const SYNC_CHECKPOINT_OPERATION_STORE = "syncCheckpointOperations";
+export const SYNC_CHECKPOINT_PROJECTION_STORE = "syncCheckpointProjection";
 
 type IndexDef = readonly [name: string, keyPath: string | string[]];
 
@@ -97,6 +99,8 @@ export function openDb(): Promise<IDBDatabase> {
         ],
       );
       ensureStore(db, transaction, SYNC_CONTENT_EPOCH_STORE, { keyPath: ["memberId", "contentEpoch"] }, [["memberId", "memberId"]]);
+      ensureStore(db, transaction, SYNC_CHECKPOINT_OPERATION_STORE, { keyPath: ["feedKey", "sequence"] }, [["operationId", "operationId"]]);
+      ensureStore(db, transaction, SYNC_CHECKPOINT_PROJECTION_STORE, { keyPath: "key" }, []);
     };
     request.onsuccess = () => {
       resolve(request.result);

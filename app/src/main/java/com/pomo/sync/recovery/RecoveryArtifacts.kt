@@ -197,7 +197,7 @@ internal fun prepareForwardRestore(
             RestoreDomain.RECOVERY_AUTHORITY,
         )
     require(selections.none { it.domain in prohibited }) { "Recovery restore cannot rewind authority or Active phases" }
-    require(selections.map { it.targetId }.distinct().size == selections.size)
+    require(selections.map { "${it.domain}:${it.targetId}" }.distinct().size == selections.size)
     return ForwardRestorePlan(safetyCheckpointId, selections, selections.size >= 10)
 }
 

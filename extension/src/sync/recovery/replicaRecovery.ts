@@ -15,6 +15,7 @@ export function validateCheckpoint(manifest: CheckpointManifest): void {
 
 export function validateJournalPack(pack: JournalPack, forkedFeeds: ReadonlySet<string>): void {
   if (forkedFeeds.has(pack.prefix.feedKey) || pack.operations.length === 0) throw new Error("pack prefix is not replaceable");
+  if (pack.prefix.sequence !== pack.operations.length) throw new Error("pack length must match prefix sequence");
   for (let index = 0; index < pack.operations.length; index++) {
     const operation = pack.operations[index]!;
     if (operation.feedKey !== pack.prefix.feedKey || operation.sequence !== index + 1) throw new Error("pack must be a complete feed prefix");
@@ -53,14 +54,24 @@ export function planRehydration(sources: readonly RecoverySource[]): Rehydration
     sourceByOperation.set(operationId, new Set(candidates.map(({ sourceId }) => sourceId)));
   }
   operations.sort((left, right) => left.feedKey.localeCompare(right.feedKey) || left.sequence - right.sequence);
+  const checkpoint = checkpoints.at(-1) ?? null;
+  const covered = new Map(checkpoint?.frontier.map((head) => [head.feedKey, head.sequence]) ?? []);
+  if (checkpoint !== null) {
+    for (let index = operations.length - 1; index >= 0; index--) {
+      const operation = operations[index]!;
+      if ((covered.get(operation.feedKey) ?? 0) >= operation.sequence) operations.splice(index, 1);
+    }
+  }
   const gaps = new Set<string>();
   const feeds = new Map<string, PackedOperation[]>();
   for (const operation of operations) feeds.set(operation.feedKey, [...(feeds.get(operation.feedKey) ?? []), operation]);
   for (const [feed, values] of feeds) {
     const sequences = new Set(values.map((operation) => operation.sequence));
-    for (let sequence = 1; sequence <= Math.max(...sequences); sequence++) if (!sequences.has(sequence)) gaps.add(`${feed}@${sequence}`);
+    for (let sequence = (covered.get(feed) ?? 0) + 1; sequence <= Math.max(...sequences); sequence++) {
+      if (!sequences.has(sequence)) gaps.add(`${feed}@${sequence}`);
+    }
   }
-  return { checkpoint: checkpoints.at(-1) ?? null, operations, sourceByOperation, gaps };
+  return { checkpoint, operations, sourceByOperation, gaps };
 }
 
 export type IntegrityFailure = "PROJECTION_CORRUPT" | "JOURNAL_CORRUPT" | "DEVICE_KEY_MISSING";

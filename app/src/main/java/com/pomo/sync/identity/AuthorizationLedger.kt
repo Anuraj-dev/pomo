@@ -97,7 +97,8 @@ internal class AuthorizationLedger private constructor(
             }.keys
         val baselineDevices = fact.baselineFrontier.map { it.deviceId }.toSet()
         if (issuerDeviceId != deviceId || !device.authorized || fact.authorizationEpoch != projection.authorizationEpoch ||
-            fact.contentEpoch != projection.contentEpoch || fact.baselineFrontier.isEmpty() ||
+            fact.contentEpoch != projection.contentEpoch ||
+            (fact.baselineFrontier.isEmpty() && expectedBaselineDevices.isNotEmpty()) ||
             baselineDevices.size != fact.baselineFrontier.size || baselineDevices != expectedBaselineDevices
         ) {
             return AuthorityDisposition.REJECTED_INVALID

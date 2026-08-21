@@ -2,6 +2,8 @@ import { req, tx } from "../../db/dao";
 import {
   openDb,
   SYNC_DISPOSITION_EVENT_STORE,
+  SYNC_CHECKPOINT_OPERATION_STORE,
+  SYNC_CHECKPOINT_PROJECTION_STORE,
   SYNC_FEED_HEAD_STORE,
   SYNC_OPERATION_STORE,
   SYNC_OUTBOX_STORE,
@@ -25,6 +27,8 @@ const SYNC_STORES = [
   SYNC_PREFERENCE_STORE,
   SYNC_OUTBOX_STORE,
   SYNC_DISPOSITION_EVENT_STORE,
+  SYNC_CHECKPOINT_OPERATION_STORE,
+  SYNC_CHECKPOINT_PROJECTION_STORE,
 ] as const;
 
 export type DurableDisposition = OperationDisposition;
@@ -72,6 +76,17 @@ export interface SyncDispositionEventRow {
   readonly operationId: string | null;
   readonly disposition: DurableDisposition;
   readonly rawWire: Uint8Array;
+}
+
+interface SyncCheckpointOperationRow {
+  readonly feedKey: FeedKey;
+  readonly sequence: number;
+  readonly operationId: string;
+}
+
+interface SyncCheckpointProjectionRow {
+  readonly key: string;
+  readonly value: string;
 }
 
 /** Authenticated kernel decision; every derived effect is computed inside the DAO transaction. */
@@ -176,6 +191,8 @@ export class IndexedDbOperationDao {
       const heads = transaction.objectStore(SYNC_FEED_HEAD_STORE);
       const outbox = transaction.objectStore(SYNC_OUTBOX_STORE);
       const dispositions = transaction.objectStore(SYNC_DISPOSITION_EVENT_STORE);
+      const checkpointOperations = transaction.objectStore(SYNC_CHECKPOINT_OPERATION_STORE);
+      const checkpointProjection = transaction.objectStore(SYNC_CHECKPOINT_PROJECTION_STORE);
       const results: Array<"COMMITTED" | "DUPLICATE"> = [];
       let projectionDirty = false;
 
@@ -235,7 +252,7 @@ export class IndexedDbOperationDao {
             crash(injectCrash, "AFTER_OUTBOX");
           }
         } else if (input.disposition === "QUARANTINED_FORK") {
-          await this.#quarantineFork(operations, heads, row);
+          await this.#quarantineFork(operations, heads, checkpointOperations, checkpointProjection, row);
           crash(injectCrash, "AFTER_QUARANTINE");
           crash(injectCrash, "AFTER_FEED_HEAD");
           projectionDirty = true;
@@ -272,6 +289,44 @@ export class IndexedDbOperationDao {
     requireHex(operationId, 64, "operationId");
     await this.#withDb((db) => tx(db, [SYNC_OUTBOX_STORE], "readwrite", async (transaction) => {
       await req(transaction.objectStore(SYNC_OUTBOX_STORE).delete(operationId));
+    }));
+  }
+
+  async restore(checkpoint: import("../protocol/types").VerifiedCheckpoint, inputs: readonly DurableCommit[]): Promise<void> {
+    const prepared = await Promise.all(inputs.map((input) => this.#prepare(input)));
+    await this.#withDb((db) => tx(db, [...SYNC_STORES], "readwrite", async (transaction) => {
+      const checkpointOperations = transaction.objectStore(SYNC_CHECKPOINT_OPERATION_STORE);
+      const checkpointProjection = transaction.objectStore(SYNC_CHECKPOINT_PROJECTION_STORE);
+      await req(checkpointOperations.clear());
+      await req(checkpointProjection.clear());
+      for (const feed of checkpoint.feeds) {
+        const feedKey = `${feed.deviceId}:${feed.incarnationId}` as FeedKey;
+        for (let index = 0; index < feed.coveredOperationIds.length; index++) {
+          await req(checkpointOperations.put({ feedKey, sequence: index + 1, operationId: feed.coveredOperationIds[index]! } satisfies SyncCheckpointOperationRow));
+        }
+        await req(transaction.objectStore(SYNC_FEED_HEAD_STORE).put({
+          feedKey,
+          deviceId: feed.deviceId,
+          incarnationId: feed.incarnationId,
+          sequence: feed.coveredOperationIds.length,
+          operationId: feed.coveredOperationIds.at(-1) ?? null,
+          forkedAt: null,
+        } satisfies SyncFeedHeadRow));
+      }
+      for (const preference of checkpoint.materializedPreferences) {
+        await req(checkpointProjection.put({ key: preference.key, value: preference.value } satisfies SyncCheckpointProjectionRow));
+      }
+      const operations = transaction.objectStore(SYNC_OPERATION_STORE);
+      const heads = transaction.objectStore(SYNC_FEED_HEAD_STORE);
+      const dispositions = transaction.objectStore(SYNC_DISPOSITION_EVENT_STORE);
+      for (const { input, row } of prepared) {
+        const existing = await req<SyncOperationRow | undefined>(operations.get(row.operationId));
+        if (existing !== undefined) throw new Error("restore trailing Operation is already durable");
+        await req(operations.add(row));
+        await this.#advanceHead(heads, row);
+        await this.#recordDisposition(dispositions, row, input.disposition);
+      }
+      await this.#rebuildProjection(transaction);
     }));
   }
 
@@ -355,7 +410,13 @@ export class IndexedDbOperationDao {
     } satisfies SyncFeedHeadRow));
   }
 
-  async #quarantineFork(operations: IDBObjectStore, heads: IDBObjectStore, row: SyncOperationRow): Promise<void> {
+  async #quarantineFork(
+    operations: IDBObjectStore,
+    heads: IDBObjectStore,
+    checkpointOperations: IDBObjectStore,
+    checkpointProjection: IDBObjectStore,
+    row: SyncOperationRow,
+  ): Promise<void> {
     const current = await req<SyncFeedHeadRow | undefined>(heads.get(row.feedKey));
     const forkAt = Math.min(current?.forkedAt ?? row.sequence, row.sequence);
     const retainedSequence = Math.min(current?.sequence ?? 0, forkAt - 1);
@@ -373,6 +434,10 @@ export class IndexedDbOperationDao {
     for (const candidate of tail) {
       await req(operations.put({ ...candidate, disposition: "QUARANTINED_FORK" } satisfies SyncOperationRow));
     }
+    const checkpointRows = await req<SyncCheckpointOperationRow[]>(checkpointOperations.getAll());
+    const invalidated = checkpointRows.filter((candidate) => candidate.feedKey === row.feedKey && candidate.sequence >= forkAt);
+    for (const candidate of invalidated) await req(checkpointOperations.delete([candidate.feedKey, candidate.sequence]));
+    if (invalidated.length > 0) await req(checkpointProjection.clear());
     await req(heads.put({
       feedKey: row.feedKey,
       deviceId: row.deviceId,
@@ -384,10 +449,15 @@ export class IndexedDbOperationDao {
   }
 
   async #rebuildProjection(transaction: IDBTransaction, injectCrash?: CrashInjector): Promise<void> {
-    const accepted = causalMaterializationOrder(
-      await req<SyncOperationRow[]>(transaction.objectStore(SYNC_OPERATION_STORE).index("disposition").getAll("ACCEPTED")),
-    );
+    const [acceptedRows, checkpointRows, checkpointPreferences] = await Promise.all([
+      req<SyncOperationRow[]>(transaction.objectStore(SYNC_OPERATION_STORE).index("disposition").getAll("ACCEPTED")),
+      req<SyncCheckpointOperationRow[]>(transaction.objectStore(SYNC_CHECKPOINT_OPERATION_STORE).getAll()),
+      req<SyncCheckpointProjectionRow[]>(transaction.objectStore(SYNC_CHECKPOINT_PROJECTION_STORE).getAll()),
+    ]);
+    const covered = new Set(checkpointRows.map((row) => row.operationId));
+    const accepted = causalMaterializationOrder(acceptedRows.filter((row) => !covered.has(row.operationId)));
     const winners = new Map<string, SyncPreferenceRow>();
+    for (const preference of checkpointPreferences) winners.set(preference.key, { key: preference.key, value: preference.value, operationId: `checkpoint:${preference.key}` });
     for (const operation of accepted) {
       winners.set(operation.preferenceKey, {
         key: operation.preferenceKey,

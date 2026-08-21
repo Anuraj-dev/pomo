@@ -57,7 +57,8 @@ export function prepareForwardRestore(safetyCheckpointId: string, selections: re
   if (safetyCheckpointId.length === 0) throw new Error("Safety checkpoint is required before restore");
   const prohibited = new Set<RestoreDomain>(["ACTIVE_PHASE", "DEVICE_KEY", "CONTENT_EPOCH", "RECOVERY_AUTHORITY"]);
   if (selections.some((selection) => prohibited.has(selection.domain))) throw new Error("Recovery restore cannot rewind authority or Active phases");
-  if (new Set(selections.map((selection) => selection.targetId)).size !== selections.length) throw new Error("duplicate restore target");
+  const targets = selections.map((selection) => `${selection.domain}:${selection.targetId}`);
+  if (new Set(targets).size !== selections.length) throw new Error("duplicate restore target");
   return { safetyCheckpointId, compensating: selections.map((selection) => ({ ...selection, compensatingPayload: selection.compensatingPayload.slice() })), independentConfirmationRequired: selections.length >= 10 };
 }
 

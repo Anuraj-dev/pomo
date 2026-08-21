@@ -83,11 +83,16 @@ internal object Rehydrator {
                 "Operation ID collision"
             }
         }
-        val selected = operations.values.map { it.first() }.sortedWith(compareBy<PackedOperation> { it.feedKey }.thenBy { it.sequence })
+        val checkpointCoverage = checkpoint?.frontier?.associate { it.feedKey to it.sequence }.orEmpty()
+        val selected = operations.values.map { it.first() }
+            .filter { operation -> operation.sequence > (checkpointCoverage[operation.feedKey] ?: 0) }
+            .sortedWith(compareBy<PackedOperation> { it.feedKey }.thenBy { it.sequence })
         val gaps = linkedSetOf<String>()
         selected.groupBy { it.feedKey }.forEach { (feed, values) ->
             val sequences = values.map { it.sequence }.toSet()
-            for (sequence in 1L..(values.maxOfOrNull { it.sequence } ?: 0)) if (sequence !in sequences) gaps += "$feed@$sequence"
+            for (sequence in ((checkpointCoverage[feed] ?: 0) + 1)..(values.maxOfOrNull { it.sequence } ?: 0)) {
+                if (sequence !in sequences) gaps += "$feed@$sequence"
+            }
         }
         val provenance =
             operations.mapValues { (_, copies) ->

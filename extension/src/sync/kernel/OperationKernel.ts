@@ -26,6 +26,7 @@ export interface OperationJournal {
   /** Implementations must commit every entry or none of them. */
   recordBatch(entries: readonly OperationJournalEntry[]): Promise<void>;
   recordRejected?(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void>;
+  recordCheckpoint?(checkpoint: VerifiedCheckpoint, entries: readonly OperationJournalEntry[]): Promise<void>;
 }
 
 export interface OperationJournalEntry {
@@ -347,13 +348,15 @@ export class OperationKernel {
       return "REJECTED_CHECKPOINT";
     }
     try {
-      if (trailingOperations.length > 0) {
-        await this.#recordBatch(trailingOperations.map((operation) => ({
+      const entries = trailingOperations.map((operation) => ({
           operation,
           disposition: "ACCEPTED" as const,
           localAuthor: false,
-        })));
-      }
+        }));
+      if (this.journal.recordCheckpoint !== undefined) {
+        await this.journal.recordCheckpoint(checkpoint, entries);
+        for (const entry of entries) this.#recordDisposition(entry.disposition);
+      } else if (entries.length > 0) await this.#recordBatch(entries);
     } catch {
       return "REJECTED_CHECKPOINT";
     }

@@ -14,6 +14,7 @@ const entries: Array<[string, string, "esm" | "iife"]> = [
   ["src/surfaces/crew/main.ts", "crew.js", "esm"],
   ["src/sync/transport/offscreenWebRtc.ts", "offscreen-webrtc.js", "esm"],
 ];
+if (process.env["POMO_SYNC_TEST_ARTIFACT"] === "true") entries.push(["src/sync/testArtifact.ts", "sync-test.js", "esm"]);
 
 async function build() {
   rmSync(dist, { recursive: true, force: true });

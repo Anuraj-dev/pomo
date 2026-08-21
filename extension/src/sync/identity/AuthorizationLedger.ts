@@ -104,7 +104,8 @@ export class AuthorizationLedger {
       .filter(([deviceId, value]) => value.authorized && (deviceId !== input.deviceId || deviceId === this.#firstDeviceId))
       .map(([deviceId]) => deviceId);
     const baselineDevices = input.baselineFrontier.map((entry) => entry.deviceId);
-    if (input.issuerDeviceId !== input.deviceId || device === undefined || !device.authorized || input.baselineFrontier.length === 0 ||
+    if (input.issuerDeviceId !== input.deviceId || device === undefined || !device.authorized ||
+        (input.baselineFrontier.length === 0 && expectedBaselineDevices.length > 0) ||
         baselineDevices.length !== new Set(baselineDevices).size ||
         baselineDevices.length !== expectedBaselineDevices.length ||
         expectedBaselineDevices.some((deviceId) => !baselineDevices.includes(deviceId)) ||
