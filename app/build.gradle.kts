@@ -43,9 +43,13 @@ android {
     productFlavors {
         create("dev") {
             dimension = "environment"
+            buildConfigField("boolean", "POMO_SYNC_TEST_ARTIFACT", "true")
+            buildConfigField("boolean", "POMO_SYNC_PRODUCTION_ACTIVATION", "false")
         }
         create("prod") {
             dimension = "environment"
+            buildConfigField("boolean", "POMO_SYNC_TEST_ARTIFACT", "false")
+            buildConfigField("boolean", "POMO_SYNC_PRODUCTION_ACTIVATION", "false")
         }
     }
 

@@ -54,8 +54,17 @@ jobs:
       - name: Unit tests
         run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" testDevDebugUnitTest
 
-      - name: Build dev debug APK
-        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug
+      - name: Build dormant production and sync test APKs
+        run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug assembleProdDebug
+
+      - name: Upload Android sync artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-sync-artifacts
+          path: |
+            app/build/outputs/apk/dev/debug/app-dev-debug.apk
+            app/build/outputs/apk/prod/debug/app-prod-debug.apk
+          if-no-files-found: error
 
   extension-check:
     name: Extension typecheck, tests, and build
@@ -91,6 +100,41 @@ jobs:
         working-directory: extension
         run: bun test
 
+      - name: Sync host performance gates
+        working-directory: extension
+        run: bun run sync:gates
+
       - name: Build
         working-directory: extension
         run: bun run build
+
+      - name: Verify dormant production package
+        working-directory: extension
+        run: bun run sync:verify-package --production
+
+      - name: Build and verify dedicated sync test package
+        working-directory: extension
+        env:
+          POMO_SYNC_TEST_ARTIFACT: "true"
+        run: |
+          bun run build
+          bun run sync:verify-package --test
+          cd dist
+          zip -qr ../pomo-sync-test-extension.zip .
+
+      - name: Upload sync host evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: sync-host-evidence
+          path: extension/evidence/sync-host-benchmark.json
+          if-no-files-found: error
+
+      - name: Upload Chrome sync artifacts and package evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: chrome-sync-artifacts
+          path: |
+            extension/pomo-sync-test-extension.zip
+            extension/evidence/sync-package-production.json
+            extension/evidence/sync-package-test.json
+          if-no-files-found: error

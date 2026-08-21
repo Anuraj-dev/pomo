@@ -14,4 +14,9 @@ describe("privacy-safe diagnostic export", () => {
     const result = await streamDiagnosticExport(events([{ monotonicMillis: 1, area: "PERFORMANCE", event: "sample", fields: { durationMs: "1" } }]), { async write() { writes++; }, async close() {} }, controller.signal);
     expect(result.cancelled).toBeTrue(); expect(writes).toBe(0);
   });
+  test("truncates without writing past ten MiB", async () => {
+    async function* endless(): AsyncIterable<DiagnosticEvent> { while (true) yield { monotonicMillis: 1, area: "PERFORMANCE", event: "sample", fields: { outcome: "x".repeat(120) } }; }
+    let bytes = 0; const result = await streamDiagnosticExport(endless(), { async write(chunk) { bytes += chunk.length; }, async close() {} });
+    expect(result.truncated).toBeTrue(); expect(bytes).toBeLessThanOrEqual(10 * 1024 * 1024);
+  });
 });

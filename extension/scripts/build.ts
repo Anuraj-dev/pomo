@@ -1,4 +1,4 @@
-import { rmSync, cpSync, watch } from "node:fs";
+import { rmSync, cpSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateIcons } from "./gen-icons";
 
@@ -25,7 +25,10 @@ async function build() {
       target: "browser",
       format,
       sourcemap: "linked",
-      define: { "process.env.NODE_ENV": '"production"' },
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        __POMO_SYNC_TEST_ARTIFACT__: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true" ? "true" : "false",
+      },
     });
     if (!res.success) {
       for (const log of res.logs) console.error(log);
@@ -40,6 +43,10 @@ async function build() {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
   cpSync(join(src, "shared", "tokens.css"), join(dist, "tokens.css"));
+  writeFileSync(
+    join(dist, "sync-build-metadata.json"),
+    `${JSON.stringify({ schema: 1, productionActivation: false, testArtifact: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true", suite: 1, generation: 1 }, null, 2)}\n`,
+  );
   generateIcons();
   console.log("build ok -> dist/");
 }

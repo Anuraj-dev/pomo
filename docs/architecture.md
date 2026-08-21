@@ -123,7 +123,11 @@ stats are derived locally from those session writes. Sources of history writes:
 - Desk offline flush via `POST /api/sessions/import` (append-only, idempotent on
   `start` / `client_id`; missing starts are assigned on the phone)
 
-The app intentionally does not import or reconcile legacy laptop history.
+The active production path does not import or reconcile legacy laptop history.
+The separately packaged dormant peer-sync system inventories Android and Chrome
+legacy data side by side and requires explicit migration; see
+`docs/sync-system.md`. It never imports desktop-client or NodeMCU state as a Full
+Replica.
 
 History dates use the phone's local calendar day. When a session crosses
 midnight, the repository splits it into per-date segments, rounds each segment's

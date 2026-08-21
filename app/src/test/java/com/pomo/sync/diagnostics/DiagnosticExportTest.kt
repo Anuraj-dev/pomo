@@ -23,4 +23,13 @@ public class DiagnosticExportTest {
         repeat(3) { recorder.record(DiagnosticEvent(it.toLong(), EvidenceArea.ROUTE, "changed", mapOf("routeKind" to "direct"))) }
         assertTrue(recorder.snapshot().size == 2)
     }
+
+    @Test public fun truncatesBeforeTheTenMebibyteBoundary() {
+        val event = DiagnosticEvent(1, EvidenceArea.PERFORMANCE, "sample", mapOf("outcome" to "x".repeat(120)))
+        val output = ByteArrayOutputStream()
+        val result = DiagnosticExporter.export(generateSequence { event }, output)
+        assertTrue(result.truncated)
+        assertTrue(result.bytesWritten <= DiagnosticExporter.MAX_BYTES)
+        assertTrue(output.size().toLong() <= DiagnosticExporter.MAX_BYTES)
+    }
 }

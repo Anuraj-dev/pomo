@@ -1,10 +1,10 @@
 # POMO-SUITE-1 shared conformance corpus
 
-This directory freezes the smallest dormant Android/Chrome protocol slice for
-issue #102. Both runtimes consume the same JSON and must agree on canonical
-bytes, hashes, validation results, and the materialized preference. Nothing in
-this directory activates synchronization or changes Room, IndexedDB, timers,
-the phone protocol, firmware, NodeMCU, or the desktop client.
+This directory freezes the shared dormant Android/Chrome protocol generation.
+Both runtimes consume the same JSON and must agree on canonical bytes, hashes,
+validation results, materialization, fault boundaries, and activation envelope.
+Nothing in this directory activates production synchronization or changes the
+phone protocol, firmware, NodeMCU, or desktop-client authority.
 
 ## Tracer operation
 
@@ -53,6 +53,11 @@ and received high-S signatures are rejected.
 - `fixtures/negative.json` contains byte-level canonicality, suite-generation,
   signature-shape, and Argon2-profile failures. Consumers must fail closed and
   must not try a legacy algorithm or alternate decoder.
+- `fixtures/fault-boundaries.json` enumerates the atomic durability and
+  activation crash points exercised by both runtimes.
+- `fixtures/system-generation.json` freezes suite, generation, formats,
+  authenticated-tombstone deletion, Room history authority, and dormant
+  production activation.
 
 Hex is lowercase in this corpus. Empty octet strings are `""`. Fixture-only
 private keys are public test material and must never enter a production key
@@ -77,9 +82,9 @@ store.
 
 ## Scope boundary
 
-This compact corpus proves the #102 tracer and basic fail-closed adapters.
-Issue #118 must expand it with additional RFC 9180 HPKE cases, full signed COSE
-envelopes, every Pomo object type, malformed parser families, fuzz seeds,
-causal/fork and Checkpoint matrices, key-custody lifecycle faults, crash
-injection, and performance gates. A passing #102 corpus is not packaged-runtime,
-provider, or physical-device evidence.
+The corpus and runtime suites cover canonical/crypto/parser, causal/fork,
+revocation/quarantine, Checkpoint/Recovery, migration, timer, deterministic fuzz,
+and declared crash boundaries. CI also emits separate host-benchmark and
+packaged-runtime structural reports. None of those reports is provider or
+physical-device evidence; those categories remain explicitly unmeasured in this
+stage.
