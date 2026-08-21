@@ -368,8 +368,10 @@ internal class OperationKernel(
     }
 
     private fun sequenceWithInvalidatedDependency(feed: FeedState): Long? =
-        (feed.accepted.entries.asSequence().map { it.key to it.value } +
-            feed.pending.entries.asSequence().map { it.key to it.value.first })
+        (
+            feed.accepted.entries.asSequence().map { it.key to it.value } +
+                feed.pending.entries.asSequence().map { it.key to it.value.first }
+        )
             .sortedBy { it.first }
             .firstOrNull { (_, authenticated) ->
                 !dependenciesPresent(authenticated.operation) &&

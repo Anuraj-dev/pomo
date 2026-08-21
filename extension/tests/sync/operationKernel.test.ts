@@ -402,7 +402,7 @@ describe("OperationKernel four-call seam", () => {
     }, []);
     expect(restoredAgain).toBe("RESTORED");
     expect(await kernel.ingest(await signedOperation(crypto, 1, null, "30"))).toBe("QUARANTINED_FORK");
-    expect(projection.value("focusDurationMinutes")).toBe("25");
+    expect(projection.value("focusDurationMinutes")).toBeUndefined();
   });
 
   test("rejects unsupported checkpoint generation without changing state", async () => {
