@@ -4,19 +4,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 public class LegacyMigrationTest {
-    private val ready = MigrationPrerequisites(
-        "anchor",
-        true,
-        LegacyTimerState.PARKED,
-        true,
-        MigrationVerification(2, 2, true, true),
-    )
+    private val ready =
+        MigrationPrerequisites(
+            "anchor",
+            true,
+            LegacyTimerState.PARKED,
+            true,
+            MigrationVerification(2, 2, true, true),
+        )
 
     @Test
     public fun inventoryRequiresDispositionForEveryDurableItem() {
-        val kinds = LegacyDisposition.entries.mapIndexed { index, kind ->
-            LegacyInventoryItem("android", "id-$index", "history", kind, "classified")
-        }
+        val kinds =
+            LegacyDisposition.entries.mapIndexed { index, kind ->
+                LegacyInventoryItem("android", "id-$index", "history", kind, "classified")
+            }
         MigrationInventory("android", kinds, kinds.size)
         assertTrue(runCatching { MigrationInventory("android", kinds, kinds.size + 1) }.isFailure)
     }

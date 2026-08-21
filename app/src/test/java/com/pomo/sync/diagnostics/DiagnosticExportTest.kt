@@ -46,7 +46,7 @@ public class DiagnosticExportTest {
                 generateSequence {
                     DiagnosticEvent(1, EvidenceArea.PERFORMANCE, "sample", mapOf("durationMs" to "1"))
                 },
-            ByteArrayOutputStream(),
+                ByteArrayOutputStream(),
             ) { true }
         assertTrue(result.cancelled)
     }

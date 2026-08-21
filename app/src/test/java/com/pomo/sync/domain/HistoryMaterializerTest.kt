@@ -59,7 +59,12 @@ public class HistoryMaterializerTest {
         assertFalse(DestructiveHistoryGuard.authorize((1..10).map { "$it" }.toSet(), emptySet()))
     }
 
-    private fun block(id: String, elapsed: Long, tagId: String, tagName: String): HistoryBlock =
+    private fun block(
+        id: String,
+        elapsed: Long,
+        tagId: String,
+        tagName: String,
+    ): HistoryBlock =
         HistoryBlock(
             id,
             "phase-$id",

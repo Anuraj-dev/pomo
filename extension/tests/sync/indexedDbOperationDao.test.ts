@@ -413,9 +413,10 @@ describe("dormant IndexedDB Device-feed persistence", () => {
       [third.operationId, "35"],
       [fourth.operationId, "40"],
     ]);
-    const winner = [authored.operation, second, third, fourth]
-      .sort((left, right) => left.operationId < right.operationId ? -1 : left.operationId > right.operationId ? 1 : 0)
-      .at(-1)!;
+    // The chain's final operation is the causal winner even when its hash sorts
+    // before an older operation. Reconstruction must match the kernel's causal
+    // materialization rather than an arbitrary operation-ID order.
+    const winner = fourth;
     expect(restarted.preferences).toEqual([projection(winner, values.get(winner.operationId)!)]);
     expect(visible.value("focusDurationMinutes")).toBe(values.get(winner.operationId));
 
