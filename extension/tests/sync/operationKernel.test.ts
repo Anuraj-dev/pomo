@@ -332,9 +332,11 @@ describe("OperationKernel four-call seam", () => {
     expect(projection.value("focusDurationMinutes")).toBe("25");
     deferred.release();
     expect(await quarantining).toBe("QUARANTINED_FORK");
-    expect(journal.records.filter(({ disposition }) => disposition === "QUARANTINED_FORK").map(({ id }) => id)).toEqual(
-      expect.arrayContaining([first.operation.operationId, bytesToHex(conflicting)]),
-    );
+    const quarantinedIds = journal.records
+      .filter(({ disposition }) => disposition === "QUARANTINED_FORK")
+      .map(({ id }) => id);
+    expect(quarantinedIds).toContain(first.operation.operationId);
+    expect(quarantinedIds).toContain(bytesToHex(conflicting));
     expect(kernel.summarize()).toMatchObject({ accepted: 0, pending: 0, quarantined: 2 });
     expect(projection.value("focusDurationMinutes")).toBeUndefined();
   });
