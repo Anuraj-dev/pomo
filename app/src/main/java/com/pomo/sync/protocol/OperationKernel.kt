@@ -515,9 +515,10 @@ internal class OperationKernel(
         operation: AuthenticatedOperation,
         checkpointFrontier: List<CheckpointHead>,
         acceptedById: Map<ProtocolBytes, AuthenticatedOperation>,
-    ): Boolean = checkpointFrontier.all { target ->
-        reachesCheckpointHead(operation, target, acceptedById, linkedSetOf())
-    }
+    ): Boolean =
+        checkpointFrontier.all { target ->
+            reachesCheckpointHead(operation, target, acceptedById, linkedSetOf())
+        }
 
     private fun reachesCheckpointHead(
         operation: AuthenticatedOperation,
