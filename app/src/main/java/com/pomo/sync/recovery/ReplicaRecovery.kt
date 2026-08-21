@@ -84,7 +84,8 @@ internal object Rehydrator {
             }
         }
         val checkpointCoverage = checkpoint?.frontier?.associate { it.feedKey to it.sequence }.orEmpty()
-        val selected = operations.values.map { it.first() }
+        val selected =
+            operations.values.map { it.first() }
             .filter { operation -> operation.sequence > (checkpointCoverage[operation.feedKey] ?: 0) }
             .sortedWith(compareBy<PackedOperation> { it.feedKey }.thenBy { it.sequence })
         val gaps = linkedSetOf<String>()

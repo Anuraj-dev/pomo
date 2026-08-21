@@ -322,9 +322,9 @@ internal class RoomOperationStore(
             )
         }
         val checkpointOperationIds = dao.checkpointOperationIds().toSet()
-        causalMaterializationOrder(dao.acceptedOperations().filterNot { operation ->
-            operation.operationId in checkpointOperationIds
-        }).forEach { operation ->
+        causalMaterializationOrder(
+            dao.acceptedOperations().filterNot { operation -> operation.operationId in checkpointOperationIds },
+        ).forEach { operation ->
             dao.upsertProjection(
                 SyncPreferenceProjectionEntity(
                     operation.preferenceKey,
