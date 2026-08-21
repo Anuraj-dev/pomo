@@ -5,6 +5,7 @@ import { SharedPreferenceProjection, encodeSharedPreferenceFact } from "../src/s
 import type { AuthenticatedOperation } from "../src/sync/protocol/types";
 
 const now = (): number => performance.now();
+const BENCHMARK_BATCH_SIZE = 32;
 const percentile = (values: readonly number[], fraction: number): number => [...values].sort((a, b) => a - b)[Math.min(values.length - 1, Math.floor(values.length * fraction))]!;
 const hex = (bytes: Uint8Array): string => [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 const memberId = "01".repeat(32);
@@ -44,8 +45,8 @@ const replayProjection = new SharedPreferenceProjection();
 const replayKernel = new OperationKernel(verifier, signer, journal, replayProjection);
 const backlog = authored.map((operation) => ({ id: operation.operationId, wire: operation.signedEnvelope }));
 const backlogStart = now(); let maximumBatchBytes = 0; let blockingMaximumMs = 0;
-for (let offset = 0; offset < backlog.length; offset += 256) {
-  const sliceStart = now(); const batch = backlog.slice(offset, offset + 256); maximumBatchBytes = Math.max(maximumBatchBytes, batch.reduce((sum, item) => sum + item.wire.byteLength, 0));
+for (let offset = 0; offset < backlog.length; offset += BENCHMARK_BATCH_SIZE) {
+  const sliceStart = now(); const batch = backlog.slice(offset, offset + BENCHMARK_BATCH_SIZE); maximumBatchBytes = Math.max(maximumBatchBytes, batch.reduce((sum, item) => sum + item.wire.byteLength, 0));
   const seen = new Set(batch.map(({ id }) => id)); if (seen.size !== batch.length) throw new Error("benchmark corpus contains duplicates");
   blockingMaximumMs = Math.max(blockingMaximumMs, now() - sliceStart);
   for (const item of batch) if (await replayKernel.ingest(item.wire) !== "ACCEPTED") throw new Error("benchmark replay was not accepted");
@@ -55,7 +56,7 @@ const checkpointStart = now(); replayProjection.prepareReplace([{ key: "checkpoi
 const cachedStart = now(); parseSyncUiState(DORMANT_SYNC_UI_STATE); const cachedStatusMs = now() - cachedStart;
 const metrics = {
   localAuthoringP95Ms: percentile(localSamples, .95), localAuthoringP99Ms: percentile(localSamples, .99), backlogMs, throughputOperationsPerSecond: throughput,
-  maximumEnvelopeBatch: 256, maximumBatchBytes, incrementalMemoryCeilingBytes: 64 * 1024 * 1024, checkpointProjectionMs: checkpointMs,
+  maximumEnvelopeBatch: BENCHMARK_BATCH_SIZE, maximumBatchBytes, incrementalMemoryCeilingBytes: 64 * 1024 * 1024, checkpointProjectionMs: checkpointMs,
   maximumBlockingSliceMs: blockingMaximumMs, timerFrameBudgetMs: 16.7, cachedStatusMs,
 };
 const gates = {
