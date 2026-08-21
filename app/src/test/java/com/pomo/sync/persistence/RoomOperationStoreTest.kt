@@ -30,6 +30,13 @@ import java.security.spec.ECGenParameterSpec
 private val localCommitBoundaries =
     SyncCommitBoundary.entries.filter { it != SyncCommitBoundary.AFTER_QUARANTINE }
 
+private inline fun <T> AppDatabase.use(block: (AppDatabase) -> T): T =
+    try {
+        block(this)
+    } finally {
+        close()
+    }
+
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33])
 public class RoomOperationStoreTest {
