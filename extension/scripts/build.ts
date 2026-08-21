@@ -12,6 +12,7 @@ const entries: Array<[string, string, "esm" | "iife"]> = [
   ["src/surfaces/popup/main.ts", "popup.js", "esm"],
   ["src/surfaces/sidepanel/main.ts", "sidepanel.js", "esm"],
   ["src/surfaces/crew/main.ts", "crew.js", "esm"],
+  ["src/sync/transport/offscreenWebRtc.ts", "offscreen-webrtc.js", "esm"],
 ];
 
 async function build() {
@@ -32,7 +33,7 @@ async function build() {
     }
   }
   cpSync(join(root, "manifest.json"), join(dist, "manifest.json"));
-  for (const f of ["newtab.html", "popup.html", "sidepanel.html", "crew.html"]) {
+  for (const f of ["newtab.html", "popup.html", "sidepanel.html", "crew.html", "offscreen-webrtc.html"]) {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
   for (const f of ["newtab.css", "popup.css", "sidepanel.css", "crew.css"]) {
