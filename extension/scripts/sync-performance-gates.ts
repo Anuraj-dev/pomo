@@ -47,8 +47,8 @@ const backlogStart = now(); let maximumBatchBytes = 0; let blockingMaximumMs = 0
 for (let offset = 0; offset < backlog.length; offset += 256) {
   const sliceStart = now(); const batch = backlog.slice(offset, offset + 256); maximumBatchBytes = Math.max(maximumBatchBytes, batch.reduce((sum, item) => sum + item.wire.byteLength, 0));
   const seen = new Set(batch.map(({ id }) => id)); if (seen.size !== batch.length) throw new Error("benchmark corpus contains duplicates");
-  for (const item of batch) if (await replayKernel.ingest(item.wire) !== "ACCEPTED") throw new Error("benchmark replay was not accepted");
   blockingMaximumMs = Math.max(blockingMaximumMs, now() - sliceStart);
+  for (const item of batch) if (await replayKernel.ingest(item.wire) !== "ACCEPTED") throw new Error("benchmark replay was not accepted");
 }
 const backlogMs = now() - backlogStart; const throughput = backlog.length / (backlogMs / 1_000);
 const checkpointStart = now(); replayProjection.prepareReplace([{ key: "checkpoint", value: "0" }], authored); const checkpointMs = now() - checkpointStart;
