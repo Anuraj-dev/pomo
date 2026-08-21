@@ -318,6 +318,20 @@ public class OperationKernelTest {
     }
 
     @Test
+    public fun restoreSkipsTrailingOperationsAlreadyDurableInActiveReplica() {
+        val persisted = mutableListOf<AuthenticatedOperation>()
+        val firstPayload = payload("bell")
+        val first = authenticated(operation(1, null, firstPayload), firstPayload)
+        val checkpoint = KernelCheckpoint(PomoSuite.ID, PomoSuite.INITIAL_GENERATION, emptyList(), emptyList())
+        val kernel = kernel(OperationStore { operations -> persisted += operations })
+
+        assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(first.signedEnvelope))
+        assertEquals(listOf(first.operationId), persisted.map { it.operationId })
+        assertEquals(RestoreResult.RESTORED, kernel.restore(checkpoint, listOf(first.signedEnvelope)))
+        assertEquals(listOf(first.operationId), persisted.map { it.operationId })
+    }
+
+    @Test
     public fun restoreValidatesEveryTrailingOperationBeforeWritingBatch() {
         var batchWrites = 0
         val firstPayload = payload("bell")

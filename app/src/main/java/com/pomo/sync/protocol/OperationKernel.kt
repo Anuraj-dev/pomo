@@ -50,6 +50,7 @@ internal class OperationKernel(
     private val checkpointPreferences: MutableMap<String, String> = linkedMapOf()
     private val materializedPreferences: MutableMap<String, String> = linkedMapOf()
 
+    @Synchronized
     fun author(request: AuthorRequest): AuthorResult {
         val missing = mutableSetOf<String>()
         if (!request.authorized) missing += "AUTHORIZATION"
@@ -95,6 +96,7 @@ internal class OperationKernel(
         }.getOrElse { AuthorResult.Blocked(setOf("AUTHORING_COMMIT")) }
     }
 
+    @Synchronized
     fun ingest(signedEnvelope: ByteArray): IngestDisposition {
         val authenticated =
             runCatching {
@@ -148,6 +150,7 @@ internal class OperationKernel(
         return result
     }
 
+    @Synchronized
     fun summarize(): KernelSummary {
         val heads = linkedMapOf<String, Pair<Long, ProtocolBytes?>>()
         val gaps = linkedSetOf<String>()
@@ -172,6 +175,7 @@ internal class OperationKernel(
         return KernelSummary(heads, gaps, waits, forks, accepted, pending, quarantined.size)
     }
 
+    @Synchronized
     fun restore(
         checkpoint: KernelCheckpoint,
         trailing: List<ByteArray>,
@@ -181,6 +185,7 @@ internal class OperationKernel(
         ) {
             return RestoreResult.REJECTED_CHECKPOINT
         }
+        val existingKnownIds = knownIds.toSet()
         val restored = linkedMapOf<String, FeedState>()
         val restoredPreferences = linkedMapOf<String, String>()
         if (
@@ -236,9 +241,10 @@ internal class OperationKernel(
             }
             acceptedTrailing += authenticated
         }
-        if (
-            acceptedTrailing.isNotEmpty() &&
-            runCatching { store.appendBatch(staged.causalMaterializationOrder()) }.isFailure
+        val newlyDurableTrailing =
+            staged.causalMaterializationOrder().filter { it.operationId !in existingKnownIds }
+        if (newlyDurableTrailing.isNotEmpty() &&
+            runCatching { store.appendBatch(newlyDurableTrailing) }.isFailure
         ) {
             return RestoreResult.REJECTED_CHECKPOINT
         }
@@ -255,6 +261,7 @@ internal class OperationKernel(
         return RestoreResult.RESTORED
     }
 
+    @Synchronized
     fun materializedPreference(key: String): String? = materializedPreferences[key]
 
     private fun validateAuthenticated(
