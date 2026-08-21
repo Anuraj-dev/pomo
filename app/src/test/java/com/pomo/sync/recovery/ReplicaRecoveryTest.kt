@@ -37,7 +37,7 @@ public class ReplicaRecoveryTest {
             )
         assertEquals(setOf("device", "mailbox"), plan.sourceByOperation.getValue("a1"))
         assertEquals(setOf("a@2"), plan.gaps)
-        assertEquals(listOf("a1", "a3"), plan.operations.map { it.operationId })
+        assertEquals(listOf("a3"), plan.operations.map { it.operationId })
     }
 
     @Test
