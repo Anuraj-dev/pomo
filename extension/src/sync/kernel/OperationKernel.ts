@@ -304,6 +304,14 @@ export class OperationKernel {
     }
     const materialized = staged.#acceptedInMaterializationOrder();
     const trailingOperations = materialized.filter((operation) => !staged.#isCheckpointCovered(operation.operationId));
+    const acceptedById = new Map(materialized.map((operation) => [operation.operationId, operation]));
+    const checkpointFrontier = [...restored.entries()].flatMap(([feedKey, feed]) =>
+      feed.headHash === null ? [] : [{ feedKey, sequence: feed.head, operationId: feed.headHash }],
+    );
+    if (trailingOperations.some((operation) =>
+      !staged.#dominatesCheckpointFrontier(operation, checkpointFrontier, acceptedById))) {
+      return "REJECTED_CHECKPOINT";
+    }
     let activateMaterialization: () => void;
     try {
       activateMaterialization = this.materializer.prepareReplace(staged.#checkpointPreferenceEntries(), materialized);
@@ -536,6 +544,39 @@ export class OperationKernel {
       }
     }
     return true;
+  }
+
+  #dominatesCheckpointFrontier(
+    operation: AuthenticatedOperation,
+    checkpointFrontier: readonly { readonly feedKey: FeedKey; readonly sequence: number; readonly operationId: string }[],
+    acceptedById: ReadonlyMap<string, AuthenticatedOperation>,
+  ): boolean {
+    return checkpointFrontier.every((target) =>
+      this.#reachesCheckpointHead(operation, target, acceptedById, new Set()));
+  }
+
+  #reachesCheckpointHead(
+    operation: AuthenticatedOperation,
+    target: { readonly feedKey: FeedKey; readonly sequence: number; readonly operationId: string },
+    acceptedById: ReadonlyMap<string, AuthenticatedOperation>,
+    visited: Set<string>,
+  ): boolean {
+    if (visited.has(operation.operationId)) return false;
+    visited.add(operation.operationId);
+    const unsigned = operation.unsigned;
+    if (this.#feedKey(unsigned) === target.feedKey && unsigned.sequence > target.sequence) return true;
+    if (unsigned.frontier.some((entry) =>
+      this.#feedKey(entry) === target.feedKey &&
+      entry.sequence === target.sequence &&
+      entry.headHash === target.operationId)) return true;
+    if (unsigned.previousHash !== null) {
+      const previous = acceptedById.get(unsigned.previousHash);
+      if (previous !== undefined && this.#reachesCheckpointHead(previous, target, acceptedById, visited)) return true;
+    }
+    return unsigned.frontier.some((entry) => {
+      const dependency = acceptedById.get(entry.headHash);
+      return dependency !== undefined && this.#reachesCheckpointHead(dependency, target, acceptedById, visited);
+    });
   }
 
   #quarantineUnavailableDependents(transitioned = new Set<string>()): OperationJournalEntry[] {

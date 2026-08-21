@@ -428,6 +428,29 @@ describe("OperationKernel four-call seam", () => {
     expect(kernel.summarize().accepted).toBe(1);
   });
 
+  test("rejects a concurrent trailing Operation that does not causally descend from the checkpoint frontier", async () => {
+    const { kernel, crypto, journal, projection } = harness();
+    const coveredOperationId = "77".repeat(32);
+    const concurrent = await signedCrossFeedOperation(
+      crypto,
+      "33".repeat(32),
+      "44".repeat(16),
+      "30",
+      [],
+    );
+
+    expect(await kernel.restore({
+      suite: POMO_SUITE_1,
+      suiteGeneration: POMO_SUITE_GENERATION_1,
+      feeds: [{ deviceId: DEVICE, incarnationId: INCARNATION, coveredOperationIds: [coveredOperationId] }],
+      materializedPreferences: [{ key: "focusDurationMinutes", value: "25" }],
+    }, [concurrent.signedEnvelope])).toBe("REJECTED_CHECKPOINT");
+
+    expect(journal.records).toEqual([]);
+    expect(kernel.summarize().heads.size).toBe(0);
+    expect(projection.value("focusDurationMinutes")).toBeUndefined();
+  });
+
   test("does not expose accepted state when durable journal recording fails", async () => {
     const crypto = new FixtureCrypto();
     const projection = new SharedPreferenceProjection();
