@@ -1,7 +1,17 @@
 package com.pomo.sync.transport
 
 internal data class SyncEnvelope(val operationId: String, val feedKey: String, val sequence: Long, val wire: ByteArray)
-internal data class DurablePeerAck(val peerDeviceId: String, val frontier: Map<String, Long>, val signatureVerified: Boolean)
+internal data class DurablePeerFrontier(
+    val sequence: Long,
+    val operationId: String,
+    val coveredOperationIds: Set<String> = emptySet(),
+)
+
+internal data class DurablePeerAck(
+    val peerDeviceId: String,
+    val frontier: Map<String, DurablePeerFrontier>,
+    val signatureVerified: Boolean,
+)
 internal enum class DirectRouteState { OFFLINE, CATCHING_UP, LIVE }
 
 internal class DirectSyncCoordinator(
@@ -22,7 +32,12 @@ internal class DirectSyncCoordinator(
     }
     fun acknowledge(ack: DurablePeerAck) {
         require(ack.signatureVerified) { "Only signed durable acknowledgments clear obligations" }
-        pending.entries.removeIf { (_, envelope) -> (ack.frontier[envelope.feedKey] ?: 0) >= envelope.sequence }
+        pending.entries.removeIf { (_, envelope) ->
+            val head = ack.frontier[envelope.feedKey]
+            head != null &&
+                ((head.sequence == envelope.sequence && head.operationId == envelope.operationId) ||
+                    (head.sequence >= envelope.sequence && envelope.operationId in head.coveredOperationIds))
+        }
         if (pending.isEmpty()) state = DirectRouteState.LIVE
     }
     fun liveObservationTrusted(): Boolean = state == DirectRouteState.LIVE

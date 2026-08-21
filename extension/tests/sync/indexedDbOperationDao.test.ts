@@ -25,6 +25,7 @@ import {
   POMO_SUITE_1,
   POMO_SUITE_GENERATION_1,
   type AuthenticatedOperation,
+  type FrontierEntry,
   type UnsignedOperation,
 } from "../../src/sync/protocol/types";
 import {
@@ -56,6 +57,7 @@ async function operation(
   key = "focusDurationMinutes",
   deviceId = DEVICE,
   incarnationId = INCARNATION,
+  frontier: readonly FrontierEntry[] = [],
 ): Promise<AuthenticatedOperation> {
   const payload = encodeSharedPreferenceFact(key, value);
   const unsigned = {
@@ -66,7 +68,7 @@ async function operation(
     incarnationId,
     sequence,
     previousHash,
-    frontier: [],
+    frontier,
     authorizationEpoch: 1,
     payloadSchema: 1,
     kind: OperationKind.SharedPreferenceSet,
@@ -236,6 +238,29 @@ describe("dormant IndexedDB Device-feed persistence", () => {
     expect((await dao.reconstruct()).preferences).toEqual([projection(higher, expectedValue)]);
   });
 
+  test("rebuilds projection in causal order when a dependent has a lower Operation ID", async () => {
+    const dao = new IndexedDbOperationDao();
+    let prerequisite!: AuthenticatedOperation;
+    let dependent!: AuthenticatedOperation;
+    for (let attempt = 0; attempt < 256; attempt++) {
+      prerequisite = await operation(1, `old-${attempt}`, null, "focusDurationMinutes", "33".repeat(32));
+      dependent = await operation(
+        1,
+        "new",
+        null,
+        "focusDurationMinutes",
+        "44".repeat(32),
+        INCARNATION,
+        [{ deviceId: prerequisite.unsigned.deviceId, incarnationId: prerequisite.unsigned.incarnationId, sequence: 1, headHash: prerequisite.operationId }],
+      );
+      if (dependent.operationId < prerequisite.operationId) break;
+    }
+    expect(dependent.operationId < prerequisite.operationId).toBe(true);
+    await dao.commit(accepted(dependent, "new", false));
+    await dao.commit(accepted(prerequisite, "old", false));
+    expect((await dao.reconstruct()).preferences).toEqual([projection(dependent, "new")]);
+  });
+
   test("preserves an unrelated preference while rebuilding after ordinary acceptance", async () => {
     const dao = new IndexedDbOperationDao();
     const unrelated = await operation(1, "5", null, "breakDurationMinutes");
@@ -390,7 +415,7 @@ describe("dormant IndexedDB Device-feed persistence", () => {
     ]);
     const winner = [authored.operation, second, third, fourth]
       .sort((left, right) => left.operationId < right.operationId ? -1 : left.operationId > right.operationId ? 1 : 0)
-      .at(0)!;
+      .at(-1)!;
     expect(restarted.preferences).toEqual([projection(winner, values.get(winner.operationId)!)]);
     expect(visible.value("focusDurationMinutes")).toBe(values.get(winner.operationId));
 

@@ -19,6 +19,12 @@ internal object CoseOperationWire {
         return OperationCodec.decodeUnsignedForVerification(CoseSign1.embeddedPayload(cose)).deviceId
     }
 
+    fun unsignedOperation(wire: ByteArray): UnsignedOperation {
+        val fields = wireFields(wire)
+        val cose = DeterministicCbor.encode(fields[0])
+        return OperationCodec.decodeUnsignedForVerification(CoseSign1.embeddedPayload(cose))
+    }
+
     fun sign(
         operation: UnsignedOperation,
         canonicalPayload: ByteArray,

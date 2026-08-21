@@ -1,6 +1,7 @@
 package com.pomo.sync.persistence
 
 import com.pomo.db.AppDatabase
+import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.OperationCodec
@@ -44,8 +45,14 @@ internal class RoomOperationStore(
             commits.forEach { commit ->
                 val existing = dao.operation(commit.operation.operationId.toString())
                 val transitionPending =
-                    existing?.disposition == IngestDisposition.PENDING_GAP.name ||
-                        existing?.disposition == IngestDisposition.PENDING_CAUSAL.name
+                    existing?.disposition in
+                        setOf(IngestDisposition.PENDING_GAP.name, IngestDisposition.PENDING_CAUSAL.name) &&
+                        commit.disposition !in
+                        setOf(
+                            IngestDisposition.PENDING_GAP,
+                            IngestDisposition.PENDING_CAUSAL,
+                            IngestDisposition.DUPLICATE,
+                        )
                 commitInTransaction(
                     commit.operation,
                     commit.disposition,
@@ -253,7 +260,7 @@ internal class RoomOperationStore(
     private fun rebuildProjection() {
         dao.clearProjection()
         faultInjector.at(SyncCommitBoundary.AFTER_PROJECTION_CLEAR)
-        dao.acceptedOperations().forEach { operation ->
+        causalMaterializationOrder(dao.acceptedOperations()).forEach { operation ->
             dao.upsertProjection(
                 SyncPreferenceProjectionEntity(
                     operation.preferenceKey,
@@ -262,6 +269,38 @@ internal class RoomOperationStore(
                 ),
             )
         }
+    }
+
+    private fun causalMaterializationOrder(operations: List<SyncOperationEntity>): List<SyncOperationEntity> {
+        val byId = operations.associateBy { it.operationId }
+        val dependencies = operations.associate { operation ->
+            val parsed = runCatching { CoseOperationWire.unsignedOperation(operation.signedWire) }.getOrNull()
+            operation.operationId to buildSet {
+                operation.previousOperationId?.takeIf(byId::containsKey)?.let(::add)
+                parsed?.frontier?.map { it.headOperationId.toString() }
+                    ?.filter(byId::containsKey)
+                    ?.forEach(::add)
+            }
+        }
+        val indegree = dependencies.mapValues { (_, required) -> required.size }.toMutableMap()
+        val dependents = mutableMapOf<String, MutableList<String>>()
+        dependencies.forEach { (operationId, required) ->
+            required.forEach { dependency -> dependents.getOrPut(dependency) { mutableListOf() }.add(operationId) }
+        }
+        val ready = operations.filter { indegree[it.operationId] == 0 }.sortedBy { it.operationId }.toMutableList()
+        val ordered = mutableListOf<SyncOperationEntity>()
+        while (ready.isNotEmpty()) {
+            val operation = ready.removeAt(0)
+            ordered += operation
+            dependents[operation.operationId].orEmpty().forEach { dependent ->
+                val remaining = indegree.getValue(dependent) - 1
+                indegree[dependent] = remaining
+                if (remaining == 0) ready += byId.getValue(dependent)
+            }
+            ready.sortBy { it.operationId }
+        }
+        if (ordered.size != operations.size) ordered += operations.filterNot(ordered::contains).sortedBy { it.operationId }
+        return ordered
     }
 
     private fun validateSameOperation(

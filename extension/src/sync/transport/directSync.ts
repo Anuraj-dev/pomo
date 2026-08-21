@@ -1,5 +1,15 @@
 export interface SyncEnvelope { readonly operationId: string; readonly feedKey: string; readonly sequence: number; readonly wire: Uint8Array }
-export interface DurablePeerAck { readonly peerDeviceId: string; readonly frontier: ReadonlyMap<string, number>; readonly signatureVerified: boolean }
+export interface DurablePeerFrontier {
+  readonly sequence: number;
+  readonly operationId: string;
+  readonly coveredOperationIds?: ReadonlySet<string>;
+}
+
+export interface DurablePeerAck {
+  readonly peerDeviceId: string;
+  readonly frontier: ReadonlyMap<string, DurablePeerFrontier>;
+  readonly signatureVerified: boolean;
+}
 export type DirectRouteState = "OFFLINE" | "CATCHING_UP" | "LIVE";
 
 export class DirectSyncCoordinator {
@@ -20,7 +30,14 @@ export class DirectSyncCoordinator {
   }
   acknowledge(ack: DurablePeerAck): void {
     if (!ack.signatureVerified) throw new Error("Only signed durable acknowledgments clear obligations");
-    for (const [id, envelope] of this.#pending) if ((ack.frontier.get(envelope.feedKey) ?? 0) >= envelope.sequence) this.#pending.delete(id);
+    for (const [id, envelope] of this.#pending) {
+      const head = ack.frontier.get(envelope.feedKey);
+      if (head !== undefined &&
+          ((head.sequence === envelope.sequence && head.operationId === envelope.operationId) ||
+            (head.sequence >= envelope.sequence && head.coveredOperationIds?.has(envelope.operationId) === true))) {
+        this.#pending.delete(id);
+      }
+    }
     if (this.#pending.size === 0) this.#state = "LIVE";
   }
   liveObservationTrusted(): boolean { return this.#state === "LIVE"; }

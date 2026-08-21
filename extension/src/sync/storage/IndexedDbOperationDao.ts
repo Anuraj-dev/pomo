@@ -14,6 +14,7 @@ import {
   POMO_SUITE_GENERATION_1,
   type AuthenticatedOperation,
   type FeedKey,
+  type FrontierEntry,
   type OperationDisposition,
   type RejectedDisposition,
 } from "../protocol/types";
@@ -36,6 +37,7 @@ export interface SyncOperationRow {
   readonly feedKey: FeedKey;
   readonly sequence: number;
   readonly previousHash: string | null;
+  readonly frontier: readonly FrontierEntry[];
   readonly rawWire: Uint8Array;
   readonly preferenceKey: string;
   readonly preferenceValue: string;
@@ -123,6 +125,33 @@ function compareUtf8(left: string, right: string): number {
 
 function compareOperationIds(left: SyncOperationRow, right: SyncOperationRow): number {
   return left.operationId < right.operationId ? -1 : left.operationId > right.operationId ? 1 : 0;
+}
+
+function causalMaterializationOrder(rows: readonly SyncOperationRow[]): SyncOperationRow[] {
+  const byId = new Map(rows.map((row) => [row.operationId, row]));
+  const indegree = new Map(rows.map((row) => [row.operationId, 0]));
+  const dependents = new Map<string, string[]>();
+  for (const row of rows) {
+    const dependencies = new Set<string>();
+    if (row.previousHash !== null && byId.has(row.previousHash)) dependencies.add(row.previousHash);
+    for (const frontier of row.frontier ?? []) if (byId.has(frontier.headHash)) dependencies.add(frontier.headHash);
+    indegree.set(row.operationId, dependencies.size);
+    for (const dependency of dependencies) dependents.set(dependency, [...(dependents.get(dependency) ?? []), row.operationId]);
+  }
+  const ready = rows.filter((row) => indegree.get(row.operationId) === 0).sort(compareOperationIds);
+  const ordered: SyncOperationRow[] = [];
+  while (ready.length > 0) {
+    const row = ready.shift()!;
+    ordered.push(row);
+    for (const dependentId of dependents.get(row.operationId) ?? []) {
+      const next = indegree.get(dependentId)! - 1;
+      indegree.set(dependentId, next);
+      if (next === 0) ready.push(byId.get(dependentId)!);
+    }
+    ready.sort(compareOperationIds);
+  }
+  if (ordered.length !== rows.length) ordered.push(...rows.filter((row) => !ordered.includes(row)).sort(compareOperationIds));
+  return ordered;
 }
 
 function crash(injector: CrashInjector | undefined, point: CrashPoint): void {
@@ -295,6 +324,7 @@ export class IndexedDbOperationDao {
         feedKey,
         sequence: operation.unsigned.sequence,
         previousHash: operation.unsigned.previousHash,
+        frontier: operation.unsigned.frontier.map((entry) => ({ ...entry })),
         rawWire: cloneBytes(operation.signedEnvelope),
         preferenceKey: fact.key,
         preferenceValue: fact.value,
@@ -353,17 +383,16 @@ export class IndexedDbOperationDao {
   }
 
   async #rebuildProjection(transaction: IDBTransaction, injectCrash?: CrashInjector): Promise<void> {
-    const accepted = await req<SyncOperationRow[]>(transaction.objectStore(SYNC_OPERATION_STORE).index("disposition").getAll("ACCEPTED"));
-    accepted.sort(compareOperationIds);
+    const accepted = causalMaterializationOrder(
+      await req<SyncOperationRow[]>(transaction.objectStore(SYNC_OPERATION_STORE).index("disposition").getAll("ACCEPTED")),
+    );
     const winners = new Map<string, SyncPreferenceRow>();
     for (const operation of accepted) {
-      if (!winners.has(operation.preferenceKey)) {
-        winners.set(operation.preferenceKey, {
-          key: operation.preferenceKey,
-          value: operation.preferenceValue,
-          operationId: operation.operationId,
-        });
-      }
+      winners.set(operation.preferenceKey, {
+        key: operation.preferenceKey,
+        value: operation.preferenceValue,
+        operationId: operation.operationId,
+      });
     }
     const preferences = transaction.objectStore(SYNC_PREFERENCE_STORE);
     await req(preferences.clear());

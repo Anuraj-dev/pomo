@@ -8,11 +8,20 @@ describe("authenticated direct Replica synchronization", () => {
     coordinator.connected();
     expect(coordinator.nextBatch()).toHaveLength(256);
     expect(coordinator.liveObservationTrusted()).toBeFalse();
-    expect(() => coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", 256]]), signatureVerified: false })).toThrow(/signed/);
-    coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", 256]]), signatureVerified: true });
+    expect(() => coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "op-256" }]]), signatureVerified: false })).toThrow(/signed/);
+    coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "wrong-256" }]]), signatureVerified: true });
+    expect(coordinator.pendingOperationIds()).toContain("op-256");
+    coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", { sequence: 256, operationId: "op-256" }]]), signatureVerified: true });
     coordinator.disconnected(); coordinator.connected();
     expect(coordinator.nextBatch()).toHaveLength(44);
-    coordinator.acknowledge({ peerDeviceId: "peer", frontier: new Map([["feed", 300]]), signatureVerified: true });
+    coordinator.acknowledge({
+      peerDeviceId: "peer",
+      frontier: new Map([[
+        "feed",
+        { sequence: 300, operationId: "op-300", coveredOperationIds: new Set(Array.from({ length: 44 }, (_, index) => `op-${index + 257}`)) },
+      ]]),
+      signatureVerified: true,
+    });
     expect(coordinator.liveObservationTrusted()).toBeTrue();
   });
 

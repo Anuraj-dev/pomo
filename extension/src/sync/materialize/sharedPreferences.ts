@@ -91,12 +91,12 @@ export class SharedPreferenceProjection {
       validateText(value, "checkpoint preference value", 0, 4096);
       return [key, value] as const;
     }));
-    for (const operation of [...operations].sort((left, right) => left.operationId.localeCompare(right.operationId))) {
+    for (const operation of operations) {
       if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet || operation.unsigned.payloadSchema !== 1) {
         throw new Error("unsupported shared-preference Operation");
       }
       const fact = decodeSharedPreferenceFact(operation.payload);
-      if (!staged.has(fact.key)) staged.set(fact.key, fact.value);
+      staged.set(fact.key, fact.value);
     }
     return () => {
       this.#values.clear();
