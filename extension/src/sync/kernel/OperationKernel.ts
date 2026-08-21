@@ -305,6 +305,7 @@ export class OperationKernel {
     } catch {
       return "REJECTED_CHECKPOINT";
     }
+    const existingKnownIds = new Set(this.#knownIds);
     const restored = new Map<FeedKey, FeedState>();
     for (const checkpointFeed of checkpoint.feeds) {
       try {
@@ -348,7 +349,7 @@ export class OperationKernel {
       return "REJECTED_CHECKPOINT";
     }
     try {
-      const entries = trailingOperations.map((operation) => ({
+      const entries = trailingOperations.filter((operation) => !existingKnownIds.has(operation.operationId)).map((operation) => ({
           operation,
           disposition: "ACCEPTED" as const,
           localAuthor: false,

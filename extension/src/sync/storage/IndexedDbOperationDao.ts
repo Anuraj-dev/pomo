@@ -321,7 +321,17 @@ export class IndexedDbOperationDao {
       const dispositions = transaction.objectStore(SYNC_DISPOSITION_EVENT_STORE);
       for (const { input, row } of prepared) {
         const existing = await req<SyncOperationRow | undefined>(operations.get(row.operationId));
-        if (existing !== undefined) throw new Error("restore trailing Operation is already durable");
+        if (existing !== undefined) {
+          if (!equalBytes(existing.rawWire, row.rawWire) || existing.feedKey !== row.feedKey || existing.sequence !== row.sequence) {
+            throw new Error("restore trailing Operation collides with durable history");
+          }
+          if (existing.disposition !== "ACCEPTED") {
+            await req(operations.put({ ...row, disposition: "ACCEPTED" } satisfies SyncOperationRow));
+            await this.#advanceHead(heads, row);
+            await this.#recordDisposition(dispositions, row, input.disposition);
+          }
+          continue;
+        }
         await req(operations.add(row));
         await this.#advanceHead(heads, row);
         await this.#recordDisposition(dispositions, row, input.disposition);

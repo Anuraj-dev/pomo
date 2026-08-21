@@ -76,6 +76,9 @@ internal interface SyncDao {
     @Query("SELECT * FROM sync_feed_heads ORDER BY deviceId ASC, incarnationId ASC")
     fun allHeads(): List<SyncFeedHeadEntity>
 
+    @Query("DELETE FROM sync_feed_heads")
+    fun clearHeads()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertCheckpointOperations(operations: List<SyncCheckpointOperationEntity>)
 
@@ -91,6 +94,9 @@ internal interface SyncDao {
 
     @Query("SELECT COUNT(*) FROM sync_checkpoint_operations")
     fun checkpointOperationCount(): Int
+
+    @Query("DELETE FROM sync_checkpoint_operations")
+    fun clearCheckpointOperations()
 
     @Query("SELECT operationId FROM sync_checkpoint_operations")
     fun checkpointOperationIds(): List<String>

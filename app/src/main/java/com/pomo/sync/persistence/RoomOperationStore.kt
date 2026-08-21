@@ -69,6 +69,15 @@ internal class RoomOperationStore(
         trailing: List<AuthenticatedOperation>,
     ) {
         database.runInTransaction {
+            val retainedOperationIds =
+                checkpoint.feeds.flatMap { it.coveredOperationIds }.map { it.toString() }.toSet() +
+                    trailing.map { it.operationId.toString() }
+            dao.allOperations()
+                .filter { it.operationId !in retainedOperationIds &&
+                    it.disposition in setOf(IngestDisposition.ACCEPTED.name, IngestDisposition.PENDING_GAP.name, IngestDisposition.PENDING_CAUSAL.name) }
+                .forEach { dao.updateDisposition(it.operationId, IngestDisposition.QUARANTINED_FORK.name) }
+            dao.clearHeads()
+            dao.clearCheckpointOperations()
             checkpoint.feeds.forEach { feed ->
                 val deviceId = feed.deviceId.toString()
                 val incarnationId = feed.incarnationId.toString()
