@@ -22,14 +22,14 @@ export const POMO_RECOVERY_ARGON2ID_PROFILE = Object.freeze({
   outputLength: 32,
 } as const);
 
-export type RecoveryArgon2idProfile = Readonly<{
-  version: number;
-  memoryKiB: number;
-  passes: number;
-  parallelism: number;
-  saltLength: number;
-  outputLength: number;
-}>;
+export interface RecoveryArgon2idProfile {
+  readonly version: number;
+  readonly memoryKiB: number;
+  readonly passes: number;
+  readonly parallelism: number;
+  readonly saltLength: number;
+  readonly outputLength: number;
+}
 
 export interface AesGcmCiphertext {
   readonly nonce: Uint8Array;

@@ -88,13 +88,30 @@ internal data class UnsignedOperation(
     }
 }
 
-internal data class AuthenticatedOperation(
+internal class AuthenticatedOperation(
     val operation: UnsignedOperation,
     val canonicalUnsigned: ByteArray,
     val operationId: ProtocolBytes,
     val canonicalPayload: ByteArray,
     val signedEnvelope: ByteArray,
-)
+) {
+    override fun equals(other: Any?): Boolean =
+        other is AuthenticatedOperation &&
+            operation == other.operation &&
+            canonicalUnsigned.contentEquals(other.canonicalUnsigned) &&
+            operationId == other.operationId &&
+            canonicalPayload.contentEquals(other.canonicalPayload) &&
+            signedEnvelope.contentEquals(other.signedEnvelope)
+
+    override fun hashCode(): Int {
+        var result = operation.hashCode()
+        result = 31 * result + canonicalUnsigned.contentHashCode()
+        result = 31 * result + operationId.hashCode()
+        result = 31 * result + canonicalPayload.contentHashCode()
+        result = 31 * result + signedEnvelope.contentHashCode()
+        return result
+    }
+}
 
 internal data class AuthorRequest(
     val memberId: ProtocolBytes,

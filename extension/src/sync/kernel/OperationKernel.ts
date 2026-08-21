@@ -535,8 +535,9 @@ export class OperationKernel {
       const accepted = [...this.#feeds.values()].flatMap((feed) => [...feed.accepted.values()]);
       const acceptedById = new Map(accepted.map((operation) => [operation.operationId, operation]));
       const invalidByFeed = new Map<FeedKey, number>();
-      for (const operation of accepted) {
-        if (this.#dependenciesSatisfied(operation, acceptedById)) continue;
+      const candidates = [...this.#feeds.values()].flatMap((feed) => [...feed.pending.values()]);
+      for (const operation of [...accepted, ...candidates]) {
+        if (this.#dependenciesSatisfied(operation, acceptedById) || !this.#referencesQuarantinedDependency(operation)) continue;
         const key = this.#feedKey(operation.unsigned);
         invalidByFeed.set(key, Math.min(invalidByFeed.get(key) ?? operation.unsigned.sequence, operation.unsigned.sequence));
       }
@@ -551,6 +552,14 @@ export class OperationKernel {
         this.#quarantineDependentFeedFrom(feed, sequence);
       }
     }
+  }
+
+  #referencesQuarantinedDependency(operation: AuthenticatedOperation): boolean {
+    const dependencies = [
+      ...(operation.unsigned.previousHash === null ? [] : [operation.unsigned.previousHash]),
+      ...operation.unsigned.frontier.map(({ headHash }) => headHash),
+    ];
+    return dependencies.some((dependency) => this.#quarantined.has(dependency));
   }
 
   #quarantineDependentFeedFrom(feed: FeedState, sequence: number): void {

@@ -144,6 +144,38 @@ public class OperationKernelTest {
     }
 
     @Test
+    public fun forkQuarantinesPendingDependentWithAnotherMissingDependency() {
+        val dependencyPayload = payload("dependency")
+        val dependency = authenticated(operation(1, null, dependencyPayload), dependencyPayload)
+        val pendingPayload = payload("pending")
+        val pending =
+            authenticated(
+                operation(
+                    sequence = 1,
+                    previous = null,
+                    payload = pendingPayload,
+                    deviceId = id(4),
+                    frontier =
+                        listOf(
+                            FeedFrontier(id(2), incarnation(), 1, dependency.operationId),
+                            FeedFrontier(id(5), incarnation(), 1, id(8)),
+                        ),
+                ),
+                pendingPayload,
+            )
+        val alternatePayload = payload("alternate")
+        val alternate = authenticated(operation(1, null, alternatePayload), alternatePayload)
+        val kernel = kernel()
+
+        assertEquals(IngestDisposition.PENDING_CAUSAL, kernel.ingest(pending.signedEnvelope))
+        assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(dependency.signedEnvelope))
+        assertEquals(1, kernel.summarize().pending)
+        assertEquals(IngestDisposition.QUARANTINED_FORK, kernel.ingest(alternate.signedEnvelope))
+        assertEquals(0, kernel.summarize().pending)
+        assertEquals(3, kernel.summarize().quarantined)
+    }
+
+    @Test
     public fun blocksAuthoringBeforeDurablePrerequisites() {
         val result =
             kernel().author(

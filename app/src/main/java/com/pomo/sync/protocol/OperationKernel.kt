@@ -350,10 +350,7 @@ internal class OperationKernel(
             changed = false
             feeds.values.forEach { feed ->
                 val invalidSequence =
-                    feed.accepted.entries
-                        .sortedBy { it.key }
-                        .firstOrNull { (_, authenticated) -> !dependenciesPresent(authenticated.operation) }
-                        ?.key
+                    sequenceWithInvalidatedDependency(feed)
                         ?: return@forEach
                 feed.forkedAt = minOf(feed.forkedAt ?: invalidSequence, invalidSequence)
                 feed.candidates.filterKeys { it >= invalidSequence }.values.forEach {
@@ -370,20 +367,38 @@ internal class OperationKernel(
         } while (changed)
     }
 
+    private fun sequenceWithInvalidatedDependency(feed: FeedState): Long? =
+        (feed.accepted.entries.asSequence().map { it.key to it.value } +
+            feed.pending.entries.asSequence().map { it.key to it.value.first })
+            .sortedBy { it.first }
+            .firstOrNull { (_, authenticated) ->
+                !dependenciesPresent(authenticated.operation) &&
+                    referencesQuarantinedDependency(authenticated.operation)
+            }
+            ?.first
+
+    private fun referencesQuarantinedDependency(operation: UnsignedOperation): Boolean =
+        (listOfNotNull(operation.previousOperationId) + operation.frontier.map { it.headOperationId })
+            .any { it in quarantined }
+
     private fun dependenciesPresent(operation: UnsignedOperation): Boolean {
         val ownFeed = feeds[feedKey(operation.deviceId, operation.incarnationId)] ?: return false
         val predecessorPresent =
             if (operation.sequence == 1L) {
                 operation.previousOperationId == null
             } else {
-                (ownFeed.accepted[operation.sequence - 1]?.operationId
-                    ?: ownFeed.checkpointIds[operation.sequence - 1]) == operation.previousOperationId
+                (
+                    ownFeed.accepted[operation.sequence - 1]?.operationId
+                        ?: ownFeed.checkpointIds[operation.sequence - 1]
+                ) == operation.previousOperationId
             }
         return predecessorPresent &&
             operation.frontier.all { dependency ->
                 val dependencyFeed = feeds[feedKey(dependency.deviceId, dependency.incarnationId)]
-                (dependencyFeed?.accepted?.get(dependency.sequence)?.operationId
-                    ?: dependencyFeed?.checkpointIds?.get(dependency.sequence)) == dependency.headOperationId
+                (
+                    dependencyFeed?.accepted?.get(dependency.sequence)?.operationId
+                        ?: dependencyFeed?.checkpointIds?.get(dependency.sequence)
+                ) == dependency.headOperationId
             }
     }
 
@@ -399,10 +414,11 @@ internal class OperationKernel(
 
     private fun causalMaterializationOrder(): List<AuthenticatedOperation> {
         val accepted = feeds.values.flatMap { it.accepted.values }
-        val byPosition = accepted.associateBy { authenticated ->
-            val operation = authenticated.operation
-            "${feedKey(operation.deviceId, operation.incarnationId)}@${operation.sequence}"
-        }
+        val byPosition =
+            accepted.associateBy { authenticated ->
+                val operation = authenticated.operation
+                "${feedKey(operation.deviceId, operation.incarnationId)}@${operation.sequence}"
+            }
         val remaining = accepted.associateByTo(linkedMapOf()) { it.operationId }
         val emitted = linkedSetOf<ProtocolBytes>()
         val ordered = mutableListOf<AuthenticatedOperation>()
@@ -429,8 +445,10 @@ internal class OperationKernel(
                                         "${feedKey(dependency.deviceId, dependency.incarnationId)}" +
                                             "@${dependency.sequence}",
                                     ]
-                                (dependencyOperation?.operationId == dependency.headOperationId &&
-                                    dependencyOperation.operationId in emitted) ||
+                                (
+                                    dependencyOperation?.operationId == dependency.headOperationId &&
+                                        dependencyOperation.operationId in emitted
+                                ) ||
                                     feeds[feedKey(dependency.deviceId, dependency.incarnationId)]
                                         ?.checkpointIds
                                         ?.get(dependency.sequence) == dependency.headOperationId

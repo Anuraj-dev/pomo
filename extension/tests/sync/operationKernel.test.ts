@@ -299,6 +299,27 @@ describe("OperationKernel four-call seam", () => {
     })).toEqual({ status: "BLOCKED_PREREQUISITE", missing: new Set(["UNFORKED_FEED"]) });
   });
 
+  test("cascades quarantine through a pending dependent with another missing dependency", async () => {
+    const { kernel, crypto } = harness();
+    const prerequisiteDevice = "33".repeat(32);
+    const dependentDevice = "44".repeat(32);
+    const prerequisiteIncarnation = "55".repeat(16);
+    const dependentIncarnation = "66".repeat(16);
+    const missingDevice = "77".repeat(32);
+    const prerequisite = await signedCrossFeedOperation(crypto, prerequisiteDevice, prerequisiteIncarnation, "old", []);
+    const pending = await signedCrossFeedOperation(crypto, dependentDevice, dependentIncarnation, "pending", [
+      { deviceId: prerequisiteDevice, incarnationId: prerequisiteIncarnation, sequence: 1, headHash: prerequisite.operationId },
+      { deviceId: missingDevice, incarnationId: "88".repeat(16), sequence: 1, headHash: "99".repeat(32) },
+    ]);
+    const conflicting = await signedCrossFeedOperation(crypto, prerequisiteDevice, prerequisiteIncarnation, "fork", []);
+
+    expect(await kernel.ingest(pending.signedEnvelope)).toBe("PENDING_CAUSAL");
+    expect(await kernel.ingest(prerequisite.signedEnvelope)).toBe("ACCEPTED");
+    expect(kernel.summarize()).toMatchObject({ accepted: 1, pending: 1, quarantined: 0 });
+    expect(await kernel.ingest(conflicting.signedEnvelope)).toBe("QUARANTINED_FORK");
+    expect(kernel.summarize()).toMatchObject({ accepted: 0, pending: 0, quarantined: 3 });
+  });
+
   test("keeps a fork invisible until its atomic quarantine batch commits", async () => {
     const { kernel, crypto, journal, projection } = harness();
     const first = await kernel.author(request("25"));
@@ -381,7 +402,7 @@ describe("OperationKernel four-call seam", () => {
     }, []);
     expect(restoredAgain).toBe("RESTORED");
     expect(await kernel.ingest(await signedOperation(crypto, 1, null, "30"))).toBe("QUARANTINED_FORK");
-    expect(projection.value("focusDurationMinutes")).toBeUndefined();
+    expect(projection.value("focusDurationMinutes")).toBe("25");
   });
 
   test("rejects unsupported checkpoint generation without changing state", async () => {

@@ -61,6 +61,7 @@ export function coseSignatureStructure(protectedBytes: Uint8Array, payload: Uint
 
 export interface DecodedCoseOperation {
   readonly canonicalUnsigned: Uint8Array;
+  readonly operation: UnsignedOperation;
   readonly deviceId: Uint8Array;
   readonly signature: Uint8Array;
   readonly signatureInput: Uint8Array;
@@ -91,7 +92,7 @@ export function decodeCoseOperation(envelope: Uint8Array): DecodedCoseOperation 
   const deviceId = hexToBytes(operation.deviceId);
   const expectedProtected = encodeCanonicalCbor(protectedHeaders(deviceId));
   if (!equalBytes(protectedBytes, expectedProtected)) throw new Error("COSE protected headers do not match POMO-SUITE-1");
-  return { canonicalUnsigned, deviceId, signature, signatureInput: signatureStructure(protectedBytes, canonicalUnsigned) };
+  return { canonicalUnsigned, operation, deviceId, signature, signatureInput: signatureStructure(protectedBytes, canonicalUnsigned) };
 }
 
 export async function verifyCoseOperation(publicKey: CryptoKey, envelope: Uint8Array): Promise<boolean> {
@@ -136,7 +137,7 @@ export class CoseOperationVerifier implements OperationVerifier {
   async verify(wire: Uint8Array): Promise<AuthenticatedOperation> {
     const { cose, payload } = decodeAuthenticatedWire(wire);
     const decoded = decodeCoseOperation(cose);
-    const unsigned = decodeUnsignedOperation(decoded.canonicalUnsigned);
+    const unsigned = decoded.operation;
     const publicKey = await this.resolvePublicKey(unsigned.deviceId);
     if (publicKey === undefined || !(await verifyP256LowS(publicKey, decoded.signatureInput, decoded.signature))) {
       throw new Error("invalid COSE Operation signature");
