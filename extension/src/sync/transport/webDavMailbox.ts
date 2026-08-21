@@ -1,3 +1,5 @@
+import { bufferOf } from "../../shared/bytes";
+
 export interface MailboxObject { readonly objectId: string; readonly bytes: Uint8Array; readonly sha256: string; readonly size: number }
 export interface MailboxManifest { readonly manifestId: string; readonly checkpointId: string; readonly packIds: readonly string[]; readonly operationIds: readonly string[]; readonly blobIds: readonly string[] }
 export type MailboxFailure = "CORS" | "QUOTA" | "CREDENTIAL" | "ROLLBACK" | "MISSING_OBJECT" | "NETWORK";
@@ -28,7 +30,7 @@ export class WebDavMailbox {
 export class FetchWebDavClient implements ImmutableMailboxClient {
   constructor(private readonly baseUrl: string, private readonly authorization: string) {}
   async createIfAbsent(objectId: string, bytes: Uint8Array): Promise<boolean> {
-    const response = await fetch(new URL(encodeURIComponent(objectId), this.baseUrl), { method: "PUT", headers: { Authorization: this.authorization, "If-None-Match": "*", "Content-Type": "application/octet-stream" }, body: bytes });
+    const response = await fetch(new URL(encodeURIComponent(objectId), this.baseUrl), { method: "PUT", headers: { Authorization: this.authorization, "If-None-Match": "*", "Content-Type": "application/octet-stream" }, body: bufferOf(bytes) });
     if (response.status === 412) return false;
     if (!response.ok) throw new Error(`WEBDAV_${response.status}`);
     return true;
@@ -54,4 +56,4 @@ function classifyFailure(error: unknown): MailboxFailure {
   if (/CORS/i.test(message)) return "CORS";
   return "NETWORK";
 }
-async function sha256(bytes: Uint8Array): Promise<string> { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
+async function sha256(bytes: Uint8Array): Promise<string> { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bufferOf(bytes)))].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }

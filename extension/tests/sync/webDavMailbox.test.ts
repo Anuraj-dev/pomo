@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { repairMailbox, WebDavMailbox, type ImmutableMailboxClient } from "../../src/sync/transport/webDavMailbox";
+import { bufferOf } from "../../src/shared/bytes";
 
 class MemoryMailbox implements ImmutableMailboxClient {
   readonly objects = new Map<string, Uint8Array>();
@@ -7,7 +8,7 @@ class MemoryMailbox implements ImmutableMailboxClient {
   async get(id: string): Promise<Uint8Array | null> { return this.objects.get(id)?.slice() ?? null; }
 }
 
-async function hash(bytes: Uint8Array): Promise<string> { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
+async function hash(bytes: Uint8Array): Promise<string> { return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bufferOf(bytes)))].map((byte) => byte.toString(16).padStart(2, "0")).join(""); }
 
 describe("independently verified immutable WebDAV Mailboxes", () => {
   test("requires create, retrieve, hash, and size verification", async () => {
