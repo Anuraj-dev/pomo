@@ -67,6 +67,18 @@ export function materializeActivePhase(input: readonly TimerFact[]): ActivePhase
     }
   }
   for (const id of staleCommandIds) accepted.delete(id);
+  let pruned = true;
+  while (pruned) {
+    pruned = false;
+    const present = new Set(accepted.keys());
+    for (const fact of [...accepted.values()]) {
+      if ([...fact.parentHeads].some((parentId) => !present.has(parentId))) {
+        accepted.delete(fact.operationId);
+        staleCommandIds.add(fact.operationId);
+        pruned = true;
+      }
+    }
+  }
   const withoutSettles = new Map([...accepted].filter(([, fact]) => fact.action !== "SETTLE"));
   const referencedWithoutSettles = new Set([...withoutSettles.values()].flatMap((fact) => [...fact.parentHeads]));
   const headsWithoutSettles = new Set([...withoutSettles.keys()].filter((id) => !referencedWithoutSettles.has(id)));

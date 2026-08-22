@@ -41,6 +41,18 @@ describe("causal Active phase materialization", () => {
     expect(projection.ownerDeviceId).toBe("chrome");
   });
 
+  test("prunes descendants of stale owner commands before they become heads", () => {
+    const start = fact("start", "START", [], "android", "claim-a");
+    const handoff = fact("handoff", "HANDOFF", ["start"], "chrome", "claim-b");
+    const stale = fact("stale-extend", "EXTEND", ["handoff"], "android", "claim-a");
+    const descendant = fact("stale-complete", "COMPLETE", ["stale-extend"], "android", "claim-a");
+    const projection = materializeActivePhase([start, handoff, stale, descendant]);
+    expect(projection.staleCommandIds).toEqual(new Set(["stale-extend", "stale-complete"]));
+    expect(projection.heads).toEqual(new Set(["handoff"]));
+    expect(projection.completedOperationIds.size).toBe(0);
+    expect(projection.ownerDeviceId).toBe("chrome");
+  });
+
   test("settlement is canonical only when it cites every conflict head", () => {
     const start = fact("start", "START", [], "android", "claim-a");
     const pause = fact("pause", "PAUSE", ["start"], "android", "claim-a");

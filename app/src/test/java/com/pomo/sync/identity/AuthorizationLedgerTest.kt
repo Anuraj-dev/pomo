@@ -37,6 +37,23 @@ public class AuthorizationLedgerTest {
     }
 
     @Test
+    public fun identityBlockAfterAuthorizationIsRevocation() {
+        val initial = AdmissionSnapshot(id(1), id(2), id(3), id(4), AdmissionStage.OFFER_CREATED)
+        val admission = AdmissionSession.create(initial)
+        admission.verifyFingerprints(initial.memberId, initial.deviceId, initial.transcriptHash)
+        admission.advance(AdmissionStage.INVENTORY_COMPLETE)
+        admission.advance(AdmissionStage.LOCAL_EXPORT_SAVED)
+        admission.advance(AdmissionStage.RECOVERY_ANCHOR_CREATED)
+        admission.advance(AdmissionStage.PLAN_APPROVED)
+        admission.advance(AdmissionStage.AUTHORIZATION_COMMITTED)
+        assertTrue(runCatching { admission.blockDifferentMember() }.isFailure)
+        admission.advance(AdmissionStage.BASELINE_VERIFIED)
+        assertTrue(runCatching { admission.blockDifferentMember() }.isFailure)
+        admission.advance(AdmissionStage.READY_ACK_COMMITTED)
+        assertTrue(runCatching { admission.blockDifferentMember() }.isFailure)
+    }
+
+    @Test
     public fun genesisIsStableAndAuthorizationRemainsSeparateFromReadiness() {
         val first = certificate(1)
         val recovery = recovery(3)

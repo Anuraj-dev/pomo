@@ -205,6 +205,27 @@ describe("Member Identity and causal authorization", () => {
     expect(resumed.snapshot().stage).toBe("READY_ACK_COMMITTED");
   });
 
+  test("identity block after authorization is revocation", () => {
+    const admission = new AdmissionSession({
+      memberId: "00".repeat(32),
+      admissionId: "11".repeat(32),
+      deviceId: "22".repeat(32),
+      transcriptHash: "33".repeat(32),
+      stage: "OFFER_CREATED",
+    });
+    admission.verifyFingerprints("00".repeat(32), "22".repeat(32), "33".repeat(32));
+    admission.advance("INVENTORY_COMPLETE");
+    admission.advance("LOCAL_EXPORT_SAVED");
+    admission.advance("RECOVERY_ANCHOR_CREATED");
+    admission.advance("PLAN_APPROVED");
+    admission.advance("AUTHORIZATION_COMMITTED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+    admission.advance("BASELINE_VERIFIED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+    admission.advance("READY_ACK_COMMITTED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+  });
+
   test("blocks a different Member Identity before authorization", () => {
     const admission = new AdmissionSession({
       memberId: "00".repeat(32),

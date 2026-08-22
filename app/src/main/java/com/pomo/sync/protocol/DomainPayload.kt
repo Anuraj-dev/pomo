@@ -89,8 +89,11 @@ internal object DomainPayload {
         val fields = array(payload, 6, DomainKind.TAG.id)
         val tagId = text(fields[1])
         val name = text(fields[2])
+        require(tagId.isNotBlank() && name.isNotBlank())
         require(unsigned(fields[3]) >= 0)
         val archived = (fields[4] as? CborValue.Boolean)?.value ?: error("archived")
+        val mergedInto = optionalText(fields[5])
+        if (mergedInto != null) require(mergedInto.isNotBlank())
         return Triple(tagId, name, archived)
     }
 
@@ -112,7 +115,9 @@ internal object DomainPayload {
 
     fun decodeProfile(payload: ByteArray): Pair<String, String?> {
         val fields = array(payload, 3, DomainKind.PROFILE.id)
-        return text(fields[1]) to optionalText(fields[2])
+        val name = text(fields[1])
+        require(name.isNotBlank())
+        return name to optionalText(fields[2])
     }
 
     fun encodeCrew(
@@ -133,8 +138,10 @@ internal object DomainPayload {
 
     fun decodeCrew(payload: ByteArray): Pair<String, Boolean> {
         val fields = array(payload, 3, DomainKind.CREW.id)
+        val crewId = text(fields[1])
+        require(crewId.isNotBlank())
         val join = (fields[2] as? CborValue.Boolean)?.value ?: error("crew intent")
-        return text(fields[1]) to join
+        return crewId to join
     }
 
     fun encodeTimer(
@@ -161,10 +168,20 @@ internal object DomainPayload {
 
     fun decodeTimer(payload: ByteArray): List<String> {
         val fields = array(payload, 6, DomainKind.TIMER.id)
+        val action = text(fields[1])
+        val phaseId = text(fields[2])
         val parents =
             (fields[3] as? CborValue.Array)?.values?.map { text(it) }
                 ?: throw IllegalArgumentException("Timer parents must be an array")
-        return listOf(text(fields[1]), text(fields[2])) + parents + listOf(text(fields[4]), text(fields[5]))
+        val ownerDeviceId = text(fields[4])
+        val ownershipClaimId = text(fields[5])
+        require(
+            action.isNotBlank() &&
+                phaseId.isNotBlank() &&
+                ownerDeviceId.isNotBlank() &&
+                ownershipClaimId.isNotBlank(),
+        )
+        return listOf(action, phaseId) + parents + listOf(ownerDeviceId, ownershipClaimId)
     }
 
     fun preferenceProjectionOrEmpty(

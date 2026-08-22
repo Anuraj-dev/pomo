@@ -108,6 +108,17 @@ internal object ActivePhaseMaterializer {
             }
         }
         staleCommandIds.forEach { accepted.remove(it) }
+        var pruned = true
+        while (pruned) {
+            pruned = false
+            val present = accepted.keys
+            val orphaned = accepted.values.filter { fact -> fact.parentHeads.any { it !in present } }
+            for (fact in orphaned) {
+                accepted.remove(fact.operationId)
+                staleCommandIds += fact.operationId
+                pruned = true
+            }
+        }
         val withoutSettles = accepted.filterValues { it.action != TimerAction.SETTLE }
         val referencedWithoutSettles = withoutSettles.values.flatMapTo(linkedSetOf()) { it.parentHeads }
         val headsWithoutSettles =

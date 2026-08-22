@@ -37,7 +37,7 @@ internal class AdmissionSession private constructor(
     }
 
     fun blockDifferentMember() {
-        require(current.stage != AdmissionStage.AUTHORIZATION_COMMITTED) {
+        require(current.stage !in postAuthorizationStages) {
             "After authorization, cancel becomes revocation"
         }
         current = current.copy(stage = AdmissionStage.IDENTITY_BLOCKED)
@@ -50,5 +50,12 @@ internal class AdmissionSession private constructor(
         }
 
         fun resume(snapshot: AdmissionSnapshot): AdmissionSession = AdmissionSession(snapshot)
+
+        private val postAuthorizationStages =
+            setOf(
+                AdmissionStage.AUTHORIZATION_COMMITTED,
+                AdmissionStage.BASELINE_VERIFIED,
+                AdmissionStage.READY_ACK_COMMITTED,
+            )
     }
 }

@@ -49,6 +49,20 @@ public class ActivePhaseMaterializerTest {
     }
 
     @Test
+    public fun descendantsOfStaleOwnerCommandsLeaveCanonicalState() {
+        val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
+        val handoff = fact("handoff", TimerAction.HANDOFF, setOf("start"), "chrome", "claim-b")
+        val stale = fact("stale-extend", TimerAction.EXTEND, setOf("handoff"), "android", "claim-a")
+        val descendant = fact("stale-complete", TimerAction.COMPLETE, setOf("stale-extend"), "android", "claim-a")
+        val projection = ActivePhaseMaterializer.materialize(listOf(start, handoff, stale, descendant))
+        assertEquals(setOf("stale-extend", "stale-complete"), projection.staleCommandIds)
+        assertEquals(setOf("handoff"), projection.heads)
+        assertTrue(projection.completedOperationIds.isEmpty())
+        assertEquals("chrome", projection.ownerDeviceId)
+        assertFalse(projection.settlementRequired)
+    }
+
+    @Test
     public fun settlementMustCiteEveryConflictHead() {
         val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
         val pause = fact("pause", TimerAction.PAUSE, setOf("start"), "android", "claim-a")

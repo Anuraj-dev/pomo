@@ -22,27 +22,34 @@ export function requireValidDomainPayload(kind: number, payload: Uint8Array): vo
   }
   const fields = asArray(decodeCanonicalCbor(payload), kind);
   if (kind === OperationKind.History) {
-    if (fields.length !== 4 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || !Array.isArray(fields[3])) {
+    if (fields.length !== 4 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || !Array.isArray(fields[3]) || !fields[3].every((item) => typeof item === "string")) {
       throw new Error("invalid History payload");
     }
     if (!["CREATE", "CORRECT", "TOMBSTONE", "SETTLE"].includes(fields[1])) throw new Error("invalid History action");
+    if (fields[2].trim() === "") throw new Error("invalid History payload");
     return;
   }
   if (kind === OperationKind.Tag) {
-    if (fields.length !== 6 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || typeof fields[3] !== "number" || typeof fields[4] !== "boolean") {
+    if (fields.length !== 6 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || typeof fields[3] !== "number" || typeof fields[4] !== "boolean" || !(fields[5] === null || typeof fields[5] === "string")) {
+      throw new Error("invalid Tag payload");
+    }
+    if (fields[1].trim() === "" || fields[2].trim() === "" || (typeof fields[5] === "string" && fields[5].trim() === "")) {
       throw new Error("invalid Tag payload");
     }
     return;
   }
   if (kind === OperationKind.Profile) {
-    if (fields.length !== 3 || typeof fields[1] !== "string" || !(fields[2] === null || typeof fields[2] === "string")) throw new Error("invalid Profile payload");
+    if (fields.length !== 3 || typeof fields[1] !== "string" || fields[1].trim() === "" || !(fields[2] === null || typeof fields[2] === "string")) throw new Error("invalid Profile payload");
     return;
   }
   if (kind === OperationKind.Crew) {
-    if (fields.length !== 3 || typeof fields[1] !== "string" || typeof fields[2] !== "boolean") throw new Error("invalid Crew payload");
+    if (fields.length !== 3 || typeof fields[1] !== "string" || fields[1].trim() === "" || typeof fields[2] !== "boolean") throw new Error("invalid Crew payload");
     return;
   }
-  if (fields.length !== 6 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || !Array.isArray(fields[3]) || typeof fields[4] !== "string" || typeof fields[5] !== "string") {
+  if (fields.length !== 6 || typeof fields[1] !== "string" || typeof fields[2] !== "string" || !Array.isArray(fields[3]) || !fields[3].every((item) => typeof item === "string") || typeof fields[4] !== "string" || typeof fields[5] !== "string") {
+    throw new Error("invalid Timer payload");
+  }
+  if (fields[1].trim() === "" || fields[2].trim() === "" || fields[4].trim() === "" || fields[5].trim() === "") {
     throw new Error("invalid Timer payload");
   }
 }
