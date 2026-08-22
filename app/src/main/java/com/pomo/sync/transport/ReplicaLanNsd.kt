@@ -163,6 +163,7 @@ internal class ReplicaLanBrowser(
             return ReplicaLanBrowser(nsdManager, localDeviceId, onPeers)
         }
 
+        @Suppress("DEPRECATION")
         fun peerFrom(info: NsdServiceInfo): ReplicaLanPeer? {
             val host = info.host?.hostAddress ?: return null
             val deviceId = deviceIdOf(info) ?: return null

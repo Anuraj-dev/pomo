@@ -1,3 +1,4 @@
+import { bufferOf } from "../../shared/bytes";
 import { encodeCanonicalCbor, decodeCanonicalCbor, type CborValue } from "../protocol/cbor";
 import { signP256LowS, verifyP256LowS } from "../crypto/PomoCrypto";
 import { DirectSyncCoordinator, type DurablePeerAck, type SyncEnvelope } from "./directSync";
@@ -136,7 +137,7 @@ export function decodeLanResponse(bytes: Uint8Array): ReplicaLanResponse {
 }
 
 export async function verifyLanAck(ack: ReplicaLanAck): Promise<DurablePeerAck> {
-  const publicKey = await crypto.subtle.importKey("raw", ack.publicKey, { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+  const publicKey = await crypto.subtle.importKey("raw", bufferOf(ack.publicKey), { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
   const verified = await verifyP256LowS(publicKey, encodeAckBody(ack.peerDeviceId, ack.publicKey, ack.frontier), ack.signature);
   return { peerDeviceId: ack.peerDeviceId, frontier: ack.frontier, signatureVerified: verified };
 }
