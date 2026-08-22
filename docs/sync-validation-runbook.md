@@ -10,9 +10,10 @@ CI rejects `productionActivation=true` otherwise.
 
 ## What this runbook is not
 
-It does not make WorkManager, LAN, WebDAV, Nostr, or TURN live. Those hosts are
-still missing. Rows that need them start as `BLOCKED` with a reason. Do not
-rewrite a blocked row into a pass by weakening the protocol.
+WorkManager ordinary drain is packaged on test artifacts. It still has no LAN,
+WebDAV, Nostr, or TURN route, so Retry now walks the outbox and stays
+local-only. Rows that need a live replica session start as `BLOCKED` with a
+reason. Do not rewrite a blocked row into a pass by weakening the protocol.
 
 ## Artifacts
 

@@ -94,6 +94,14 @@ different sessions only when desk remaining is strictly less than phone
 remaining; otherwise HTTP 409 `timer_busy`).
 
 ```text
+sync/transport/
+```
+
+`OrdinaryDrainHost` walks the Room outbox through `DirectSyncCoordinator`.
+`OrdinaryDrainWorker` is the WorkManager entry. Retry now enqueues an immediate
+pass. Periodic work waits for connectivity. Live routes are not wired yet.
+
+```text
 ui/
 ```
 

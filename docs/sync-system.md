@@ -5,6 +5,13 @@ Pomo packages the complete peer-sync generation as a dormant system. Android
 production artifacts keep `productionActivation=false`. There is no migration
 cutover, dual-write period, or automatic activation in this stage.
 
+Test artifacts run an ordinary drain host. Android schedules it with WorkManager.
+Chrome runs it from the service worker when Retry now is pressed or a drain
+request is stored. The host walks the durable outbox, offers at most 256
+envelopes, and clears an obligation only after a signed durable ack is
+persisted. No LAN, WebDAV, Nostr, or TURN route is wired yet, so a drain stays
+local-only until those adapters exist.
+
 ## Authority and safety boundary
 
 - Android Room remains canonical history. IndexedDB is the Chrome Full Replica

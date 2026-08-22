@@ -17,6 +17,18 @@ change. Do not merge activation in the same commit as protocol or host work.
    install, execute `docs/sync-validation-runbook.md`, write evidence into
    `sync-protocol/activation/physical-matrix.json`.
 
+## Live host loop
+
+After PR 124, ordinary drain exists on test artifacts. Next independently
+reviewable slices, in this order:
+
+1. Replica LAN session into `OperationKernel` ingress.
+2. Live WebDAV Mailbox, then Nostr rendezvous and optional TURN.
+3. Content-epoch wrapping on those routes.
+4. Replace live `OfflineTimer` / `TimerEngine` only after those hosts work.
+
+Do not open the activation PR while any required physical row is `BLOCKED`.
+
 ## After evidence
 
 5. Isolated activation PR, produced by

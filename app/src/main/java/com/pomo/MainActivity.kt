@@ -25,6 +25,7 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.service.PomodoroService
 import com.pomo.service.PomodoroServiceStarter
+import com.pomo.sync.transport.OrdinaryDrainScheduler
 import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.sync.ui.timerControlsAllowed
 import com.pomo.ui.TimerFragment
@@ -111,6 +112,7 @@ public class MainActivity : AppCompatActivity() {
         navView.setOnItemReselectedListener { }
 
         startService()
+        OrdinaryDrainScheduler.enqueuePeriodic(this)
         requestNotificationPermission()
         handleNavIntent(intent)
     }

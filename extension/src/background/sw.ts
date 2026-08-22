@@ -38,6 +38,9 @@ import {
   type PomoRequest,
   type PomoResponse,
 } from "../shared/messages";
+import { SYNC_ACTIVATION } from "../sync/activation";
+import { IndexedDbOperationDao } from "../sync/storage/IndexedDbOperationDao";
+import { drainOrdinaryOutbox, envelopesFrom } from "../sync/transport/ordinaryDrain";
 import {
   completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
@@ -838,12 +841,23 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
   }
   const scheduled = scheduleOrdinaryDrain(ui);
   try {
+    let outcome = "skipped";
+    if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
+      const dao = new IndexedDbOperationDao();
+      const result = await drainOrdinaryOutbox({
+        obligations: envelopesFrom(await dao.reconstruct()),
+        routes: [],
+        ingest() {},
+        markDelivered: (operationId) => dao.markDelivered(operationId),
+      });
+      outcome = result.localOnly ? "local-only" : "routed";
+    }
     const events = await readDiagnosticEvents();
     events.push({
       monotonicMillis: Date.now(),
       area: "STATE_TRANSITION",
       event: "ordinary-drain-scheduled",
-      fields: { outcome: "local-only" },
+      fields: { outcome },
     });
     const completed = completeOrdinaryDrain(scheduled);
     await chrome.storage.local.set({
