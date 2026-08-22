@@ -19,6 +19,11 @@ const kernel = new OperationKernel(
   allowAllOperationAuthorization,
 );
 
+/** Registers a device verification key for authenticated test-artifact ingestion. */
+export function registerTestArtifactPublicKey(deviceId: string, publicKey: CryptoKey): void {
+  publicKeys.set(deviceId, publicKey);
+}
+
 /** Test-only sync entry point; production manifests never include this module. */
 export const syncTestSystem = new DormantSyncSystem(
   { ingest: (wire) => kernel.ingest(wire) },

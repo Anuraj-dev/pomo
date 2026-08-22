@@ -65,10 +65,21 @@ internal object ActivePhaseMaterializer {
         require(facts.map { it.phaseId }.distinct().size == 1) { "Projection must target one identified phase" }
         val byId = facts.associateBy { it.operationId }
         val accepted = linkedMapOf<String, TimerFact>()
-        val pending = linkedSetOf<String>()
-        facts.forEach { fact ->
-            if (!byId.keys.containsAll(fact.parentHeads)) pending += fact.operationId else accepted[fact.operationId] = fact
+        val remaining = facts.toMutableList()
+        var progressed = true
+        while (progressed) {
+            progressed = false
+            val iterator = remaining.iterator()
+            while (iterator.hasNext()) {
+                val fact = iterator.next()
+                if (fact.parentHeads.all { it in accepted }) {
+                    accepted[fact.operationId] = fact
+                    iterator.remove()
+                    progressed = true
+                }
+            }
         }
+        val pending = remaining.mapTo(linkedSetOf()) { it.operationId }
         val starts = accepted.values.filter { it.action == TimerAction.START }
         require(starts.isNotEmpty())
         val plan = starts.first().plan

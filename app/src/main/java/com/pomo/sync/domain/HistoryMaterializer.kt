@@ -62,7 +62,8 @@ internal class HistoryMaterializer {
                 return@forEach
             }
             val settlement = settlements.singleOrNull()
-            if (settlements.size > 1 || settlement?.selectedFactIds?.any { it !in byId } == true) {
+            val blockFactIds = blockFacts.mapTo(linkedSetOf()) { it.factId }
+            if (settlements.size > 1 || settlement?.selectedFactIds?.any { it !in blockFactIds } == true) {
                 conflicts += blockId
                 return@forEach
             }

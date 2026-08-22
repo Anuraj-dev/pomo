@@ -297,6 +297,25 @@ export class IndexedDbOperationDao {
     await this.#withDb((db) => tx(db, [...SYNC_STORES], "readwrite", async (transaction) => {
       const checkpointOperations = transaction.objectStore(SYNC_CHECKPOINT_OPERATION_STORE);
       const checkpointProjection = transaction.objectStore(SYNC_CHECKPOINT_PROJECTION_STORE);
+      const operations = transaction.objectStore(SYNC_OPERATION_STORE);
+      const heads = transaction.objectStore(SYNC_FEED_HEAD_STORE);
+      const dispositions = transaction.objectStore(SYNC_DISPOSITION_EVENT_STORE);
+      const outbox = transaction.objectStore(SYNC_OUTBOX_STORE);
+      const retainedOperationIds = new Set([
+        ...checkpoint.feeds.flatMap((feed) => feed.coveredOperationIds),
+        ...prepared.map(({ row }) => row.operationId),
+      ]);
+      const rebuildable = new Set(["ACCEPTED", "PENDING_GAP", "PENDING_CAUSAL"]);
+      for (const existing of await req<SyncOperationRow[]>(operations.getAll())) {
+        if (!retainedOperationIds.has(existing.operationId) && rebuildable.has(existing.disposition)) {
+          await req(operations.put({ ...existing, disposition: "QUARANTINED_FORK" } satisfies SyncOperationRow));
+          await this.#recordDisposition(dispositions, existing, "QUARANTINED_FORK");
+        }
+      }
+      for (const pending of await req<SyncOutboxRow[]>(outbox.getAll())) {
+        if (!retainedOperationIds.has(pending.operationId)) await req(outbox.delete(pending.operationId));
+      }
+      await req(heads.clear());
       await req(checkpointOperations.clear());
       await req(checkpointProjection.clear());
       for (const feed of checkpoint.feeds) {
@@ -304,7 +323,7 @@ export class IndexedDbOperationDao {
         for (let index = 0; index < feed.coveredOperationIds.length; index++) {
           await req(checkpointOperations.put({ feedKey, sequence: index + 1, operationId: feed.coveredOperationIds[index]! } satisfies SyncCheckpointOperationRow));
         }
-        await req(transaction.objectStore(SYNC_FEED_HEAD_STORE).put({
+        await req(heads.put({
           feedKey,
           deviceId: feed.deviceId,
           incarnationId: feed.incarnationId,
@@ -316,9 +335,6 @@ export class IndexedDbOperationDao {
       for (const preference of checkpoint.materializedPreferences) {
         await req(checkpointProjection.put({ key: preference.key, value: preference.value } satisfies SyncCheckpointProjectionRow));
       }
-      const operations = transaction.objectStore(SYNC_OPERATION_STORE);
-      const heads = transaction.objectStore(SYNC_FEED_HEAD_STORE);
-      const dispositions = transaction.objectStore(SYNC_DISPOSITION_EVENT_STORE);
       for (const { input, row } of prepared) {
         const existing = await req<SyncOperationRow | undefined>(operations.get(row.operationId));
         if (existing !== undefined) {

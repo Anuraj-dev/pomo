@@ -56,6 +56,25 @@ public class HistoryMaterializerTest {
     }
 
     @Test
+    public fun settlementSelectingForeignBlockFactRemainsConflicted() {
+        val local = block("block-local", 1_500, "tag-work", "Work")
+        val foreign = block("block-foreign", 2_000, "tag-study", "Study")
+        val facts =
+            listOf(
+                HistoryFact.Create("create-local", local),
+                HistoryFact.Correct("correct-local", local.blockId, local.copy(elapsedMillis = 1_800)),
+                HistoryFact.Create("create-foreign", foreign),
+                HistoryFact.Settle("settle-local", local.blockId, setOf("create-foreign")),
+            )
+
+        val materialized = HistoryMaterializer().materialize(facts)
+
+        assertTrue(local.blockId in materialized.conflicts)
+        assertTrue(local.blockId !in materialized.visible)
+        assertEquals(2_000L, materialized.visible.getValue(foreign.blockId).elapsedMillis)
+    }
+
+    @Test
     public fun tagIdentitySurvivesRenameArchiveRestoreAndMerge() {
         val work = SessionTag("tag-work", "Work", 0)
         val study = SessionTag("tag-study", "Study", 1)

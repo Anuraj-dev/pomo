@@ -36,6 +36,17 @@ public class ActivePhaseMaterializerTest {
         assertTrue(ActivePhaseMaterializer.materialize(listOf(start, uncertain)).timeUncertain)
     }
 
+    @Test
+    public fun descendantsOfPendingParentsRemainPending() {
+        val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
+        val orphanParent = fact("orphan-parent", TimerAction.HANDOFF, setOf("missing"), "chrome", "claim-b")
+        val descendant = fact("descendant", TimerAction.SETTLE, setOf("start", "orphan-parent"), "chrome", "claim-b")
+        val projection = ActivePhaseMaterializer.materialize(listOf(start, orphanParent, descendant))
+        assertEquals(setOf("orphan-parent", "descendant"), projection.pending)
+        assertEquals(setOf("start"), projection.heads)
+        assertFalse(projection.settlementRequired)
+    }
+
     private fun fact(
         id: String,
         action: TimerAction,

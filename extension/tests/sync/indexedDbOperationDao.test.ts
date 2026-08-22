@@ -482,6 +482,43 @@ describe("dormant IndexedDB Device-feed persistence", () => {
     expect(state.operations).toHaveLength(1);
     expect(state.preferences).toEqual([projection(authored, "25")]);
   });
+
+  test("restore quarantines stale accepted history outside the checkpoint and trailing set", async () => {
+    const dao = new IndexedDbOperationDao();
+    const first = await operation(1, "25", null);
+    const second = await operation(2, "30", first.operationId);
+    const trailing = await operation(1, "40", null, "focusDurationMinutes", "33".repeat(32), "44".repeat(16));
+    await dao.commit(accepted(first, "25", false));
+    await dao.commit(accepted(second, "30", true));
+
+    await dao.restore(
+      {
+        suite: POMO_SUITE_1,
+        suiteGeneration: POMO_SUITE_GENERATION_1,
+        feeds: [{ deviceId: DEVICE, incarnationId: INCARNATION, coveredOperationIds: [first.operationId] }],
+        materializedPreferences: [{ key: "focusDurationMinutes", value: "25" }],
+      },
+      [accepted(trailing, "40", false)],
+    );
+
+    const state = await new IndexedDbOperationDao().reconstruct();
+    expect(state.operations.find((row) => row.operationId === first.operationId)?.disposition).toBe("ACCEPTED");
+    expect(state.operations.find((row) => row.operationId === second.operationId)?.disposition).toBe("QUARANTINED_FORK");
+    expect(state.operations.find((row) => row.operationId === trailing.operationId)?.disposition).toBe("ACCEPTED");
+    expect(state.outbox.map((row) => row.operationId)).toEqual([]);
+    expect(state.feedHeads).toEqual([
+      {
+        feedKey: `${DEVICE}:${INCARNATION}`,
+        deviceId: DEVICE,
+        incarnationId: INCARNATION,
+        sequence: 1,
+        operationId: first.operationId,
+        forkedAt: null,
+      },
+      head(trailing),
+    ]);
+    expect(state.preferences).toEqual([projection(trailing, "40")]);
+  });
 });
 
 const LOCAL_COMMIT_CRASH_POINTS: readonly CrashPoint[] = [
