@@ -224,7 +224,7 @@ export function httpReplicaPeer(deviceId: string, endpoint: string): ReplicaLanP
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "content-type": "application/cbor" },
-        body: encodeLanRequest(request),
+        body: bufferOf(encodeLanRequest(request)),
         signal: AbortSignal.timeout(5_000),
       });
       if (!response.ok) throw new Error(`replica HTTP status ${response.status}`);

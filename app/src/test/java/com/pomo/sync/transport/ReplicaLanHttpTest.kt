@@ -13,7 +13,17 @@ public class ReplicaLanHttpTest {
     @Test
     public fun chromeHttpPostUsesTheReplicaLanCodec() {
         val ingested = mutableListOf<ByteArray>()
-        val listener = ReplicaLanListener(session(pair, { wire -> ingested.add(wire.copyOf()); "ACCEPTED" }, { emptyList() }))
+        val listener =
+            ReplicaLanListener(
+                session(
+                    pair,
+                    { wire ->
+                        ingested.add(wire.copyOf())
+                        "ACCEPTED"
+                    },
+                    { emptyList() },
+                ),
+            )
         val port = listener.start()
         try {
             val envelope = SyncEnvelope("op-1", "feed", 1, byteArrayOf(9))

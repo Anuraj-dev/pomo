@@ -51,7 +51,7 @@ describe("replica offer and HTTP peer", () => {
       const bytes = body instanceof Uint8Array ? body : new Uint8Array(body as ArrayBuffer);
       const { decodeLanRequest } = await import("../../src/sync/transport/replicaLan");
       const response = await peerSession.handle(decodeLanRequest(bytes));
-      return new Response(encodeLanResponse(response), { status: 200 });
+      return new Response(bufferOf(encodeLanResponse(response)), { status: 200 });
     }) as typeof fetch;
     try {
       await installChromeLivePeer({
