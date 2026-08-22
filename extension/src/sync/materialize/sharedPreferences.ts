@@ -99,7 +99,8 @@ export class SharedPreferenceProjection {
   }
 
   prepareAccepted(operations: readonly AuthenticatedOperation[]): () => void {
-    const updates = operations.flatMap((operation) => {
+    const ordered = inCausalOrder(operations);
+    const updates = ordered.flatMap((operation) => {
       this.validate(operation);
       if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet) return [];
       const fact = decodeSharedPreferenceFact(operation.payload);
@@ -109,6 +110,41 @@ export class SharedPreferenceProjection {
       for (const [key, value] of updates) this.#values.set(key, value);
     };
   }
+}
+
+function inCausalOrder(operations: readonly AuthenticatedOperation[]): AuthenticatedOperation[] {
+  const byId = new Map(operations.map((operation) => [operation.operationId, operation]));
+  const dependents = new Map<string, string[]>();
+  const indegree = new Map(operations.map((operation) => [operation.operationId, 0]));
+  for (const operation of operations) {
+    const dependencies = new Set<string>();
+    if (operation.unsigned.previousHash !== null && byId.has(operation.unsigned.previousHash)) {
+      dependencies.add(operation.unsigned.previousHash);
+    }
+    for (const frontier of operation.unsigned.frontier) {
+      if (byId.has(frontier.headHash)) dependencies.add(frontier.headHash);
+    }
+    indegree.set(operation.operationId, dependencies.size);
+    for (const dependency of dependencies) {
+      dependents.set(dependency, [...(dependents.get(dependency) ?? []), operation.operationId]);
+    }
+  }
+  const ready = operations.filter((operation) => indegree.get(operation.operationId) === 0);
+  const ordered: AuthenticatedOperation[] = [];
+  while (ready.length > 0) {
+    ready.sort((left, right) => compareUtf8(left.operationId, right.operationId));
+    const operation = ready.shift()!;
+    ordered.push(operation);
+    for (const dependentId of dependents.get(operation.operationId) ?? []) {
+      const remaining = indegree.get(dependentId)! - 1;
+      indegree.set(dependentId, remaining);
+      if (remaining === 0) ready.push(byId.get(dependentId)!);
+    }
+  }
+  if (ordered.length !== operations.length) {
+    return [...operations].sort((left, right) => compareUtf8(left.operationId, right.operationId));
+  }
+  return ordered;
 }
 
 function compareUtf8(left: string, right: string): number {

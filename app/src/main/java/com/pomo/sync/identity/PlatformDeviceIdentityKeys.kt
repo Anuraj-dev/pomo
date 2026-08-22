@@ -112,24 +112,30 @@ internal class PlatformDeviceIdentityKeys(
 
     private fun loadWrappedAgreement(): KeyPair? {
         if (!wrappedAgreementFile.isFile) return null
-        val bytes = wrappedAgreementFile.readBytes()
-        if (bytes.size < 6 || bytes[0] != 1.toByte()) return null
-        val ivSize = bytes[1].toInt() and 0xff
-        var cursor = 2
-        val iv = bytes.copyOfRange(cursor, cursor + ivSize)
-        cursor += ivSize
-        val publicSize = ((bytes[cursor].toInt() and 0xff) shl 8) or (bytes[cursor + 1].toInt() and 0xff)
-        cursor += 2
-        val publicBytes = bytes.copyOfRange(cursor, cursor + publicSize)
-        val wrapped = bytes.copyOfRange(cursor + publicSize, bytes.size)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
-        cipher.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, iv))
-        val privateBytes = cipher.doFinal(wrapped)
-        val factory = java.security.KeyFactory.getInstance("EC")
-        return KeyPair(
-            factory.generatePublic(X509EncodedKeySpec(publicBytes)),
-            factory.generatePrivate(PKCS8EncodedKeySpec(privateBytes)),
-        )
+        return try {
+            val bytes = wrappedAgreementFile.readBytes()
+            if (bytes.size < 6 || bytes[0] != 1.toByte()) return null
+            val ivSize = bytes[1].toInt() and 0xff
+            var cursor = 2
+            if (ivSize < 1 || cursor + ivSize + 2 > bytes.size) return null
+            val iv = bytes.copyOfRange(cursor, cursor + ivSize)
+            cursor += ivSize
+            val publicSize = ((bytes[cursor].toInt() and 0xff) shl 8) or (bytes[cursor + 1].toInt() and 0xff)
+            cursor += 2
+            if (publicSize < 1 || cursor + publicSize >= bytes.size) return null
+            val publicBytes = bytes.copyOfRange(cursor, cursor + publicSize)
+            val wrapped = bytes.copyOfRange(cursor + publicSize, bytes.size)
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+            cipher.init(Cipher.DECRYPT_MODE, wrapKey(), GCMParameterSpec(128, iv))
+            val privateBytes = cipher.doFinal(wrapped)
+            val factory = java.security.KeyFactory.getInstance("EC")
+            KeyPair(
+                factory.generatePublic(X509EncodedKeySpec(publicBytes)),
+                factory.generatePrivate(PKCS8EncodedKeySpec(privateBytes)),
+            )
+        } catch (_: Exception) {
+            null
+        }
     }
 
     private val signingAlias: String = "pomo.$namespace.device.signing"

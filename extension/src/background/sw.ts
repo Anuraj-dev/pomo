@@ -39,6 +39,7 @@ import {
   type PomoResponse,
 } from "../shared/messages";
 import {
+  completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
   parseSyncUiState,
   scheduleOrdinaryDrain,
@@ -835,19 +836,25 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
   } catch {
     ui = DORMANT_SYNC_UI_STATE;
   }
-  const next = scheduleOrdinaryDrain(ui);
-  const events = await readDiagnosticEvents();
-  events.push({
-    monotonicMillis: Date.now(),
-    area: "STATE_TRANSITION",
-    event: "ordinary-drain-scheduled",
-    fields: { outcome: "local-only" },
-  });
-  await chrome.storage.local.set({
-    [SYNC_UI_STATE_KEY]: next,
-    "pomo:sync:diagnostic-events": events.slice(-200),
-  });
-  await chrome.storage.local.remove(SYNC_DRAIN_REQUEST_KEY);
+  const scheduled = scheduleOrdinaryDrain(ui);
+  try {
+    const events = await readDiagnosticEvents();
+    events.push({
+      monotonicMillis: Date.now(),
+      area: "STATE_TRANSITION",
+      event: "ordinary-drain-scheduled",
+      fields: { outcome: "local-only" },
+    });
+    const completed = completeOrdinaryDrain(scheduled);
+    await chrome.storage.local.set({
+      [SYNC_UI_STATE_KEY]: completed,
+      "pomo:sync:diagnostic-events": events.slice(-200),
+    });
+    await chrome.storage.local.remove(SYNC_DRAIN_REQUEST_KEY);
+  } catch (error) {
+    await chrome.storage.local.set({ [SYNC_UI_STATE_KEY]: scheduled });
+    throw error;
+  }
 }
 
 async function readDiagnosticEvents(): Promise<Array<{ monotonicMillis: number; area: string; event: string; fields: Record<string, string> }>> {

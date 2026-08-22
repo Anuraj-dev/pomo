@@ -59,12 +59,16 @@ function openInbox(): Promise<IDBDatabase> {
 
 async function stageInbound(routeId: string, bytes: number[]): Promise<void> {
   const db = await openInbox();
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction("inbox", "readwrite");
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.objectStore("inbox").put({ routeId, bytes, receivedAt: Date.now() });
-  });
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("inbox", "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore("inbox").put({ routeId, bytes, receivedAt: Date.now() });
+    });
+  } finally {
+    db.close();
+  }
 }
 
 function bind(routeId: string, state: { channel: RTCDataChannel | null }, channel: RTCDataChannel): void {

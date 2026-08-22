@@ -17,6 +17,10 @@ public class SharedDataMaterializerTest {
             )
         val projection = SharedPreferencesMaterializer.materialize(patches)
         assertEquals("30", projection.getValue("focusMinutes").value)
+        assertEquals(
+            "30",
+            SharedPreferencesMaterializer.materialize(patches.reversed()).getValue("focusMinutes").value,
+        )
         assertEquals("active-phase", projection.getValue("focusMinutes").effectiveAfterPhaseId)
         assertFalse("theme" in projection)
         assertTrue(SharedPreferencesMaterializer.isDeviceLocal("routeHealth"))

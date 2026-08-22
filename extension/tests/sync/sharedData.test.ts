@@ -15,7 +15,7 @@ describe("shared preferences, Profile, and Crew boundaries", () => {
       { field: "theme", value: "dark", operationId: "c", effectiveAfterPhaseId: null },
       { field: "focusMinutes", value: "25", operationId: "a", effectiveAfterPhaseId: "active" },
     ]);
-    expect(projection.get("focusMinutes")?.value).toBe("25");
+    expect(projection.get("focusMinutes")?.value).toBe("30");
     expect(projection.has("theme")).toBeFalse();
     expect(isDeviceLocalPreference("routeHealth")).toBeTrue();
   });

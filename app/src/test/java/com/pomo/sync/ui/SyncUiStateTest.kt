@@ -10,6 +10,7 @@ public class SyncUiStateTest {
     public fun retryPreservesSafetyStateAndOnlySchedulesDrain() {
         val safe = SyncUiState.Dormant.copy(health = SyncHealth.SAFE_MODE, affectedTimerDomain = true)
         assertEquals(safe.copy(retryPending = true), scheduleOrdinaryDrain(safe))
+        assertEquals(safe, completeOrdinaryDrain(scheduleOrdinaryDrain(safe)))
         assertFalse(timerControlsAllowed(safe))
     }
 

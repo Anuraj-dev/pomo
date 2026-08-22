@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain, timerControlsFrozenFromStorage } from "../../src/sync/ui/syncUiState";
+import { completeOrdinaryDrain, DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain, timerControlsFrozenFromStorage } from "../../src/sync/ui/syncUiState";
 
 describe("sync UI state", () => {
   test("strictly validates all eight domain health states and the four-signal rail", () => {
@@ -9,6 +9,7 @@ describe("sync UI state", () => {
   test("Retry now only schedules ordinary drain and preserves safety state", () => {
     const safe = { ...DORMANT_SYNC_UI_STATE, health: "SAFE_MODE" as const, timerControlsFrozen: true };
     expect(scheduleOrdinaryDrain(safe)).toEqual({ ...safe, retryPending: true });
+    expect(completeOrdinaryDrain(scheduleOrdinaryDrain(safe)).retryPending).toBeFalse();
   });
   test("dormant state never freezes the local timer or claims protection", () => {
     expect(DORMANT_SYNC_UI_STATE.timerControlsFrozen).toBeFalse();
