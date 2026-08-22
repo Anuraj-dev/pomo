@@ -10,6 +10,7 @@ import android.util.Log
 internal class ReplicaLanAdvertiser(
     private val nsdManager: NsdManager,
 ) {
+    @Volatile
     private var listener: NsdManager.RegistrationListener? = null
 
     @Suppress("DEPRECATION")
@@ -35,7 +36,9 @@ internal class ReplicaLanAdvertiser(
                     errorCode: Int,
                 ) {
                     Log.w(TAG, "replica mDNS registration failed, code $errorCode")
-                    mainHandler.post { listener = null }
+                    mainHandler.post {
+                        if (listener === registration) listener = null
+                    }
                 }
 
                 override fun onServiceUnregistered(info: NsdServiceInfo) = Unit
@@ -147,8 +150,10 @@ internal class ReplicaLanBrowser(
         if (discovery != null) {
             runCatching { nsdManager.stopServiceDiscovery(discovery) }
         }
-        discovered.clear()
-        onPeers(emptyList())
+        mainHandler.post {
+            discovered.clear()
+            onPeers(emptyList())
+        }
     }
 
     companion object {

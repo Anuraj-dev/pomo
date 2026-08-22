@@ -6,13 +6,14 @@ import com.pomo.sync.crypto.CoseKernelSigner
 import com.pomo.sync.crypto.CoseKernelVerifier
 import com.pomo.sync.crypto.HpkeP256
 import com.pomo.sync.crypto.PomoCrypto
+import com.pomo.sync.identity.PlatformDeviceIdentityKeys
 import com.pomo.sync.persistence.RoomOperationStore
 import com.pomo.sync.protocol.CheckpointVerifier
 import com.pomo.sync.protocol.OperationKernel
+import java.io.File
 import java.security.KeyPair
-import java.security.KeyPairGenerator
 import java.security.PublicKey
-import java.security.spec.ECGenParameterSpec
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Process-wide replica LAN session. Drain routes are the currently resolved
@@ -26,58 +27,32 @@ internal object ReplicaLanRuntime {
     private var advertiser: ReplicaLanAdvertiser? = null
     private var browser: ReplicaLanBrowser? = null
     private val peers = linkedMapOf<String, ReplicaLanPeer>()
-    private val keys = linkedMapOf<String, PublicKey>()
+    private val keys = ConcurrentHashMap<String, PublicKey>()
 
     fun start(context: Context) {
         if (!OrdinaryDrainScheduler.hostAllowed()) return
         synchronized(lock) {
             if (session != null) return
-            val pair = signingPair()
-            val publicKey = HpkeP256.serialize(pair.public)
-            val deviceId = PomoCrypto.sha256(publicKey).joinToString("") { "%02x".format(it.toInt() and 0xff) }
-            keys[deviceId] = pair.public
-            val store = RoomOperationStore(AppDatabase.getInstance(context.applicationContext))
-            val nextKernel =
-                OperationKernel(
-                    CoseKernelSigner(pair.private),
-                    CoseKernelVerifier { id -> keys[id.toString()] },
-                    store,
-                    CheckpointVerifier { },
-                )
-            kernel = nextKernel
-            val nextSession =
-                ReplicaLanSession(
-                    deviceId,
-                    publicKey,
-                    sign = { PomoCrypto.signP256LowS(pair.private, it) },
-                    ingest = { wire -> nextKernel.ingest(wire).name },
-                    outbox = { OrdinaryDrainHost.envelopesFrom(store.restartSnapshot()) },
-                )
-            session = nextSession
-            val nextListener = ReplicaLanListener(nextSession)
-            listener = nextListener
-            val port = nextListener.start()
-            val nextAdvertiser = ReplicaLanAdvertiser.forContext(context)
-            advertiser = nextAdvertiser
-            nextAdvertiser.advertise(deviceId, port)
-            val nextBrowser = ReplicaLanBrowser.forContext(context, deviceId, ::replacePeers)
-            browser = nextBrowser
-            nextBrowser.start()
+            startLocked(context)
+        }
+    }
+
+    /**
+     * Starts the runtime when absent. Returns true only when this call created
+     * the session so the caller can own cleanup.
+     */
+    fun ensureStarted(context: Context): Boolean {
+        if (!OrdinaryDrainScheduler.hostAllowed()) return false
+        synchronized(lock) {
+            if (session != null) return false
+            startLocked(context)
+            return true
         }
     }
 
     fun stop() {
         synchronized(lock) {
-            browser?.stop()
-            advertiser?.stop()
-            listener?.stop()
-            browser = null
-            advertiser = null
-            listener = null
-            session = null
-            kernel = null
-            peers.clear()
-            keys.clear()
+            clearLocked()
         }
     }
 
@@ -119,7 +94,60 @@ internal object ReplicaLanRuntime {
         deviceId: String,
         publicKey: PublicKey,
     ) {
-        synchronized(lock) { keys[deviceId] = publicKey }
+        keys[deviceId] = publicKey
+    }
+
+    private fun startLocked(context: Context) {
+        try {
+            val app = context.applicationContext
+            val pair = persistedSigningPair(app)
+            val publicKey = HpkeP256.serialize(pair.public)
+            val deviceId = PomoCrypto.sha256(publicKey).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            keys[deviceId] = pair.public
+            val store = RoomOperationStore(AppDatabase.getInstance(app))
+            val nextKernel =
+                OperationKernel(
+                    CoseKernelSigner(pair.private),
+                    CoseKernelVerifier { id -> keys[id.toString()] },
+                    store,
+                    CheckpointVerifier { },
+                )
+            kernel = nextKernel
+            val nextSession =
+                ReplicaLanSession(
+                    deviceId,
+                    publicKey,
+                    sign = { PomoCrypto.signP256LowS(pair.private, it) },
+                    ingest = { wire -> nextKernel.ingest(wire).name },
+                    outbox = { OrdinaryDrainHost.envelopesFrom(store.restartSnapshot()) },
+                )
+            session = nextSession
+            val nextListener = ReplicaLanListener(nextSession)
+            listener = nextListener
+            val port = nextListener.start()
+            val nextAdvertiser = ReplicaLanAdvertiser.forContext(app)
+            advertiser = nextAdvertiser
+            nextAdvertiser.advertise(deviceId, port)
+            val nextBrowser = ReplicaLanBrowser.forContext(app, deviceId, ::replacePeers)
+            browser = nextBrowser
+            nextBrowser.start()
+        } catch (error: Exception) {
+            clearLocked()
+            throw error
+        }
+    }
+
+    private fun clearLocked() {
+        browser?.stop()
+        advertiser?.stop()
+        listener?.stop()
+        browser = null
+        advertiser = null
+        listener = null
+        session = null
+        kernel = null
+        peers.clear()
+        keys.clear()
     }
 
     private fun replacePeers(next: List<ReplicaLanPeer>) {
@@ -129,9 +157,11 @@ internal object ReplicaLanRuntime {
         }
     }
 
-    private fun signingPair(): KeyPair =
-        KeyPairGenerator.getInstance("EC").run {
-            initialize(ECGenParameterSpec("secp256r1"))
-            generateKeyPair()
-        }
+    private fun persistedSigningPair(context: Context): KeyPair {
+        val dir = File(context.filesDir, "sync").also { it.mkdirs() }
+        return PlatformDeviceIdentityKeys(
+            "replica-lan",
+            File(dir, "replica-lan-agreement.bin"),
+        ).loadOrCreate().first
+    }
 }

@@ -35,8 +35,8 @@ public class ReplicaLanSessionTest {
                 authored.value.operation.sequence,
                 authored.value.signedEnvelope.copyOf(),
             )
-        val sessionA = session("aa".repeat(32), pairA, { "ACCEPTED" }, { listOf(envelope) })
-        val sessionB = session("bb".repeat(32), pairB, { wire -> kernelB.ingest(wire).name }, { emptyList() })
+        val sessionA = session(pairA, { "ACCEPTED" }, { listOf(envelope) })
+        val sessionB = session(pairB, { wire -> kernelB.ingest(wire).name }, { emptyList() })
         val delivered = mutableListOf<String>()
         val result =
             OrdinaryDrainHost(
@@ -54,15 +54,14 @@ public class ReplicaLanSessionTest {
 
     @Test
     public fun forgedAckDoesNotClearObligations() {
-        val pair = pairA
         val envelope = SyncEnvelope("op-1", "feed", 1, byteArrayOf(1))
-        val honest = session("aa".repeat(32), pair, { "ACCEPTED" }, { emptyList() })
+        val honest = session(pairA, { "ACCEPTED" }, { emptyList() })
         val route =
             object : DrainRoute {
                 override val name: String = "forged"
 
                 override fun exchange(batch: List<SyncEnvelope>): DrainExchange {
-                    val response = honest.handle(ReplicaLanRequest("bb".repeat(32), batch))
+                    val response = honest.handle(ReplicaLanRequest(session(pairB, { "ACCEPTED" }, { emptyList() }).deviceId, batch))
                     val forged = response.ack.copy(signature = response.ack.signature.copyOf().also { it[0] = (it[0] + 1).toByte() })
                     return DrainExchange(ack = ReplicaLanSession.verifyAck(forged), connected = true)
                 }
@@ -75,21 +74,43 @@ public class ReplicaLanSessionTest {
     }
 
     @Test
-    public fun rejectedEnvelopeIsNotAcked() {
-        val sessionB = session("bb".repeat(32), pairB, { IngestDisposition.REJECTED_INVALID.name }, { emptyList() })
+    public fun spoofedDeviceIdAckDoesNotClearObligations() {
         val envelope = SyncEnvelope("op-1", "feed", 1, byteArrayOf(1))
-        val response = sessionB.handle(ReplicaLanRequest("aa".repeat(32), listOf(envelope)))
+        val honest = session(pairA, { "ACCEPTED" }, { emptyList() })
+        val attacker = session(pairB, { "ACCEPTED" }, { emptyList() })
+        val route =
+            object : DrainRoute {
+                override val name: String = "spoofed"
+
+                override fun exchange(batch: List<SyncEnvelope>): DrainExchange {
+                    val response = attacker.handle(ReplicaLanRequest(honest.deviceId, batch))
+                    val spoofed = response.ack.copy(peerDeviceId = honest.deviceId)
+                    return DrainExchange(ack = ReplicaLanSession.verifyAck(spoofed), connected = true)
+                }
+            }
+        val delivered = mutableListOf<String>()
+        val result = OrdinaryDrainHost(listOf(route), { }, delivered::add).drain(listOf(envelope))
+        assertTrue(delivered.isEmpty())
+        assertEquals(setOf("op-1"), result.remaining)
+        assertFalse(result.live)
+    }
+
+    @Test
+    public fun rejectedEnvelopeIsNotAcked() {
+        val sessionB = session(pairB, { IngestDisposition.REJECTED_INVALID.name }, { emptyList() })
+        val envelope = SyncEnvelope("op-1", "feed", 1, byteArrayOf(1))
+        val response = sessionB.handle(ReplicaLanRequest(session(pairA, { "ACCEPTED" }, { emptyList() }).deviceId, listOf(envelope)))
         assertTrue(response.ack.frontier.isEmpty())
         assertTrue(ReplicaLanSession.verifyAck(response.ack).signatureVerified)
     }
 
     @Test
     public fun loopbackSocketCarriesSignedAck() {
-        val sessionB = session("bb".repeat(32), pairB, { "ACCEPTED" }, { emptyList() })
+        val sessionB = session(pairB, { "ACCEPTED" }, { emptyList() })
         val listener = ReplicaLanListener(sessionB)
         val port = listener.start()
         try {
-            val sessionA = session("aa".repeat(32), pairA, { "ACCEPTED" }, { emptyList() })
+            val sessionA = session(pairA, { "ACCEPTED" }, { emptyList() })
             val envelope = SyncEnvelope("op-1", "feed", 1, byteArrayOf(7))
             val delivered = mutableListOf<String>()
             val peer = ReplicaLanPeer(sessionB.deviceId, "127.0.0.1", port)
@@ -119,18 +140,20 @@ public class ReplicaLanSessionTest {
     private val pairB: KeyPair = generate()
 
     private fun session(
-        deviceId: String,
         pair: KeyPair,
         ingest: (ByteArray) -> String,
         outbox: () -> List<SyncEnvelope>,
-    ): ReplicaLanSession =
-        ReplicaLanSession(
+    ): ReplicaLanSession {
+        val publicKey = HpkeP256.serialize(pair.public)
+        val deviceId = PomoCrypto.sha256(publicKey).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+        return ReplicaLanSession(
             deviceId,
-            HpkeP256.serialize(pair.public),
+            publicKey,
             { PomoCrypto.signP256LowS(pair.private, it) },
             ingest,
             outbox,
         )
+    }
 
     private fun kernel(
         pair: KeyPair,

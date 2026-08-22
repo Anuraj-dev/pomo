@@ -3,6 +3,7 @@ package com.pomo.sync.transport
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.net.InetAddress
+import java.net.InetSocketAddress
 import java.net.ServerSocket
 import java.net.Socket
 import java.net.SocketException
@@ -67,8 +68,9 @@ internal class ReplicaLanListener(
             peer: ReplicaLanPeer,
             request: ReplicaLanRequest,
         ): ReplicaLanResponse {
-            Socket(peer.host, peer.port).use { socket ->
+            Socket().use { socket ->
                 socket.soTimeout = TIMEOUT_MS
+                socket.connect(InetSocketAddress(peer.host, peer.port), TIMEOUT_MS)
                 writeFrame(socket, ReplicaLanCodec.encodeRequest(request))
                 return ReplicaLanCodec.decodeResponse(readFrame(socket))
             }

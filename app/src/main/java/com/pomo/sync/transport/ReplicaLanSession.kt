@@ -77,6 +77,11 @@ internal class ReplicaLanSession(
             )
 
         fun verifyAck(ack: ReplicaLanAck): DurablePeerAck {
+            val boundDeviceId =
+                PomoCrypto.sha256(ack.publicKey).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+            if (boundDeviceId != ack.peerDeviceId) {
+                return DurablePeerAck(ack.peerDeviceId, ack.frontier, false)
+            }
             val canonical = ReplicaLanCodec.encodeAckBody(ack.peerDeviceId, ack.publicKey, ack.frontier)
             val verified =
                 runCatching {

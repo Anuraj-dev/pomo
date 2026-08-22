@@ -844,12 +844,12 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
   try {
     let outcome = "skipped";
     if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
-      const dao = new IndexedDbOperationDao();
+      const operationDao = new IndexedDbOperationDao();
       const result = await drainOrdinaryOutbox({
-        obligations: envelopesFrom(await dao.reconstruct()),
+        obligations: envelopesFrom(await operationDao.reconstruct()),
         routes: replicaLanDrainRoutes(),
         ingest: (wire) => ingestReplicaLan(wire),
-        markDelivered: (operationId) => dao.markDelivered(operationId),
+        markDelivered: (operationId) => operationDao.markDelivered(operationId),
       });
       outcome = result.localOnly ? "local-only" : "routed";
     }

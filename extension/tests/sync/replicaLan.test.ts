@@ -1,4 +1,6 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { bufferOf } from "../../src/shared/bytes";
+import { bytesToHex } from "../../src/shared/hex";
 import { drainOrdinaryOutbox } from "../../src/sync/transport/ordinaryDrain";
 import {
   ReplicaLanSession,
@@ -18,14 +20,26 @@ async function publicBytes(publicKey: CryptoKey): Promise<Uint8Array> {
   return new Uint8Array(await crypto.subtle.exportKey("raw", publicKey));
 }
 
+async function deviceIdOf(publicKey: CryptoKey): Promise<{ id: string; bytes: Uint8Array }> {
+  const bytes = await publicBytes(publicKey);
+  const id = bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bufferOf(bytes))));
+  return { id, bytes };
+}
+
+afterEach(() => {
+  installReplicaLan({ session: null, peers: [] });
+});
+
 describe("replica LAN session", () => {
   test("signed exchange ingests through the peer and clears covered outbox", async () => {
     const pairA = await extractablePair();
     const pairB = await extractablePair();
+    const identityA = await deviceIdOf(pairA.publicKey);
+    const identityB = await deviceIdOf(pairB.publicKey);
     const ingested: Uint8Array[] = [];
     const envelope = { operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([9]) };
-    const sessionA = new ReplicaLanSession("aa".repeat(32), await publicBytes(pairA.publicKey), pairA.privateKey, () => "ACCEPTED", () => [envelope]);
-    const sessionB = new ReplicaLanSession("bb".repeat(32), await publicBytes(pairB.publicKey), pairB.privateKey, (wire) => {
+    const sessionA = new ReplicaLanSession(identityA.id, identityA.bytes, pairA.privateKey, () => "ACCEPTED", () => [envelope]);
+    const sessionB = new ReplicaLanSession(identityB.id, identityB.bytes, pairB.privateKey, (wire) => {
       ingested.push(wire.slice());
       return "ACCEPTED";
     }, () => []);
@@ -46,7 +60,8 @@ describe("replica LAN session", () => {
 
   test("forged ack does not clear obligations", async () => {
     const pair = await extractablePair();
-    const honest = new ReplicaLanSession("aa".repeat(32), await publicBytes(pair.publicKey), pair.privateKey, () => "ACCEPTED", () => []);
+    const identity = await deviceIdOf(pair.publicKey);
+    const honest = new ReplicaLanSession(identity.id, identity.bytes, pair.privateKey, () => "ACCEPTED", () => []);
     const envelope = { operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([1]) };
     const peer: ReplicaLanPeer = {
       deviceId: honest.deviceId,
@@ -57,7 +72,45 @@ describe("replica LAN session", () => {
         return { ...response, ack: { ...response.ack, signature } };
       },
     };
-    const session = new ReplicaLanSession("bb".repeat(32), await publicBytes((await extractablePair()).publicKey), (await extractablePair()).privateKey, () => "ACCEPTED", () => []);
+    const localPair = await extractablePair();
+    const localIdentity = await deviceIdOf(localPair.publicKey);
+    const session = new ReplicaLanSession(localIdentity.id, localIdentity.bytes, localPair.privateKey, () => "ACCEPTED", () => []);
+    const delivered: string[] = [];
+    const result = await drainOrdinaryOutbox({
+      obligations: [envelope],
+      routes: [session.drainRoute(peer)],
+      ingest() {},
+      markDelivered(id) { delivered.push(id); },
+    });
+    expect(delivered).toEqual([]);
+    expect(result.remaining).toEqual(new Set(["op-1"]));
+    expect(result.live).toBeFalse();
+  });
+
+  test("ack signed by an unrelated key claiming another device id is rejected", async () => {
+    const honestPair = await extractablePair();
+    const attackerPair = await extractablePair();
+    const honestIdentity = await deviceIdOf(honestPair.publicKey);
+    const attackerIdentity = await deviceIdOf(attackerPair.publicKey);
+    const honest = new ReplicaLanSession(honestIdentity.id, honestIdentity.bytes, honestPair.privateKey, () => "ACCEPTED", () => []);
+    const attacker = new ReplicaLanSession(attackerIdentity.id, attackerIdentity.bytes, attackerPair.privateKey, () => "ACCEPTED", () => []);
+    const envelope = { operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([1]) };
+    const peer: ReplicaLanPeer = {
+      deviceId: honest.deviceId,
+      async exchange(request) {
+        const response = await attacker.handle(request);
+        return {
+          ...response,
+          ack: {
+            ...response.ack,
+            peerDeviceId: honest.deviceId,
+          },
+        };
+      },
+    };
+    const localPair = await extractablePair();
+    const localIdentity = await deviceIdOf(localPair.publicKey);
+    const session = new ReplicaLanSession(localIdentity.id, localIdentity.bytes, localPair.privateKey, () => "ACCEPTED", () => []);
     const delivered: string[] = [];
     const result = await drainOrdinaryOutbox({
       obligations: [envelope],
@@ -72,7 +125,8 @@ describe("replica LAN session", () => {
 
   test("rejected envelopes are omitted from the signed frontier", async () => {
     const pair = await extractablePair();
-    const session = new ReplicaLanSession("bb".repeat(32), await publicBytes(pair.publicKey), pair.privateKey, () => "REJECTED_INVALID", () => []);
+    const identity = await deviceIdOf(pair.publicKey);
+    const session = new ReplicaLanSession(identity.id, identity.bytes, pair.privateKey, () => "REJECTED_INVALID", () => []);
     const response = await session.handle({
       deviceId: "aa".repeat(32),
       envelopes: [{ operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([1]) }],
@@ -95,15 +149,15 @@ describe("replica LAN session", () => {
 
   test("directory routes skip the local device", async () => {
     const pair = await extractablePair();
-    const session = new ReplicaLanSession("aa".repeat(32), await publicBytes(pair.publicKey), pair.privateKey, () => "ACCEPTED", () => []);
+    const identity = await deviceIdOf(pair.publicKey);
+    const session = new ReplicaLanSession(identity.id, identity.bytes, pair.privateKey, () => "ACCEPTED", () => []);
     installReplicaLan({
       session,
       peers: [
-        { deviceId: "aa".repeat(32), exchange: async () => { throw new Error("self"); } },
+        { deviceId: identity.id, exchange: async () => { throw new Error("self"); } },
         { deviceId: "bb".repeat(32), exchange: async (request) => session.handle(request) },
       ],
     });
     expect(replicaLanDrainRoutes().map((route) => route.name)).toEqual(["lan:" + "bb".repeat(32)]);
-    installReplicaLan({ session: null, peers: [] });
   });
 });

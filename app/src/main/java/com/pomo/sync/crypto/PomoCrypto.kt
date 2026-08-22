@@ -153,7 +153,20 @@ internal object PomoCrypto {
     }
 
     private fun requireP256Key(key: Any) {
-        val parameters = (key as? ECKey)?.params ?: error("ESP256 requires an EC key")
+        val parameters = (key as? ECKey)?.params
+        if (parameters == null) {
+            // AndroidKeyStore private keys often omit ECKey params while still
+            // signing with SHA256withECDSA. Public keys from the certificate do
+            // expose params and keep the full curve check below.
+            val algorithm =
+                when (key) {
+                    is PrivateKey -> key.algorithm
+                    is PublicKey -> key.algorithm
+                    else -> null
+                }
+            require(algorithm == "EC") { "ESP256 requires an EC key" }
+            return
+        }
         val field =
             parameters.curve.field as? ECFieldFp
                 ?: error("ESP256 requires a prime-field P-256 key")

@@ -38,7 +38,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Ordinary drain walks the Chrome outbox. WebRTC objects exist, but the worker does not run a live peer session."
+      "blockedReason": "Ordinary drain calls replicaLanDrainRoutes(), but Chrome source does not install a live peer session into the worker. Two-profile Chrome physical evidence is also missing."
     },
     {
       "id": "lan",

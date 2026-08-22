@@ -26,7 +26,7 @@ Next independently reviewable slices, in this order:
 2. Content-epoch wrapping on those routes.
 3. Replace live `OfflineTimer` / `TimerEngine` only after those hosts work.
 
-Do not open the activation PR while any required physical row is `BLOCKED`.
+Do not open the activation PR while any required row is `BLOCKED`.
 
 ## After evidence
 

@@ -1,4 +1,5 @@
 import { bufferOf } from "../../shared/bytes";
+import { bytesToHex } from "../../shared/hex";
 import { encodeCanonicalCbor, decodeCanonicalCbor, type CborValue } from "../protocol/cbor";
 import { signP256LowS, verifyP256LowS } from "../crypto/PomoCrypto";
 import { DirectSyncCoordinator, type DurablePeerAck, type SyncEnvelope } from "./directSync";
@@ -137,7 +138,11 @@ export function decodeLanResponse(bytes: Uint8Array): ReplicaLanResponse {
 }
 
 export async function verifyLanAck(ack: ReplicaLanAck): Promise<DurablePeerAck> {
-  const publicKey = await crypto.subtle.importKey("raw", bufferOf(ack.publicKey), { name: "ECDSA", namedCurve: "P-256" }, true, ["verify"]);
+  const boundDeviceId = bytesToHex(new Uint8Array(await crypto.subtle.digest("SHA-256", bufferOf(ack.publicKey))));
+  if (boundDeviceId !== ack.peerDeviceId) {
+    return { peerDeviceId: ack.peerDeviceId, frontier: ack.frontier, signatureVerified: false };
+  }
+  const publicKey = await crypto.subtle.importKey("raw", bufferOf(ack.publicKey), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
   const verified = await verifyP256LowS(publicKey, encodeAckBody(ack.peerDeviceId, ack.publicKey, ack.frontier), ack.signature);
   return { peerDeviceId: ack.peerDeviceId, frontier: ack.frontier, signatureVerified: verified };
 }
@@ -190,7 +195,7 @@ export class ReplicaLanSession {
     }
     const frontier = new Map<string, { sequence: number; operationId: string; coveredOperationIds: Set<string> }>();
     for (const [feedKey, envelopes] of grouped) {
-      const head = envelopes.reduce((current, envelope) => envelope.sequence >= current.sequence ? envelope : current);
+      const head = envelopes.reduce((current, envelope) => envelope.sequence > current.sequence ? envelope : current);
       frontier.set(feedKey, {
         sequence: head.sequence,
         operationId: head.operationId,
