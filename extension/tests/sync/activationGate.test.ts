@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test";
 import { evaluateActivationGate, REQUIRED_ROW_IDS, type PhysicalMatrix } from "../../scripts/activationGate";
 
+const COMMIT = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const DEV_SHA = "aa".repeat(32);
+const PROD_SHA = "bb".repeat(32);
+const CHROME_SHA = "cc".repeat(32);
+
 const blockedRow = (id: string) => ({
   id,
   scenario: id,
@@ -15,7 +20,7 @@ const passRow = (id: string) => ({
   scenario: id,
   required: true,
   status: "PASS_PHYSICAL" as const,
-  evidence: `evidence/${id}.log#commit`,
+  evidence: `evidence/${id}.log#${COMMIT}`,
 });
 
 const dormantMatrix = (): PhysicalMatrix => ({
@@ -49,11 +54,11 @@ test("activation requires pass evidence, artifacts, and commit", () => {
     schema: 1,
     suite: 1,
     generation: 1,
-    commit: "abc123",
+    commit: COMMIT,
     artifactVersions: {
-      androidDevDebugSha256: "aa",
-      androidProdDebugSha256: "bb",
-      chromeTestZipSha256: "cc",
+      androidDevDebugSha256: DEV_SHA,
+      androidProdDebugSha256: PROD_SHA,
+      chromeTestZipSha256: CHROME_SHA,
     },
     rows: REQUIRED_ROW_IDS.map(passRow),
   };
@@ -63,6 +68,15 @@ test("activation requires pass evidence, artifacts, and commit", () => {
     rows: matrix.rows.map((row, index) => (index === 0 ? { ...row, evidence: "" } : row)),
   };
   expect(evaluateActivationGate({ productionActivation: true, matrix: missingEvidence }).ok).toBeFalse();
+  const placeholderHashes = {
+    ...matrix,
+    artifactVersions: {
+      androidDevDebugSha256: "aa",
+      androidProdDebugSha256: "bb",
+      chromeTestZipSha256: "cc",
+    },
+  };
+  expect(evaluateActivationGate({ productionActivation: true, matrix: placeholderHashes }).ok).toBeFalse();
 });
 
 test("fail physical must keep evidence and still blocks activation", () => {
@@ -70,15 +84,15 @@ test("fail physical must keep evidence and still blocks activation", () => {
     schema: 1,
     suite: 1,
     generation: 1,
-    commit: "abc123",
+    commit: COMMIT,
     artifactVersions: {
-      androidDevDebugSha256: "aa",
-      androidProdDebugSha256: "bb",
-      chromeTestZipSha256: "cc",
+      androidDevDebugSha256: DEV_SHA,
+      androidProdDebugSha256: PROD_SHA,
+      chromeTestZipSha256: CHROME_SHA,
     },
     rows: REQUIRED_ROW_IDS.map((id, index) =>
       index === 0
-        ? { id, scenario: id, required: true, status: "FAIL_PHYSICAL", evidence: "evidence/fail.log" }
+        ? { id, scenario: id, required: true, status: "FAIL_PHYSICAL", evidence: `evidence/fail.log#${COMMIT}` }
         : passRow(id),
     ),
   };

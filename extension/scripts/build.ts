@@ -1,10 +1,21 @@
 import { rmSync, cpSync, watch, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateIcons } from "./gen-icons";
+import { evaluateActivationGate, type PhysicalMatrix } from "./activationGate";
 
 const generation = JSON.parse(
   readFileSync(join(import.meta.dir, "../../sync-protocol/fixtures/system-generation.json"), "utf8"),
 ) as { readonly productionActivation: boolean; readonly suite: number; readonly generation: number };
+const matrix = JSON.parse(
+  readFileSync(join(import.meta.dir, "../../sync-protocol/activation/physical-matrix.json"), "utf8"),
+) as PhysicalMatrix;
+const gate = evaluateActivationGate({
+  productionActivation: generation.productionActivation === true,
+  matrix,
+});
+if (!gate.ok) {
+  throw new Error(`physical activation gate failed:\n${gate.errors.join("\n")}`);
+}
 const testArtifact = process.env["POMO_SYNC_TEST_ARTIFACT"] === "true";
 const productionActivation = !testArtifact && generation.productionActivation === true;
 

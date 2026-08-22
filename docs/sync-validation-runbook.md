@@ -25,10 +25,18 @@ Download the PR or `main` workflow artifacts named:
 
 Use the `devDebug` APK (`POMO_SYNC_TEST_ARTIFACT=true`) and the Chrome zip built
 with `POMO_SYNC_TEST_ARTIFACT=true`. The `prodDebug` APK is the dormant
-production control: same protocol, test surfaces off, activation off.
+production control: same protocol, test surfaces off, activation off. Do not
+install it for the test rows.
 
-Record the SHA-256 of the three files you actually installed in
-`artifactVersions` on the matrix. Record the git commit in `commit`.
+Hash all three files from the same bundle into `artifactVersions`:
+
+- `androidDevDebugSha256` for the test APK you install
+- `androidProdDebugSha256` for the unused prodDebug control APK
+- `chromeTestZipSha256` for the Chrome zip you load unpacked
+
+Each hash is 64 hexadecimal characters. Record the git commit SHA in `commit`.
+Every `PASS_PHYSICAL` or `FAIL_PHYSICAL` evidence line must include that commit
+SHA so the row names an immutable revision.
 
 ## Install order
 
@@ -70,8 +78,9 @@ Every row must use exactly one status:
   Do not delete the evidence row. Do not skip a protocol check to make it pass.
 - `BLOCKED` — you could not run it. Write why. Activation stays off.
 
-Evidence is a repo path, gist URL, or issue comment URL plus the commit and
-artifact hashes already on the matrix. Empty `evidence` is not a pass.
+Evidence is a repo path, gist URL, or issue comment URL plus the 40-character
+commit SHA. Artifact hashes already live on the matrix. Empty `evidence` is not
+a pass.
 
 ## Rows
 

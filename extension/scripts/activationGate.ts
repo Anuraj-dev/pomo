@@ -47,6 +47,16 @@ export interface ActivationGateResult {
 }
 
 const allowed = new Set<string>(ALLOWED_STATUSES);
+const SHA256_HEX = /^[0-9a-f]{64}$/i;
+const GIT_COMMIT_SHA = /[0-9a-f]{40}/i;
+
+export function isSha256Hex(value: string): boolean {
+  return SHA256_HEX.test(value);
+}
+
+export function hasVersionedEvidence(value: string): boolean {
+  return GIT_COMMIT_SHA.test(value.trim());
+}
 
 export function evaluateActivationGate(input: ActivationGateInput): ActivationGateResult {
   const errors: string[] = [];
@@ -60,10 +70,10 @@ export function evaluateActivationGate(input: ActivationGateInput): ActivationGa
     byId.set(row.id, row);
     if (!allowed.has(row.status)) errors.push(`row ${row.id} has illegal status ${row.status}`);
     if (row.status === "BLOCKED" && !row.blockedReason) errors.push(`row ${row.id} is BLOCKED without a reason`);
-    if (row.status === "PASS_PHYSICAL" && row.evidence.trim() === "") {
+    if (row.status === "PASS_PHYSICAL" && !hasVersionedEvidence(row.evidence)) {
       errors.push(`row ${row.id} is PASS_PHYSICAL without versioned evidence`);
     }
-    if (row.status === "FAIL_PHYSICAL" && row.evidence.trim() === "") {
+    if (row.status === "FAIL_PHYSICAL" && !hasVersionedEvidence(row.evidence)) {
       errors.push(`row ${row.id} is FAIL_PHYSICAL without versioned evidence`);
     }
   }
@@ -87,9 +97,12 @@ export function evaluateActivationGate(input: ActivationGateInput): ActivationGa
     }
     const versions = input.matrix.artifactVersions ?? {};
     for (const key of ["androidDevDebugSha256", "androidProdDebugSha256", "chromeTestZipSha256"]) {
-      if (!versions[key]) errors.push(`productionActivation requires artifactVersions.${key}`);
+      const digest = versions[key] ?? "";
+      if (!isSha256Hex(digest)) errors.push(`productionActivation requires artifactVersions.${key} as 64 hex`);
     }
-    if (!input.matrix.commit) errors.push("productionActivation requires matrix commit");
+    if (!input.matrix.commit || !GIT_COMMIT_SHA.test(input.matrix.commit)) {
+      errors.push("productionActivation requires matrix commit");
+    }
   }
 
   return { ok: errors.length === 0, errors };
