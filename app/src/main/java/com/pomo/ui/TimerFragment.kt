@@ -20,9 +20,9 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.tags.TagStore
 import com.pomo.timer.TimerState
-import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
 import com.pomo.ui.theme.PomoTheme

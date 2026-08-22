@@ -3,9 +3,9 @@ package com.pomo.sync.persistence
 import com.pomo.db.AppDatabase
 import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
+import com.pomo.sync.protocol.DomainPayload
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.KernelCheckpoint
-import com.pomo.sync.protocol.DomainPayload
 import com.pomo.sync.protocol.OperationCommit
 import com.pomo.sync.protocol.OperationStore
 

@@ -32,7 +32,11 @@ internal object DomainPayload {
         }
     }
 
-    fun encodeHistory(action: String, blockId: String, fields: List<String>): ByteArray {
+    fun encodeHistory(
+        action: String,
+        blockId: String,
+        fields: List<String>,
+    ): ByteArray {
         require(action in setOf("CREATE", "CORRECT", "TOMBSTONE", "SETTLE"))
         require(blockId.isNotBlank())
         return DeterministicCbor.encode(
@@ -163,7 +167,10 @@ internal object DomainPayload {
         return listOf(text(fields[1]), text(fields[2])) + parents + listOf(text(fields[4]), text(fields[5]))
     }
 
-    fun preferenceProjectionOrEmpty(kind: Int, payload: ByteArray): Pair<String, String> =
+    fun preferenceProjectionOrEmpty(
+        kind: Int,
+        payload: ByteArray,
+    ): Pair<String, String> =
         if (kind == DomainKind.PREFERENCE.id) {
             val preference = OperationCodec.decodePreference(payload)
             preference.key to (preference.value as PreferenceValue.Text).value
@@ -185,8 +192,7 @@ internal object DomainPayload {
         return fields
     }
 
-    private fun text(value: CborValue): String =
-        (value as? CborValue.Text)?.value ?: throw IllegalArgumentException("expected text")
+    private fun text(value: CborValue): String = (value as? CborValue.Text)?.value ?: throw IllegalArgumentException("expected text")
 
     private fun optionalText(value: CborValue): String? =
         when (value) {
