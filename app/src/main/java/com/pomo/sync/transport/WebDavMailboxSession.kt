@@ -29,7 +29,10 @@ internal class WebDavMailboxSession(
                     return DrainExchange(connected = false)
                 }
                 if (batch.isNotEmpty()) {
-                    client.put(WebDavMailboxCodec.offerLocator(deviceId), WebDavMailboxCodec.encodeOffer(deviceId, batch))
+                    client.put(
+                        WebDavMailboxCodec.offerLocator(deviceId),
+                        WebDavMailboxCodec.encodeOffer(deviceId, batch, objects),
+                    )
                 }
                 val inbound = linkedMapOf<String, SyncEnvelope>()
                 for (peerId in peerDeviceIds) {
@@ -39,7 +42,8 @@ internal class WebDavMailboxSession(
                     val accepted = mutableListOf<SyncEnvelope>()
                     val covered = linkedSetOf<String>()
                     for ((meta, objectId) in entries) {
-                        val wire = client.get(objectId) ?: continue
+                        val stored = client.get(objectId) ?: continue
+                        val wire = ProviderWrap.open(stored)
                         val envelope = SyncEnvelope(meta.operationId, meta.feedKey, meta.sequence, wire.copyOf())
                         val disposition = ingest(wire.copyOf())
                         if (disposition in DURABLE) {

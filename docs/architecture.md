@@ -101,8 +101,9 @@ sync/transport/
 `OrdinaryDrainWorker` is the WorkManager entry. Retry now enqueues an immediate
 pass. Periodic work waits for connectivity. `ReplicaLanRuntime` is the LAN
 session: NSD advertise/browse, TCP exchange, kernel ingest, signed durable
-acks. Configured WebDAV Mailboxes are attached as drain routes. Nostr and TURN
-are not attached.
+acks. Configured WebDAV Mailboxes, Nostr rendezvous catch-up, and optional
+WebRTC inbox/TURN ICE config are attached as drain routes. Provider bytes may
+be content-epoch wrapped.
 
 ```text
 ui/

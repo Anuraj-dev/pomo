@@ -10,10 +10,10 @@ CI rejects `productionActivation=true` otherwise.
 
 ## What this runbook is not
 
-WorkManager ordinary drain is packaged on test artifacts. Replica LAN is a
-kernel ingest route when NSD resolves a peer. Configured WebDAV Mailboxes are
-ordinary drain routes. Nostr and TURN are still not attached, so Retry now stays
-local-only when no LAN peer and no mailbox config are present.
+WorkManager ordinary drain is packaged on test artifacts. Replica LAN, configured
+WebDAV Mailboxes, Nostr rendezvous catch-up, and optional WebRTC/TURN routes are
+attached on test artifacts. Retry now stays local-only when none of those routes
+have a peer or config.
 Rows that need a live replica session start as `BLOCKED` with a reason. Do not
 rewrite a blocked row into a pass by weakening the protocol.
 

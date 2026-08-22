@@ -5,6 +5,7 @@ import { signP256LowS } from "../crypto/PomoCrypto";
 import type { DurablePeerAck, SyncEnvelope } from "./directSync";
 import type { DrainExchange, DrainRoute } from "./ordinaryDrain";
 import { encodeAckBody, verifyLanAck, type ReplicaLanAck } from "./replicaLan";
+import { openProviderBytes, wrapProviderBytes } from "./providerWrap";
 
 export interface MailboxObject { readonly objectId: string; readonly bytes: Uint8Array; readonly sha256: string; readonly size: number }
 export interface MailboxManifest { readonly manifestId: string; readonly checkpointId: string; readonly packIds: readonly string[]; readonly operationIds: readonly string[]; readonly blobIds: readonly string[] }
@@ -83,7 +84,7 @@ export function ackLocator(targetDeviceId: string): string {
 
 export async function mailboxObjects(batch: readonly SyncEnvelope[]): Promise<MailboxObject[]> {
   return Promise.all(batch.map(async (envelope) => {
-    const bytes = envelope.wire.slice();
+    const bytes = await wrapProviderBytes(envelope.wire.slice());
     const digest = await sha256(bytes);
     return { objectId: digest, bytes, sha256: digest, size: bytes.length };
   }));
@@ -109,13 +110,18 @@ function asBytes(value: CborValue, name: string): Uint8Array {
   return value;
 }
 
-export async function encodeOffer(deviceId: string, envelopes: readonly SyncEnvelope[]): Promise<Uint8Array> {
-  const entries = await Promise.all(envelopes.map(async (envelope) => [
+export async function encodeOffer(
+  deviceId: string,
+  envelopes: readonly SyncEnvelope[],
+  objects: readonly MailboxObject[],
+): Promise<Uint8Array> {
+  if (envelopes.length !== objects.length) throw new Error("offer envelopes and objects must align");
+  const entries = envelopes.map((envelope, index) => [
     envelope.operationId,
     envelope.feedKey,
     envelope.sequence,
-    await objectIdForWire(envelope.wire),
-  ]));
+    objects[index]!.objectId,
+  ]);
   return encodeCanonicalCbor([OFFER_LABEL, SCHEMA, deviceId, entries]);
 }
 
@@ -191,7 +197,7 @@ export class WebDavMailboxSession {
         const protection = await mailbox.protect(objects);
         if (!protection.protected) return { connected: false };
         if (batch.length > 0) {
-          await this.client.put(offerLocator(this.deviceId), await encodeOffer(this.deviceId, batch));
+          await this.client.put(offerLocator(this.deviceId), await encodeOffer(this.deviceId, batch, objects));
         }
         const inbound = new Map<string, SyncEnvelope>();
         for (const peerId of this.peerDeviceIds) {
@@ -202,8 +208,9 @@ export class WebDavMailboxSession {
           const accepted: SyncEnvelope[] = [];
           const covered = new Set<string>();
           for (const entry of entries) {
-            const wire = await this.client.get(entry.objectId);
-            if (wire === null) continue;
+            const stored = await this.client.get(entry.objectId);
+            if (stored === null) continue;
+            const wire = await openProviderBytes(stored);
             const envelope = { ...entry.envelope, wire: wire.slice() };
             const disposition = await this.ingest(wire.slice());
             if (DURABLE.has(disposition)) {

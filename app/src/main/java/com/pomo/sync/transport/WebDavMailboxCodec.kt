@@ -18,7 +18,7 @@ internal object WebDavMailboxCodec {
 
     fun mailboxObjects(batch: List<SyncEnvelope>): List<MailboxObject> =
         batch.map { envelope ->
-            val wire = envelope.wire.copyOf()
+            val wire = ProviderWrap.wrap(envelope.wire)
             MailboxObject(
                 objectIdForWire(wire),
                 wire,
@@ -30,21 +30,23 @@ internal object WebDavMailboxCodec {
     fun encodeOffer(
         deviceId: String,
         envelopes: List<SyncEnvelope>,
-    ): ByteArray =
-        DeterministicCbor.encode(
+        objects: List<MailboxObject>,
+    ): ByteArray {
+        require(envelopes.size == objects.size)
+        return DeterministicCbor.encode(
             CborValue.Array(
                 listOf(
                     CborValue.Text(OFFER_LABEL),
                     CborValue.Integer(SCHEMA),
                     CborValue.Text(deviceId),
                     CborValue.Array(
-                        envelopes.map { envelope ->
+                        envelopes.mapIndexed { index, envelope ->
                             CborValue.Array(
                                 listOf(
                                     CborValue.Text(envelope.operationId),
                                     CborValue.Text(envelope.feedKey),
                                     CborValue.Integer(envelope.sequence),
-                                    CborValue.Text(objectIdForWire(envelope.wire)),
+                                    CborValue.Text(objects[index].objectId),
                                 ),
                             )
                         },
@@ -52,6 +54,7 @@ internal object WebDavMailboxCodec {
                 ),
             ),
         )
+    }
 
     fun decodeOffer(bytes: ByteArray): Pair<String, List<Pair<SyncEnvelope, String>>> {
         val fields = frame(bytes, 4, OFFER_LABEL)

@@ -54,7 +54,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Nostr rendezvous is not a live host route."
+      "blockedReason": "Nostr rendezvous catch-up exists on Chrome test artifacts. Physical direct-internet evidence has not been collected."
     },
     {
       "id": "turn",
@@ -62,7 +62,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "TURN is not configured or measured as a live connectivity provider."
+      "blockedReason": "Optional TURN ICE config and relay classification exist. Physical TURN evidence has not been collected."
     },
     {
       "id": "webdav-providers",

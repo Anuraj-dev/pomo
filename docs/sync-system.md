@@ -12,11 +12,12 @@ envelopes, and clears an obligation only after a signed durable ack is
 persisted. Replica LAN is a live drain route: Android advertises
 `_pomo-replica._tcp`, accepts a length-prefixed CBOR session, and ingest goes
 through `OperationKernel`. Chrome uses the same session codec against whatever
-peers the directory currently holds. Configured WebDAV Mailboxes are also
-ordinary drain routes: immutable operation objects plus overwriteable offer and
-ack locators, with outbox clearance only after a signed durable peer ack. Nostr
-and TURN are still not attached, so a drain with no LAN peer and no mailbox
-config stays local-only.
+peers the directory currently holds. Configured WebDAV Mailboxes are also ordinary drain routes: immutable operation
+objects plus overwriteable offer and ack locators, with outbox clearance only
+after a signed durable peer ack. Chrome also attaches encrypted Nostr rendezvous
+catch-up and optional WebRTC inbox/TURN ICE config. Provider object bytes can be
+wrapped under the current content-epoch key. A drain with no configured peer
+route stays local-only.
 
 ## Authority and safety boundary
 
