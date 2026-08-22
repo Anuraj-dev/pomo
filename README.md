@@ -7,7 +7,8 @@ IndexedDB. Desktop and NodeMCU stay thin clients of the phone LAN API.
 
 A dormant peer-sync generation is packaged on Android and Chrome. Equal Full
 Replicas under one Member Identity are specified and tested as a preference
-journal plus domain allowlist, with `productionActivation=false`. Public
+journal plus domain allowlist, with `productionActivation=false`. Test artifacts
+run ordinary drain and a Replica LAN session into `OperationKernel`. Public
 migration cutover is not on. CI uploads signed test APKs and a Chrome test zip.
 Physical and provider rows live in `docs/sync-validation-runbook.md` and stay
 `BLOCKED` until a person runs them. See `docs/sync-system.md`.

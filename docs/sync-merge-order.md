@@ -19,13 +19,12 @@ change. Do not merge activation in the same commit as protocol or host work.
 
 ## Live host loop
 
-After PR 124, ordinary drain exists on test artifacts. Next independently
-reviewable slices, in this order:
+PR 125 carries ordinary drain and the Replica LAN session on the same branch.
+Next independently reviewable slices, in this order:
 
-1. Replica LAN session into `OperationKernel` ingress.
-2. Live WebDAV Mailbox, then Nostr rendezvous and optional TURN.
-3. Content-epoch wrapping on those routes.
-4. Replace live `OfflineTimer` / `TimerEngine` only after those hosts work.
+1. Live WebDAV Mailbox, then Nostr rendezvous and optional TURN.
+2. Content-epoch wrapping on those routes.
+3. Replace live `OfflineTimer` / `TimerEngine` only after those hosts work.
 
 Do not open the activation PR while any required physical row is `BLOCKED`.
 

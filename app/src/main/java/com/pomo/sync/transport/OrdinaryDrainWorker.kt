@@ -17,8 +17,8 @@ internal class OrdinaryDrainWorker(
         val store = RoomOperationStore(AppDatabase.getInstance(applicationContext))
         val host =
             OrdinaryDrainHost(
-                routes = emptyList(),
-                ingest = { _ -> },
+                routes = ReplicaLanRuntime.drainRoutes(),
+                ingest = ReplicaLanRuntime::ingest,
                 markDelivered = store::markDelivered,
             )
         host.drain(OrdinaryDrainHost.envelopesFrom(store.restartSnapshot()))

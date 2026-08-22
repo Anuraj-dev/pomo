@@ -9,8 +9,11 @@ Test artifacts run an ordinary drain host. Android schedules it with WorkManager
 Chrome runs it from the service worker when Retry now is pressed or a drain
 request is stored. The host walks the durable outbox, offers at most 256
 envelopes, and clears an obligation only after a signed durable ack is
-persisted. No LAN, WebDAV, Nostr, or TURN route is wired yet, so a drain stays
-local-only until those adapters exist.
+persisted. Replica LAN is a live drain route: Android advertises
+`_pomo-replica._tcp`, accepts a length-prefixed CBOR session, and ingest goes
+through `OperationKernel`. Chrome uses the same session codec against whatever
+peers the directory currently holds. WebDAV, Nostr, and TURN are still not
+attached, so a drain with no resolved LAN peer stays local-only.
 
 ## Authority and safety boundary
 

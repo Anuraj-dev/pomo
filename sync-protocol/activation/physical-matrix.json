@@ -22,7 +22,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "WorkManager ordinary drain walks the outbox and clears only signed acks. There is still no Replica LAN session, so Retry now stays local-only."
+      "blockedReason": "Replica LAN session exists on test artifacts. Two-device Android physical evidence has not been collected."
     },
     {
       "id": "android-chrome",
@@ -30,7 +30,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Ordinary drain walks the outbox on both runtimes. There is still no live Android/Chrome replica session, so nothing is exchanged."
+      "blockedReason": "LAN session codec is shared. Chrome still has no NSD/TCP listener, so Android/Chrome physical exchange has not been collected."
     },
     {
       "id": "chrome-chrome",
@@ -46,7 +46,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "No NSD or other LAN discovery is wired to OperationKernel ingress."
+      "blockedReason": "NSD advertise/browse and kernel ingress exist. Physical LAN evidence has not been collected."
     },
     {
       "id": "direct-internet",
@@ -78,7 +78,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Cannot measure catch-up after offline work until a replica drain exists."
+      "blockedReason": "LAN drain can catch up in tests. Offline-duration physical evidence has not been collected."
     },
     {
       "id": "lifecycle-loss",

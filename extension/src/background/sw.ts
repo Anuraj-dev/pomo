@@ -41,6 +41,7 @@ import {
 import { SYNC_ACTIVATION } from "../sync/activation";
 import { IndexedDbOperationDao } from "../sync/storage/IndexedDbOperationDao";
 import { drainOrdinaryOutbox, envelopesFrom } from "../sync/transport/ordinaryDrain";
+import { ingestReplicaLan, replicaLanDrainRoutes } from "../sync/transport/replicaLan";
 import {
   completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
@@ -846,8 +847,8 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
       const dao = new IndexedDbOperationDao();
       const result = await drainOrdinaryOutbox({
         obligations: envelopesFrom(await dao.reconstruct()),
-        routes: [],
-        ingest() {},
+        routes: replicaLanDrainRoutes(),
+        ingest: (wire) => ingestReplicaLan(wire),
         markDelivered: (operationId) => dao.markDelivered(operationId),
       });
       outcome = result.localOnly ? "local-only" : "routed";

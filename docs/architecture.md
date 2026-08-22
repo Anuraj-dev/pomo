@@ -99,7 +99,9 @@ sync/transport/
 
 `OrdinaryDrainHost` walks the Room outbox through `DirectSyncCoordinator`.
 `OrdinaryDrainWorker` is the WorkManager entry. Retry now enqueues an immediate
-pass. Periodic work waits for connectivity. Live routes are not wired yet.
+pass. Periodic work waits for connectivity. `ReplicaLanRuntime` is the LAN
+session: NSD advertise/browse, TCP exchange, kernel ingest, signed durable
+acks. WebDAV, Nostr, and TURN are not attached.
 
 ```text
 ui/
