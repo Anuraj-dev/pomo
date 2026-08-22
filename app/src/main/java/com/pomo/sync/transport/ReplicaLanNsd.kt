@@ -37,7 +37,7 @@ internal class ReplicaLanAdvertiser(
                 ) {
                     Log.w(TAG, "replica mDNS registration failed, code $errorCode")
                     mainHandler.post {
-                        if (listener === registration) listener = null
+                        if (listener === this) listener = null
                     }
                 }
 

@@ -22,11 +22,11 @@ internal object ContentEpochSeal {
                 listOf(
                     CborValue.Text("Pomo Content Epoch Wrap"),
                     CborValue.Integer(1),
-                    CborValue.Bytes(memberId.bytes.copyOf()),
+                    CborValue.Bytes(memberId.copy()),
                     CborValue.Integer(contentEpoch),
-                    CborValue.Bytes(authorizationFrontierHash.bytes.copyOf()),
+                    CborValue.Bytes(authorizationFrontierHash.copy()),
                     CborValue.Integer(if (recipient.recovery) 2 else 1),
-                    CborValue.Bytes(recipient.recipientId.bytes.copyOf()),
+                    CborValue.Bytes(recipient.recipientId.copy()),
                 ),
             ),
         )
