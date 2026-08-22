@@ -40,6 +40,7 @@ import {
 } from "../shared/messages";
 import { SYNC_ACTIVATION } from "../sync/activation";
 import { IndexedDbOperationDao } from "../sync/storage/IndexedDbOperationDao";
+import { startReplicaTimer } from "../sync/timer/replicaTimerRuntime";
 import { drainOrdinaryOutbox, envelopesFrom } from "../sync/transport/ordinaryDrain";
 import { ingestReplicaLan, replicaLanDrainRoutes } from "../sync/transport/replicaLan";
 import { nostrRendezvousDrainRoutes } from "../sync/transport/nostrRendezvous";
@@ -599,6 +600,9 @@ async function init(): Promise<void> {
     } catch (error) {
       console.error("engine restore failed; starting fresh", error);
     }
+  }
+  if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
+    startReplicaTimer("chrome-local");
   }
   await ensureAlarm();
   await consumeOrdinaryDrainRequest();

@@ -28,6 +28,7 @@ import com.pomo.network.SessionImportPayloads
 import com.pomo.network.TimerAdoptPayloads
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
+import com.pomo.sync.timer.ReplicaTimerRuntime
 import com.pomo.sync.transport.OrdinaryDrainScheduler
 import com.pomo.sync.transport.ReplicaLanRuntime
 import com.pomo.sync.transport.WebDavMailboxRuntime
@@ -139,6 +140,12 @@ public class PomodoroService : Service(), TimerObserver {
             } catch (error: Exception) {
                 Log.w(TAG, "WebDAV mailbox routes failed to start", error)
             }
+            val installId =
+                android.provider.Settings.Secure.getString(
+                    contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID,
+                ) ?: "android-local"
+            ReplicaTimerRuntime.start(installId)
         }
 
         val savedState = prefs.loadTimerState()
@@ -266,6 +273,7 @@ public class PomodoroService : Service(), TimerObserver {
             Log.w(TAG, "Failed to unregister network callback", e)
         }
         serviceScope.cancel()
+        ReplicaTimerRuntime.stop()
         WebDavMailboxRuntime.stop()
         ReplicaLanRuntime.stop()
         // Unregister the advertisement before killing the server, so a client never

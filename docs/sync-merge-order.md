@@ -20,13 +20,15 @@ change. Do not merge activation in the same commit as protocol or host work.
 ## Live host loop
 
 PR 125 carries ordinary drain, Replica LAN, WebDAV Mailbox routes, Nostr
-rendezvous catch-up, optional TURN ICE config, and content-epoch provider
-wrapping on the same branch.
-Next independently reviewable slices, in this order:
+rendezvous catch-up, optional TURN ICE config, content-epoch provider wrapping,
+and the kernel-backed `ActivePhaseTimer` on the same branch. Product
+`OfflineTimer` / `TimerEngine` still drive notifications and widgets; the
+active-phase journal is the sync-facing timer authority on test artifacts.
 
-1. Replace live `OfflineTimer` / `TimerEngine` with the kernel-backed timer
-   after hosts have physical evidence.
-2. Collect physical matrix evidence, then the isolated activation PR.
+Next:
+
+1. Collect physical matrix evidence.
+2. Isolated activation PR only after every required row is `PASS_PHYSICAL`.
 
 Do not open the activation PR while any required row is `BLOCKED`.
 
