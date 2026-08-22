@@ -42,6 +42,7 @@ import { SYNC_ACTIVATION } from "../sync/activation";
 import { IndexedDbOperationDao } from "../sync/storage/IndexedDbOperationDao";
 import { drainOrdinaryOutbox, envelopesFrom } from "../sync/transport/ordinaryDrain";
 import { ingestReplicaLan, replicaLanDrainRoutes } from "../sync/transport/replicaLan";
+import { webDavMailboxDrainRoutes } from "../sync/transport/webDavMailbox";
 import {
   completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
@@ -847,7 +848,7 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
       const operationDao = new IndexedDbOperationDao();
       const result = await drainOrdinaryOutbox({
         obligations: envelopesFrom(await operationDao.reconstruct()),
-        routes: replicaLanDrainRoutes(),
+        routes: [...replicaLanDrainRoutes(), ...webDavMailboxDrainRoutes()],
         ingest: (wire) => ingestReplicaLan(wire),
         markDelivered: (operationId) => operationDao.markDelivered(operationId),
       });

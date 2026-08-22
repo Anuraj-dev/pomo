@@ -14,12 +14,13 @@ internal class OrdinaryDrainWorker(
 ) : Worker(context, params) {
     override fun doWork(): Result {
         if (!OrdinaryDrainScheduler.hostAllowed()) return Result.success()
-        val created = ReplicaLanRuntime.ensureStarted(applicationContext)
+        val createdLan = ReplicaLanRuntime.ensureStarted(applicationContext)
+        val createdMailbox = WebDavMailboxRuntime.ensureStarted(applicationContext)
         try {
             val store = RoomOperationStore(AppDatabase.getInstance(applicationContext))
             val host =
                 OrdinaryDrainHost(
-                    routes = ReplicaLanRuntime.drainRoutes(),
+                    routes = ReplicaLanRuntime.drainRoutes() + WebDavMailboxRuntime.drainRoutes(),
                     ingest = ReplicaLanRuntime::ingest,
                     markDelivered = store::markDelivered,
                 )
@@ -27,7 +28,8 @@ internal class OrdinaryDrainWorker(
             SyncSafetyGate.state = completeOrdinaryDrain(SyncSafetyGate.state)
             return Result.success()
         } finally {
-            if (created) ReplicaLanRuntime.stop()
+            if (createdMailbox) WebDavMailboxRuntime.stop()
+            if (createdLan) ReplicaLanRuntime.stop()
         }
     }
 }

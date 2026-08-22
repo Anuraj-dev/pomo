@@ -39,6 +39,12 @@ internal interface ImmutableMailboxClient {
     ): Boolean
 
     fun get(objectId: String): ByteArray?
+
+    /** Overwrite a locator object. Operation payloads stay on [createIfAbsent]. */
+    fun put(
+        objectId: String,
+        bytes: ByteArray,
+    )
 }
 
 internal class WebDavMailbox(

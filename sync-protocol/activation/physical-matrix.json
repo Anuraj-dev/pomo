@@ -70,7 +70,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "WebDAV mailbox codec tests are not provider behavior. No live Mailbox is attached."
+      "blockedReason": "WebDAV mailbox drain routes exist on test artifacts. Two-provider physical evidence has not been collected."
     },
     {
       "id": "offline-duration",

@@ -19,10 +19,11 @@ change. Do not merge activation in the same commit as protocol or host work.
 
 ## Live host loop
 
-PR 125 carries ordinary drain and the Replica LAN session on the same branch.
+PR 125 carries ordinary drain, the Replica LAN session, and live WebDAV
+Mailbox drain routes on the same branch.
 Next independently reviewable slices, in this order:
 
-1. Live WebDAV Mailbox, then Nostr rendezvous and optional TURN.
+1. Nostr rendezvous and optional TURN.
 2. Content-epoch wrapping on those routes.
 3. Replace live `OfflineTimer` / `TimerEngine` only after those hosts work.
 

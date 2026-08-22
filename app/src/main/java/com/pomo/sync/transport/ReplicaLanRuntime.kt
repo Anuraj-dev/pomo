@@ -70,8 +70,12 @@ internal object ReplicaLanRuntime {
     }
 
     fun ingest(wire: ByteArray) {
+        ingestDisposition(wire)
+    }
+
+    fun ingestDisposition(wire: ByteArray): String {
         val current = synchronized(lock) { kernel }
-        current?.ingest(wire.copyOf())
+        return current?.ingest(wire.copyOf())?.name ?: "REJECTED_INVALID"
     }
 
     fun installForTest(
