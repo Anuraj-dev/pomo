@@ -190,6 +190,29 @@ public class RoomOperationStoreTest {
     }
 
     @Test
+    public fun forkUsesCheckpointOnlyPrefixWhenRoomOperationWasCompacted() {
+        database().use { database ->
+            val store = RoomOperationStore(database)
+            val checkpointId = id(7)
+            val incarnation = ProtocolBytes.of(ByteArray(16) { 3 }, 16)
+            database.syncDao().insertCheckpointOperations(
+                listOf(SyncCheckpointOperationEntity(id(2).toString(), incarnation.toString(), 1, checkpointId.toString())),
+            )
+            database.syncDao().upsertHead(
+                SyncFeedHeadEntity(id(2).toString(), incarnation.toString(), 1, checkpointId.toString(), forkedAt = null),
+            )
+            val fork = authenticated(sequence = 2, previous = checkpointId, value = "gong")
+
+            store.commit(fork, IngestDisposition.QUARANTINED_FORK, localAuthor = false)
+
+            val head = store.restartSnapshot().heads.single()
+            assertEquals(1L, head.sequence)
+            assertEquals(checkpointId.toString(), head.operationId)
+            assertEquals(2L, head.forkedAt)
+        }
+    }
+
+    @Test
     public fun forkPersistsQuarantineOfAcceptedCrossFeedDependents() {
         database().use { database ->
             val store = RoomOperationStore(database)

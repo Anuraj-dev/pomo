@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { bytesToHex } from "../../src/shared/hex";
-import { OperationKernel, type AuthorRequest, type OperationJournal, type OperationJournalEntry, type OperationMaterializer, type OperationSigner, type OperationVerifier } from "../../src/sync/kernel/OperationKernel";
+import { allowAllOperationAuthorization, OperationKernel, type AuthorRequest, type OperationAuthorizationPolicy, type OperationJournal, type OperationJournalEntry, type OperationMaterializer, type OperationSigner, type OperationVerifier } from "../../src/sync/kernel/OperationKernel";
 import { SharedPreferenceProjection, encodeSharedPreferenceFact } from "../../src/sync/materialize/sharedPreferences";
 import { canonicalUnsignedOperation, operationId, payloadHash } from "../../src/sync/protocol/operation";
 import { OperationKind, type AuthenticatedOperation, type OperationDisposition, POMO_SUITE_1, POMO_SUITE_GENERATION_1, type UnsignedOperation } from "../../src/sync/protocol/types";
@@ -119,11 +119,11 @@ class ControllableMaterializer implements OperationMaterializer {
   }
 }
 
-function harness(): { kernel: OperationKernel; crypto: FixtureCrypto; journal: MemoryJournal; projection: SharedPreferenceProjection } {
+function harness(authorization: OperationAuthorizationPolicy = allowAllOperationAuthorization): { kernel: OperationKernel; crypto: FixtureCrypto; journal: MemoryJournal; projection: SharedPreferenceProjection } {
   const crypto = new FixtureCrypto();
   const journal = new MemoryJournal();
   const projection = new SharedPreferenceProjection();
-  return { kernel: new OperationKernel(crypto, crypto, journal, projection), crypto, journal, projection };
+  return { kernel: new OperationKernel(crypto, crypto, journal, projection, authorization), crypto, journal, projection };
 }
 
 function request(value = "25"): AuthorRequest {
@@ -145,6 +145,7 @@ async function signedOperation(
   sequence: number,
   previousHash: string | null,
   value: string,
+  authorizationEpoch = 1,
 ): Promise<Uint8Array> {
   const payload = encodeSharedPreferenceFact("focusDurationMinutes", value);
   const unsigned: UnsignedOperation = {
@@ -156,7 +157,7 @@ async function signedOperation(
     sequence,
     previousHash,
     frontier: [],
-    authorizationEpoch: 1,
+    authorizationEpoch,
     payloadSchema: 1,
     kind: OperationKind.SharedPreferenceSet,
     payloadHash: await payloadHash(payload),
@@ -369,6 +370,16 @@ describe("OperationKernel four-call seam", () => {
     expect(await kernel.ingest(new Uint8Array([1, 2, 3]))).toBe("REJECTED_INVALID");
   });
 
+  test("gates authenticated ingress through member and authorization-epoch policy", async () => {
+    const authorization: OperationAuthorizationPolicy = {
+      authorize: (operation) => operation.unsigned.memberId === MEMBER && operation.unsigned.authorizationEpoch === 1 ? "AUTHORIZED" : "REJECTED_INVALID",
+    };
+    const { kernel, crypto, journal, projection } = harness(authorization);
+    expect(await kernel.ingest(await signedOperation(crypto, 1, null, "30", 2))).toBe("REJECTED_INVALID");
+    expect(journal.records.at(-1)?.disposition).toBe("REJECTED_INVALID");
+    expect(projection.value("focusDurationMinutes")).toBeUndefined();
+  });
+
   test("accumulates every blocked author prerequisite using the shared tokens", async () => {
     const { kernel, crypto } = harness();
     expect(await kernel.ingest(await signedOperation(crypto, 2, "aa".repeat(32), "30"))).toBe("PENDING_GAP");
@@ -386,7 +397,7 @@ describe("OperationKernel four-call seam", () => {
   test("returns only the authenticated verifier result from authoring", async () => {
     const crypto = new FixtureCrypto();
     const projection = new SharedPreferenceProjection();
-    const kernel = new OperationKernel(new TamperingVerifier(crypto), crypto, new MemoryJournal(), projection);
+    const kernel = new OperationKernel(new TamperingVerifier(crypto), crypto, new MemoryJournal(), projection, allowAllOperationAuthorization);
     expect(await kernel.author({
       ...request(),
       frontier: [
@@ -462,7 +473,7 @@ describe("OperationKernel four-call seam", () => {
   test("does not expose accepted state when durable journal recording fails", async () => {
     const crypto = new FixtureCrypto();
     const projection = new SharedPreferenceProjection();
-    const kernel = new OperationKernel(crypto, crypto, new FailingJournal(), projection);
+    const kernel = new OperationKernel(crypto, crypto, new FailingJournal(), projection, allowAllOperationAuthorization);
     expect(await kernel.author(request())).toEqual({
       status: "BLOCKED_PREREQUISITE",
       missing: new Set(["AUTHORING_COMMIT"]),
@@ -474,7 +485,7 @@ describe("OperationKernel four-call seam", () => {
   test("maps an ingest journal failure to rejected without exposing optimistic state", async () => {
     const crypto = new FixtureCrypto();
     const projection = new SharedPreferenceProjection();
-    const kernel = new OperationKernel(crypto, crypto, new FailingJournal(), projection);
+    const kernel = new OperationKernel(crypto, crypto, new FailingJournal(), projection, allowAllOperationAuthorization);
     const envelope = await signedOperation(crypto, 1, null, "25");
     expect(await kernel.ingest(envelope)).toBe("REJECTED_INVALID");
     expect(kernel.summarize().accepted).toBe(0);
@@ -553,7 +564,7 @@ describe("OperationKernel four-call seam", () => {
     const crypto = new FixtureCrypto();
     const journal = new MemoryJournal();
     const materializer = new ControllableMaterializer();
-    const kernel = new OperationKernel(crypto, crypto, journal, materializer);
+    const kernel = new OperationKernel(crypto, crypto, journal, materializer, allowAllOperationAuthorization);
     const active = await kernel.author(request("25"));
     if (active.status !== "AUTHORED") throw new Error("fixture authoring was blocked");
     const beforeRecords = [...journal.records];

@@ -45,13 +45,14 @@ internal class AuthorizationLedger private constructor(
         factId: ProtocolBytes,
         issuerDeviceId: ProtocolBytes?,
         recoverySignatureVerified: Boolean,
+        verifiedBaselineFrontier: List<FeedFrontier>? = null,
     ): AuthorityDisposition {
         if (fact.memberId != projection.memberId) return AuthorityDisposition.QUARANTINED_DIFFERENT_MEMBER
         if (factId in projection.acceptedFactIds) return AuthorityDisposition.DUPLICATE
         if (!projection.acceptedFactIds.containsAll(fact.ledgerFrontier)) return AuthorityDisposition.PENDING_CAUSAL
         return when (fact.kind) {
             AuthorityFactKind.ADMIT_DEVICE -> applyAdmit(fact, factId, issuerDeviceId)
-            AuthorityFactKind.DEVICE_READY -> applyReady(fact, factId, issuerDeviceId)
+            AuthorityFactKind.DEVICE_READY -> applyReady(fact, factId, issuerDeviceId, verifiedBaselineFrontier)
             AuthorityFactKind.REVOKE_DEVICE -> applyRevoke(fact, factId, issuerDeviceId)
             AuthorityFactKind.RECOVERY_ROTATE -> applyRotate(fact, factId, issuerDeviceId, recoverySignatureVerified)
             AuthorityFactKind.RECOVERY_RESET -> applyReset(fact, factId, recoverySignatureVerified)
@@ -88,6 +89,7 @@ internal class AuthorizationLedger private constructor(
         fact: AuthorityFact,
         factId: ProtocolBytes,
         issuerDeviceId: ProtocolBytes?,
+        verifiedBaselineFrontier: List<FeedFrontier>?,
     ): AuthorityDisposition {
         val deviceId = fact.subjectDeviceId ?: return AuthorityDisposition.REJECTED_INVALID
         val device = projection.devices[deviceId] ?: return AuthorityDisposition.REJECTED_INVALID
@@ -99,7 +101,10 @@ internal class AuthorizationLedger private constructor(
         if (issuerDeviceId != deviceId || !device.authorized || fact.authorizationEpoch != projection.authorizationEpoch ||
             fact.contentEpoch != projection.contentEpoch ||
             (fact.baselineFrontier.isEmpty() && expectedBaselineDevices.isNotEmpty()) ||
-            baselineDevices.size != fact.baselineFrontier.size || baselineDevices != expectedBaselineDevices
+            baselineDevices.size != fact.baselineFrontier.size || baselineDevices != expectedBaselineDevices ||
+            verifiedBaselineFrontier == null ||
+            verifiedBaselineFrontier.toSet() != fact.baselineFrontier.toSet() ||
+            verifiedBaselineFrontier.size != fact.baselineFrontier.size
         ) {
             return AuthorityDisposition.REJECTED_INVALID
         }

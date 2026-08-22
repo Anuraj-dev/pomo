@@ -74,6 +74,17 @@ describe("Member Identity and causal authorization", () => {
     const joining = certificate("22".repeat(32));
     const ledger = new AuthorizationLedger(genesis(first));
     expect(ledger.markReady({
+      factId: "a1-mismatched-baseline",
+      memberId: "00".repeat(32),
+      issuerDeviceId: first.deviceId,
+      deviceId: first.deviceId,
+      authorizationEpoch: 1,
+      contentEpoch: 1,
+      baselineFrontier: [{ ...frontier[0]!, headHash: "44".repeat(32) }],
+      verifiedBaselineFrontier: frontier,
+      ledgerFrontier: new Set(),
+    })).toBe("REJECTED_INVALID");
+    expect(ledger.markReady({
       factId: "a1",
       memberId: "00".repeat(32),
       issuerDeviceId: first.deviceId,
@@ -81,6 +92,7 @@ describe("Member Identity and causal authorization", () => {
       authorizationEpoch: 1,
       contentEpoch: 1,
       baselineFrontier: frontier,
+      verifiedBaselineFrontier: frontier,
       ledgerFrontier: new Set(),
     })).toBe("ACCEPTED");
     expect(ledger.admit({
@@ -113,6 +125,7 @@ describe("Member Identity and causal authorization", () => {
       authorizationEpoch: 2,
       contentEpoch: 2,
       baselineFrontier: frontier,
+      verifiedBaselineFrontier: frontier,
       ledgerFrontier: new Set(["a1"]),
     })).toBe("REJECTED_INVALID");
     expect(ledger.revoke({

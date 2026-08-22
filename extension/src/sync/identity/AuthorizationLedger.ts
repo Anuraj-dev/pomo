@@ -1,4 +1,5 @@
-import type { FrontierEntry } from "../protocol/types";
+import type { AuthenticatedOperation, FrontierEntry } from "../protocol/types";
+import type { OperationAuthorizationPolicy } from "../kernel/OperationKernel";
 import type { DeviceCertificate, GenesisRecord, RecoveryCertificate } from "./types";
 
 export interface AuthorizedDevice {
@@ -16,6 +17,21 @@ export interface AuthorizationSnapshot {
   readonly recoveryGeneration: number;
   readonly recovery: RecoveryCertificate;
   readonly devices: ReadonlyMap<string, AuthorizedDevice>;
+}
+
+export function operationAuthorizationPolicy(
+  snapshot: AuthorizationSnapshot,
+  classifyRevocation: (operation: AuthenticatedOperation) => "NORMAL_VALIDATION" | "REJECT_KNOWINGLY_LATER" | "QUARANTINE_CONCURRENT" = () => "NORMAL_VALIDATION",
+): OperationAuthorizationPolicy {
+  return {
+    authorize: (operation) => {
+      const device = snapshot.devices.get(operation.unsigned.deviceId);
+      if (operation.unsigned.memberId !== snapshot.memberId || operation.unsigned.authorizationEpoch !== snapshot.authorizationEpoch ||
+          device?.authorized !== true || device.deviceReady !== true) return "REJECTED_INVALID";
+      const revocation = classifyRevocation(operation);
+      return revocation === "REJECT_KNOWINGLY_LATER" ? "REJECTED_INVALID" : revocation === "QUARANTINE_CONCURRENT" ? "QUARANTINED_FORK" : "AUTHORIZED";
+    },
+  };
 }
 
 export type AuthorityDisposition =
@@ -95,6 +111,8 @@ export class AuthorizationLedger {
     readonly authorizationEpoch: number;
     readonly contentEpoch: number;
     readonly baselineFrontier: readonly FrontierEntry[];
+    /** Frontier authenticated by the completed baseline transaction. */
+    readonly verifiedBaselineFrontier: readonly FrontierEntry[];
     readonly ledgerFrontier: ReadonlySet<string>;
   }): AuthorityDisposition {
     const preflight = this.#preflight(input.factId, input.memberId, input.ledgerFrontier);
@@ -104,11 +122,13 @@ export class AuthorizationLedger {
       .filter(([deviceId, value]) => value.authorized && (deviceId !== input.deviceId || deviceId === this.#firstDeviceId))
       .map(([deviceId]) => deviceId);
     const baselineDevices = input.baselineFrontier.map((entry) => entry.deviceId);
+    const baselineMatchesVerified = sameFrontier(input.baselineFrontier, input.verifiedBaselineFrontier);
     if (input.issuerDeviceId !== input.deviceId || device === undefined || !device.authorized ||
         (input.baselineFrontier.length === 0 && expectedBaselineDevices.length > 0) ||
         baselineDevices.length !== new Set(baselineDevices).size ||
         baselineDevices.length !== expectedBaselineDevices.length ||
         expectedBaselineDevices.some((deviceId) => !baselineDevices.includes(deviceId)) ||
+        !baselineMatchesVerified ||
         input.authorizationEpoch !== this.#authorizationEpoch || input.contentEpoch !== this.#contentEpoch) {
       return "REJECTED_INVALID";
     }
@@ -217,6 +237,13 @@ export class AuthorizationLedger {
     const device = this.#devices.get(deviceId);
     return device?.authorized === true && device.deviceReady;
   }
+}
+
+function sameFrontier(left: readonly FrontierEntry[], right: readonly FrontierEntry[]): boolean {
+  if (left.length !== right.length) return false;
+  const key = (entry: FrontierEntry): string => `${entry.deviceId}:${entry.incarnationId}:${entry.sequence}:${entry.headHash}`;
+  const expected = new Set(right.map(key));
+  return expected.size === right.length && left.every((entry) => expected.has(key(entry)));
 }
 
 export function classifyRevokedOperation(input: {

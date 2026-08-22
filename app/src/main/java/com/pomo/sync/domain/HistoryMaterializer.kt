@@ -72,8 +72,12 @@ internal class HistoryMaterializer {
             }
             val selected = settlement?.selectedFactIds ?: blockFacts.mapTo(linkedSetOf()) { it.factId }
             if (tombstones.any { it.factId in selected }) return@forEach
-            val correction = corrections.filter { it.factId in selected }.singleOrNull()
-            visible[blockId] = correction?.replacement ?: creates.single().block
+            val selectedCorrections = corrections.filter { it.factId in selected }
+            if (selectedCorrections.size > 1) {
+                conflicts += blockId
+                return@forEach
+            }
+            visible[blockId] = selectedCorrections.singleOrNull()?.replacement ?: creates.single().block
         }
         return MaterializedHistory(visible, alternatives, conflicts)
     }

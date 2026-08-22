@@ -39,9 +39,26 @@ public class AuthorizationLedgerTest {
         val ledger = AuthorizationLedger.fromGenesis(identity)
         val firstId = IdentityCodec.deviceId(first)
         val readyId = id(10)
+        val readyFact = ready(firstId, identity.memberId)
+        assertEquals(
+            AuthorityDisposition.REJECTED_INVALID,
+            ledger.apply(
+                readyFact,
+                id(9),
+                firstId,
+                false,
+                listOf(FeedFrontier(firstId, incarnation(), 1, id(31))),
+            ),
+        )
         assertEquals(
             AuthorityDisposition.ACCEPTED,
-            ledger.apply(ready(firstId, identity.memberId), readyId, firstId, false),
+            ledger.apply(
+                readyFact,
+                readyId,
+                firstId,
+                false,
+                readyFact.baselineFrontier,
+            ),
         )
 
         val joining = certificate(5)
@@ -69,7 +86,14 @@ public class AuthorizationLedgerTest {
         val admitId = id(11)
         val revokeId = id(12)
         val ledger = AuthorizationLedger.fromGenesis(identity)
-        ledger.apply(ready(firstId, identity.memberId), readyId, firstId, false)
+        val readyFact = ready(firstId, identity.memberId)
+        ledger.apply(
+            readyFact,
+            readyId,
+            firstId,
+            false,
+            readyFact.baselineFrontier,
+        )
         ledger.apply(admit(identity.memberId, target, targetId, readyId), admitId, firstId, false)
         assertEquals(
             AuthorityDisposition.ACCEPTED,

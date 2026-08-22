@@ -302,9 +302,9 @@ internal class RoomOperationStore(
         val prefixSequence = minOf(durableHead?.sequence ?: 0, effectiveForkAt - 1)
         val prefix =
             if (prefixSequence > 0) {
-                requireNotNull(dao.acceptedAt(incoming.deviceId, incoming.incarnationId, prefixSequence)) {
-                    "Fork prefix must reference an accepted Operation"
-                }
+                dao.acceptedAt(incoming.deviceId, incoming.incarnationId, prefixSequence)?.operationId
+                    ?: dao.checkpointOperationAt(incoming.deviceId, incoming.incarnationId, prefixSequence)
+                    ?: error("Fork prefix must reference an accepted or checkpoint Operation")
             } else {
                 null
             }
@@ -313,7 +313,7 @@ internal class RoomOperationStore(
                 incoming.deviceId,
                 incoming.incarnationId,
                 prefixSequence,
-                prefix?.operationId,
+                prefix,
                 forkedAt = effectiveForkAt,
             ),
         )

@@ -46,6 +46,16 @@ internal interface SyncDao {
     ): SyncOperationEntity?
 
     @Query(
+        "SELECT operationId FROM sync_checkpoint_operations " +
+            "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence = :sequence",
+    )
+    fun checkpointOperationAt(
+        deviceId: String,
+        incarnationId: String,
+        sequence: Long,
+    ): String?
+
+    @Query(
         "UPDATE sync_operations SET disposition = 'QUARANTINED_FORK' " +
             "WHERE deviceId = :deviceId AND incarnationId = :incarnationId AND sequence >= :sequence",
     )

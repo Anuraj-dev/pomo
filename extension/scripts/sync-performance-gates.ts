@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { parseSyncUiState, DORMANT_SYNC_UI_STATE } from "../src/sync/ui/syncUiState";
-import { OperationKernel, type OperationJournalEntry } from "../src/sync/kernel/OperationKernel";
+import { allowAllOperationAuthorization, OperationKernel, type OperationJournalEntry } from "../src/sync/kernel/OperationKernel";
 import { SharedPreferenceProjection, encodeSharedPreferenceFact } from "../src/sync/materialize/sharedPreferences";
 import type { AuthenticatedOperation } from "../src/sync/protocol/types";
 
@@ -31,7 +31,7 @@ const authorRequest = (index: number) => ({
   payload: encodeSharedPreferenceFact("benchmark", String(index)), completePrerequisites: new Set(["PROFILE_FRONTIER"]), authorized: true, deviceReady: true,
 });
 const authoringProjection = new SharedPreferenceProjection();
-const authoringKernel = new OperationKernel(verifier, signer, journal, authoringProjection);
+const authoringKernel = new OperationKernel(verifier, signer, journal, authoringProjection, allowAllOperationAuthorization);
 const localSamples: number[] = [];
 const authored: AuthenticatedOperation[] = [];
 for (let index = 0; index < BENCHMARK_OPERATION_COUNT; index++) {
@@ -43,7 +43,7 @@ for (let index = 0; index < BENCHMARK_OPERATION_COUNT; index++) {
 }
 
 const replayProjection = new SharedPreferenceProjection();
-const replayKernel = new OperationKernel(verifier, signer, journal, replayProjection);
+const replayKernel = new OperationKernel(verifier, signer, journal, replayProjection, allowAllOperationAuthorization);
 const backlog = authored.map((operation) => ({ id: operation.operationId, wire: operation.signedEnvelope }));
 const backlogStart = now(); let maximumBatchBytes = 0; let blockingMaximumMs = 0;
 for (let offset = 0; offset < backlog.length; offset += BENCHMARK_BATCH_SIZE) {

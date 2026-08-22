@@ -49,12 +49,15 @@ internal class WebDavMailbox(
         runCatching {
             objects.forEach { expected ->
                 client.createIfAbsent(expected.objectId, expected.bytes.copyOf())
-                val retrieved = requireNotNull(client.get(expected.objectId)) { "Mailbox object is missing" }
-                require(retrieved.size.toLong() == expected.size)
-                require(PomoCrypto.sha256(retrieved).hex() == expected.sha256)
+                val retrieved =
+                    client.get(expected.objectId)
+                        ?: return MailboxProtection(mailboxId, false, MailboxFailure.MISSING_OBJECT)
+                if (retrieved.size.toLong() != expected.size || PomoCrypto.sha256(retrieved).hex() != expected.sha256) {
+                    return MailboxProtection(mailboxId, false, MailboxFailure.ROLLBACK)
+                }
             }
             MailboxProtection(mailboxId, true, null)
-        }.getOrElse { MailboxProtection(mailboxId, false, MailboxFailure.NETWORK) }
+        }.getOrElse { MailboxProtection(mailboxId, false, classifyFailure(it)) }
 
     fun challenge(expected: MailboxObject): Boolean {
         val bytes = client.get(expected.objectId) ?: return false
@@ -62,6 +65,16 @@ internal class WebDavMailbox(
     }
 
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+    private fun classifyFailure(error: Throwable): MailboxFailure {
+        val message = generateSequence(error) { it.cause }.joinToString(" ") { it.message.orEmpty() }
+        return when {
+            Regex("(?i)401|403|credential|authorization").containsMatchIn(message) -> MailboxFailure.CREDENTIAL
+            Regex("(?i)507|413|quota").containsMatchIn(message) -> MailboxFailure.QUOTA
+            Regex("(?i)cors").containsMatchIn(message) -> MailboxFailure.CORS
+            else -> MailboxFailure.NETWORK
+        }
+    }
 }
 
 internal fun repairMailbox(

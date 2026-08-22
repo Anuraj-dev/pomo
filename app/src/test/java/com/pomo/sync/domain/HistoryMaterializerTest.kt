@@ -39,6 +39,23 @@ public class HistoryMaterializerTest {
     }
 
     @Test
+    public fun settlementSelectingMultipleCorrectionsRemainsConflicted() {
+        val original = block("block-2", 1_500, "tag-work", "Work")
+        val facts =
+            listOf(
+                HistoryFact.Create("create", original),
+                HistoryFact.Correct("correct-a", original.blockId, original.copy(elapsedMillis = 1_600)),
+                HistoryFact.Correct("correct-b", original.blockId, original.copy(elapsedMillis = 1_700)),
+                HistoryFact.Settle("settle", original.blockId, setOf("create", "correct-a", "correct-b")),
+            )
+
+        val materialized = HistoryMaterializer().materialize(facts)
+
+        assertTrue(original.blockId in materialized.conflicts)
+        assertTrue(original.blockId !in materialized.visible)
+    }
+
+    @Test
     public fun tagIdentitySurvivesRenameArchiveRestoreAndMerge() {
         val work = SessionTag("tag-work", "Work", 0)
         val study = SessionTag("tag-study", "Study", 1)

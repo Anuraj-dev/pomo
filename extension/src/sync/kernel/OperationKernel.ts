@@ -18,6 +18,13 @@ import {
 export interface OperationVerifier {
   verify(signedEnvelope: Uint8Array): Promise<AuthenticatedOperation>;
 }
+export type OperationAuthorizationDecision = "AUTHORIZED" | "REJECTED_INVALID" | "QUARANTINED_FORK";
+export interface OperationAuthorizationPolicy {
+  authorize(operation: AuthenticatedOperation): OperationAuthorizationDecision;
+}
+export const allowAllOperationAuthorization: OperationAuthorizationPolicy = {
+  authorize: () => "AUTHORIZED",
+};
 export interface OperationSigner {
   sign(operation: UnsignedOperation, payload: Uint8Array, canonicalUnsigned: Uint8Array, operationId: string): Promise<Uint8Array>;
 }
@@ -119,6 +126,7 @@ export class OperationKernel {
     private readonly signer: OperationSigner,
     private readonly journal: OperationJournal,
     private readonly materializer: OperationMaterializer,
+    private readonly authorization: OperationAuthorizationPolicy,
   ) {}
 
   author(request: AuthorRequest): Promise<AuthorResult> {
@@ -216,6 +224,12 @@ export class OperationKernel {
       await this.#recordBatch([{ operation, disposition: "DUPLICATE", localAuthor }]);
       return "DUPLICATE";
     }
+    const authorization = this.authorization.authorize(operation);
+    if (authorization === "REJECTED_INVALID") {
+      await this.#recordBatch([{ operation, disposition: "REJECTED_INVALID", localAuthor }]);
+      return "REJECTED_INVALID";
+    }
+    if (authorization === "QUARANTINED_FORK") return this.#quarantineAuthorized(operation, localAuthor);
     const key = this.#feedKey(operation.unsigned);
     const existingFeed = this.#feeds.get(key);
     const feed = existingFeed ?? this.#newFeed();
@@ -294,6 +308,24 @@ export class OperationKernel {
       this.#uncommittedSnapshot = null;
     }
     return disposition;
+  }
+
+  async #quarantineAuthorized(operation: AuthenticatedOperation, localAuthor: boolean): Promise<"QUARANTINED_FORK"> {
+    const snapshot = this.#captureState();
+    const key = this.#feedKey(operation.unsigned);
+    const feed = this.#feeds.get(key) ?? this.#newFeed();
+    this.#feeds.set(key, feed);
+    feed.forkedAt = Math.min(feed.forkedAt ?? operation.unsigned.sequence, operation.unsigned.sequence);
+    feed.candidates.set(operation.unsigned.sequence, operation);
+    this.#knownIds.add(operation.operationId);
+    this.#quarantined.add(operation.operationId);
+    try {
+      await this.#recordBatch([{ operation, disposition: "QUARANTINED_FORK", localAuthor }]);
+      return "QUARANTINED_FORK";
+    } catch (error) {
+      this.#restoreState(snapshot);
+      throw error;
+    }
   }
 
   summarize(): KernelSummary {
@@ -389,7 +421,7 @@ export class OperationKernel {
       validate: (operation) => this.materializer.validate(operation),
       prepareReplace: () => () => {},
       replace: () => {},
-    });
+    }, this.authorization);
     for (const [key, feed] of restored) {
       staged.#feeds.set(key, feed);
       for (const id of feed.checkpointIds.values()) staged.#knownIds.add(id);

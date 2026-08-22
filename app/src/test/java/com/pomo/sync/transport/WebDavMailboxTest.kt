@@ -25,6 +25,44 @@ public class WebDavMailboxTest {
         assertEquals(setOf("a", "b"), target.objects.keys)
     }
 
+    @Test
+    public fun protectionPreservesMissingRollbackAndTransportFailureClasses() {
+        val bytes = byteArrayOf(1, 2, 3)
+        val expected = MailboxObject("object", bytes, PomoCrypto.sha256(bytes).hex(), bytes.size.toLong())
+
+        val missing =
+            WebDavMailbox(
+                "primary",
+                object : ImmutableMailboxClient {
+                    override fun createIfAbsent(
+                        objectId: String,
+                        bytes: ByteArray,
+                    ): Boolean = true
+
+                    override fun get(objectId: String): ByteArray? = null
+                },
+            ).protect(listOf(expected))
+        assertEquals(MailboxFailure.MISSING_OBJECT, missing.failure)
+
+        val rolledBack = MemoryMailbox(mutableMapOf(expected.objectId to byteArrayOf(9)))
+        val rollback = WebDavMailbox("primary", rolledBack).protect(listOf(expected))
+        assertEquals(MailboxFailure.ROLLBACK, rollback.failure)
+
+        val unauthorized =
+            WebDavMailbox(
+                "primary",
+                object : ImmutableMailboxClient {
+                    override fun createIfAbsent(
+                        objectId: String,
+                        bytes: ByteArray,
+                    ): Boolean = error("WEBDAV_401")
+
+                    override fun get(objectId: String): ByteArray? = null
+                },
+            ).protect(listOf(expected))
+        assertEquals(MailboxFailure.CREDENTIAL, unauthorized.failure)
+    }
+
     private class MemoryMailbox(val objects: MutableMap<String, ByteArray> = linkedMapOf()) : ImmutableMailboxClient {
         override fun createIfAbsent(
             objectId: String,

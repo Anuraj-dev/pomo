@@ -13,6 +13,7 @@ import {
   SYNC_PREFERENCE_STORE,
 } from "../../src/db/schema";
 import {
+  allowAllOperationAuthorization,
   OperationKernel,
   type OperationSigner,
   type OperationVerifier,
@@ -378,7 +379,7 @@ describe("dormant IndexedDB Device-feed persistence", () => {
     const crypto = new PersistenceFixtureCrypto();
     const dao = new IndexedDbOperationDao();
     const visible = new SharedPreferenceProjection();
-    const kernel = new OperationKernel(crypto, crypto, new IndexedDbKernelJournal(dao), visible);
+    const kernel = new OperationKernel(crypto, crypto, new IndexedDbKernelJournal(dao), visible, allowAllOperationAuthorization);
     const authored = await kernel.author({
       memberId: MEMBER,
       deviceId: DEVICE,
