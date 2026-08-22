@@ -38,7 +38,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Ordinary drain calls replicaLanDrainRoutes(), but Chrome source does not install a live peer session into the worker. Two-profile Chrome physical evidence is also missing."
+      "blockedReason": "Chrome worker now installs a live ReplicaLanSession and offscreen DataChannel peers. Two-profile physical evidence is still missing, and SDP still needs a configured Nostr rendezvous."
     },
     {
       "id": "lan",

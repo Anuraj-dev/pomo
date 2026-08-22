@@ -75,3 +75,48 @@ export function webRtcInboxDrainRoutes(): DrainRoute[] {
 export function turnConfigured(): boolean {
   return iceConfig.turnUrls.length > 0;
 }
+
+const INBOX_DB = "pomo-webrtc-inbox";
+const INBOX_STORE = "inbox";
+
+function openPackagedWebRtcInbox(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(INBOX_DB, 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains(INBOX_STORE)) {
+        request.result.createObjectStore(INBOX_STORE, { keyPath: "id", autoIncrement: true });
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/** Reads and clears the offscreen document's durable WebRTC inbox. */
+export function packagedWebRtcInbox(): WebRtcInboxStore {
+  return {
+    async takeAll(): Promise<readonly StagedWebRtcMessage[]> {
+      const db = await openPackagedWebRtcInbox();
+      try {
+        return await new Promise((resolve, reject) => {
+          const tx = db.transaction(INBOX_STORE, "readwrite");
+          const store = tx.objectStore(INBOX_STORE);
+          const request = store.getAll();
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            const rows = (request.result as Array<{ routeId: string; bytes: number[]; receivedAt: number }>).map((row) => ({
+              routeId: row.routeId,
+              bytes: new Uint8Array(row.bytes),
+              receivedAt: row.receivedAt,
+            }));
+            store.clear();
+            tx.oncomplete = () => resolve(rows);
+            tx.onerror = () => reject(tx.error);
+          };
+        });
+      } finally {
+        db.close();
+      }
+    },
+  };
+}

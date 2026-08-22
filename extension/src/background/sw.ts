@@ -46,6 +46,7 @@ import { ingestReplicaLan, replicaLanDrainRoutes } from "../sync/transport/repli
 import { nostrRendezvousDrainRoutes } from "../sync/transport/nostrRendezvous";
 import { webDavMailboxDrainRoutes } from "../sync/transport/webDavMailbox";
 import { webRtcInboxDrainRoutes } from "../sync/transport/webRtcInbox";
+import { ensurePackagedChromeLivePeer, handleLivePeerRuntimeMessage, isLivePeerRuntimeMessage } from "../sync/transport/chromeLivePeer";
 import {
   completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
@@ -603,6 +604,7 @@ async function init(): Promise<void> {
   }
   if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
     startReplicaTimer("chrome-local");
+    await ensurePackagedChromeLivePeer();
   }
   await ensureAlarm();
   await consumeOrdinaryDrainRequest();
@@ -851,6 +853,7 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
   try {
     let outcome = "skipped";
     if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
+      await ensurePackagedChromeLivePeer();
       const operationDao = new IndexedDbOperationDao();
       const result = await drainOrdinaryOutbox({
         obligations: envelopesFrom(await operationDao.reconstruct()),
@@ -921,6 +924,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  if (isLivePeerRuntimeMessage(message)) {
+    void initOnce()
+      .then(() => handleLivePeerRuntimeMessage(message))
+      .then(() => sendResponse({ ok: true }))
+      .catch((error: unknown) => {
+        sendResponse({ ok: false, error: error instanceof Error ? error.message : String(error) });
+      });
+    return true;
+  }
   if (!isPomoRequest(message)) return;
   void initOnce()
     .then(() => handleRequest(message))
