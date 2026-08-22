@@ -1,5 +1,7 @@
 import { DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain, SYNC_DRAIN_REQUEST_KEY, SYNC_UI_STATE_KEY, type SyncUiState } from "./syncUiState";
 import { requireSafeDiagnostic, streamDiagnosticExport, type DiagnosticEvent } from "../diagnostics/diagnosticExport";
+import { resumeAdmission } from "../identity/admissionRuntime";
+import { chromeLivePeerStorage, ensurePackagedChromeLivePeer, loadOrCreateLivePeerIdentity } from "../transport/chromeLivePeer";
 
 export type SyncPanelDensity = "compact" | "panel" | "full";
 
@@ -26,6 +28,11 @@ export function bootSyncPanel(root: HTMLElement, density: SyncPanelDensity): () 
         [SYNC_UI_STATE_KEY]: current,
       });
     }
+    if (action === "admission-resume") void admitFromPanel(root, current, null).then((next) => { current = next; render(root, current, density); });
+    if (action === "admission-admit") {
+      const remote = root.querySelector<HTMLTextAreaElement>("#syncAdmissionRemote")?.value ?? "";
+      void admitFromPanel(root, current, remote).then((next) => { current = next; render(root, current, density); });
+    }
     if (action === "recovery-confirm") void confirmForwardRestore(current).then((next) => { current = next; render(root, current, density); });
     if (action === "diagnostics-export" && diagnosticAbort === null) {
       diagnosticAbort = new AbortController();
@@ -47,10 +54,14 @@ function render(root: HTMLElement, state: SyncUiState, density: SyncPanelDensity
 }
 
 function fullWorkbench(): string {
-  return `<div class="sync-workbench"><section aria-labelledby="admission-title"><h2 id="admission-title">Admission</h2><p id="syncAdmission"></p><code id="syncAdmissionFingerprint"></code></section><section aria-labelledby="migration-title"><h2 id="migration-title">Migration</h2><p id="syncMigration"></p><code id="syncMigrationFingerprint"></code></section><section class="sync-span" aria-labelledby="history-title"><h2 id="history-title">Data History</h2><p>Chronology is causal. Provenance, disposition, and projection effect remain inspectable.</p><div class="sync-history" id="syncHistory"></div></section><section class="sync-span" aria-labelledby="recovery-title"><h2 id="recovery-title">Recovery workbench</h2><p id="syncRecovery"></p><ol id="syncRecoveryOperations"></ol><button type="button" id="syncRecoveryConfirm" disabled>Confirm forward restore</button><small>Creates a Safety checkpoint before compensating Operations. Active phases and authority cannot be rewound.</small></section><section class="sync-span" aria-labelledby="diagnostics-title"><h2 id="diagnostics-title">Diagnostics</h2><p>Sanitized local evidence only. No implicit upload or centralized telemetry.</p><div class="sync-actions"><button type="button" data-sync-action="diagnostics-export">Export diagnostics</button><button type="button" data-sync-action="diagnostics-cancel">Cancel export</button></div><p id="syncDiagnosticStatus" role="status"></p></section></div>`;
+  return `<div class="sync-workbench"><section aria-labelledby="admission-title"><h2 id="admission-title">Admission</h2><p id="syncAdmission"></p><code id="syncAdmissionFingerprint"></code><pre id="syncAdmissionOffer" class="num"></pre><textarea id="syncAdmissionRemote" rows="4" placeholder="Paste the other replica's offer"></textarea><div class="sync-actions"><button type="button" data-sync-action="admission-resume">Resume Admission</button><button type="button" data-sync-action="admission-admit">Admit pasted offer</button></div></section><section aria-labelledby="migration-title"><h2 id="migration-title">Migration</h2><p id="syncMigration"></p><code id="syncMigrationFingerprint"></code></section><section class="sync-span" aria-labelledby="history-title"><h2 id="history-title">Data History</h2><p>Chronology is causal. Provenance, disposition, and projection effect remain inspectable.</p><div class="sync-history" id="syncHistory"></div></section><section class="sync-span" aria-labelledby="recovery-title"><h2 id="recovery-title">Recovery workbench</h2><p id="syncRecovery"></p><ol id="syncRecoveryOperations"></ol><button type="button" id="syncRecoveryConfirm" disabled>Confirm forward restore</button><small>Creates a Safety checkpoint before compensating Operations. Active phases and authority cannot be rewound.</small></section><section class="sync-span" aria-labelledby="diagnostics-title"><h2 id="diagnostics-title">Diagnostics</h2><p>Sanitized local evidence only. No implicit upload or centralized telemetry.</p><div class="sync-actions"><button type="button" data-sync-action="diagnostics-export">Export diagnostics</button><button type="button" data-sync-action="diagnostics-cancel">Cancel export</button></div><p id="syncDiagnosticStatus" role="status"></p></section></div>`;
 }
 function renderFull(root: HTMLElement, state: SyncUiState): void {
   setText(root, "#syncAdmission", `${state.admission.stage}${state.admission.resumable ? " · resumable" : ""}`); setText(root, "#syncAdmissionFingerprint", state.admission.fingerprint ?? "Fingerprint pending");
+  void chrome.storage.local.get("pomo:sync:admission-offer").then((stored) => {
+    const offer = stored["pomo:sync:admission-offer"];
+    if (typeof offer === "string") setText(root, "#syncAdmissionOffer", offer);
+  });
   setText(root, "#syncMigration", `${state.migration.stage}${state.migration.resumable ? " · resumable" : ""}`); setText(root, "#syncMigrationFingerprint", state.migration.fingerprint ?? "Fingerprint pending");
   const history = root.querySelector("#syncHistory")!;
   if (state.history.length === 0) history.textContent = "No synchronized Operations yet. Local history remains available.";
@@ -62,6 +73,17 @@ function renderFull(root: HTMLElement, state: SyncUiState): void {
 }
 function setText(root: HTMLElement, selector: string, value: string): void { const element = root.querySelector(selector); if (element !== null) element.textContent = value; }
 function renderError(root: HTMLElement, density: SyncPanelDensity): void { root.setAttribute("aria-busy", "false"); root.dataset["health"] = "STALLED"; root.innerHTML = `<h${density === "full" ? "1" : "2"}>Sync</h${density === "full" ? "1" : "2"}><p role="alert">Sync state could not be read. Timer rendering is unaffected.</p><button type="button" data-sync-action="retry">Retry now</button>`; }
+
+async function admitFromPanel(root: HTMLElement, _current: SyncUiState, remote: string | null): Promise<SyncUiState> {
+  const storage = chromeLivePeerStorage();
+  const identity = await loadOrCreateLivePeerIdentity(storage);
+  const result = await resumeAdmission({ storage, lanDeviceId: identity.deviceId, remoteOffer: remote });
+  await chrome.storage.local.set({ [SYNC_UI_STATE_KEY]: result.state, "pomo:sync:admission-offer": result.offer });
+  await ensurePackagedChromeLivePeer();
+  const offerEl = root.querySelector("#syncAdmissionOffer");
+  if (offerEl !== null) offerEl.textContent = result.offer;
+  return result.state;
+}
 
 async function exportDiagnostics(root: HTMLElement, signal: AbortSignal): Promise<void> {
   const status = root.querySelector<HTMLElement>("#syncDiagnosticStatus"); if (status !== null) status.textContent = "Preparing sanitized export…";
