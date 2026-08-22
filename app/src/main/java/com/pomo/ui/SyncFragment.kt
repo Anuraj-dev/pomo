@@ -18,6 +18,7 @@ import com.pomo.MainActivity
 import com.pomo.sync.diagnostics.DiagnosticEvent
 import com.pomo.sync.diagnostics.DiagnosticExporter
 import com.pomo.sync.diagnostics.EvidenceArea
+import com.pomo.sync.identity.ReplicaAdmission
 import com.pomo.sync.transport.OrdinaryDrainScheduler
 import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.sync.ui.completeOrdinaryDrain
@@ -76,12 +77,11 @@ public class SyncFragment : Fragment() {
                         },
                         onResumeAdmission = {
                             if (state.admission.resumable) {
-                                state =
-                                    state.copy(
-                                        admission = state.admission.copy(stage = "Resumed locally"),
-                                    )
-                                SyncSafetyGate.state = state
+                                state = ReplicaAdmission.resume(requireContext(), null)
                             }
+                        },
+                        onAdmitRemote = { offer ->
+                            state = ReplicaAdmission.resume(requireContext(), offer)
                         },
                         onResumeMigration = {
                             if (state.migration.resumable) {

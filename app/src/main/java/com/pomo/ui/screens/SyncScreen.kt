@@ -22,8 +22,13 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -49,6 +54,7 @@ public fun SyncScreen(
     onConfirmRecovery: () -> Unit,
     onExportDiagnostics: () -> Unit,
     onBack: () -> Unit,
+    onAdmitRemote: (String) -> Unit = {},
 ) {
     Column(
         modifier =
@@ -124,6 +130,39 @@ public fun SyncScreen(
             item {
                 SectionBlock(title = "Admission") {
                     WorkflowBody(state.admission, "Admission", onResumeAdmission)
+                    if (state.admissionOffer.isNotEmpty()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            "Local offer. Compare fingerprints, then paste the other replica here.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = PomoTokens.colors.onSurfaceMuted,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            state.admissionOffer,
+                            fontFamily = JetBrainsMono,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                    }
+                    var remoteOffer by remember { mutableStateOf("") }
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = remoteOffer,
+                        onValueChange = { remoteOffer = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Other replica offer") },
+                        minLines = 3,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PomoButton(
+                        onClick = { onAdmitRemote(remoteOffer) },
+                        enabled = remoteOffer.isNotBlank(),
+                        variant = PomoButtonVariant.Tonal,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Admit pasted offer")
+                    }
                 }
             }
             item {
