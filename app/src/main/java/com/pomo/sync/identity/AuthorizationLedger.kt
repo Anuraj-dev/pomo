@@ -1,5 +1,6 @@
 package com.pomo.sync.identity
 
+import com.pomo.sync.protocol.FeedFrontier
 import com.pomo.sync.protocol.ProtocolBytes
 
 internal enum class AuthorityDisposition {
