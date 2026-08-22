@@ -86,13 +86,19 @@ jobs:
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/dev/debug/app-dev-debug.apk
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/prod/debug/app-prod-debug.apk
 
+      - name: Stage Android sync artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p android-sync-artifacts
+          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk android-sync-artifacts/
+          cp app/build/outputs/apk/prod/debug/app-prod-debug.apk android-sync-artifacts/
+
       - name: Upload Android sync artifacts
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: android-sync-artifacts
-          path: |
-            app/build/outputs/apk/dev/debug/app-dev-debug.apk
-            app/build/outputs/apk/prod/debug/app-prod-debug.apk
+          path: android-sync-artifacts/
           if-no-files-found: error
 
   extension-check:
@@ -207,14 +213,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          echo "downloaded layout:"
+          find validation-bundle -type f | sort
+          flatten() {
+            local name="$1"
+            local found
+            found="$(find validation-bundle -name "$name" -type f | head -n 1)"
+            if [ -z "$found" ]; then
+              echo "missing $name in validation-bundle" >&2
+              exit 1
+            fi
+            if [ "$found" != "validation-bundle/$name" ]; then
+              cp "$found" "validation-bundle/$name"
+            fi
+          }
+          flatten app-dev-debug.apk
+          flatten app-prod-debug.apk
+          flatten pomo-sync-test-extension.zip
           cp docs/sync-validation-runbook.md docs/sync-merge-order.md \
             sync-protocol/activation/physical-matrix.json \
             sync-protocol/fixtures/system-generation.json \
             scripts/install-sync-validation.sh \
             validation-bundle/
-          test -f validation-bundle/app-dev-debug.apk
-          test -f validation-bundle/app-prod-debug.apk
-          test -f validation-bundle/pomo-sync-test-extension.zip
           python3 -c 'import json; d=json.load(open("sync-protocol/fixtures/system-generation.json")); assert d["productionActivation"] is False'
           {
             echo "commit=${GITHUB_SHA}"
