@@ -38,7 +38,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Live session, HTTP replica peers, and optional Nostr/WebDAV catch-up install in the worker. Two-profile Chrome physical evidence is still missing."
+      "blockedReason": "Chrome live WebRTC now exchanges replaceable encrypted SDP over Nostr rendezvous. Two-profile physical evidence has not been collected."
     },
     {
       "id": "lan",

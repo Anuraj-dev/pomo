@@ -60,7 +60,7 @@ describe("replica offer and HTTP peer", () => {
         ingest: () => "ACCEPTED",
         outbox: () => [],
         inbox: { takeAll: () => [] },
-        pipe: { ensureDocument: async () => {}, open: async () => ({}), addCandidate: async () => {}, send: async () => {}, close: async () => {} },
+        pipe: { ensureDocument: async () => {}, open: async () => ({}), setRemoteDescription: async () => {}, waitUntilOpen: async () => {}, addCandidate: async () => {}, send: async () => {}, close: async () => {} },
       });
       const envelope = { operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([9]) };
       const delivered: string[] = [];

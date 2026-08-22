@@ -25,7 +25,14 @@ import {
   webRtcInboxDrainRoute,
   type WebRtcInboxStore,
 } from "./webRtcInbox";
-import { installNostrRendezvousRoutes, NostrRendezvousSession, type NostrSyncEvent, type NostrSyncTransport } from "./nostrRendezvous";
+import {
+  importRendezvousSignalKey,
+  installNostrRendezvousRoutes,
+  NostrRendezvousSession,
+  WebRtcRendezvousSignaling,
+  type NostrSyncEvent,
+  type NostrSyncTransport,
+} from "./nostrRendezvous";
 import { installWebDavMailboxFromConfig, type MailboxEndpointConfig } from "./webDavMailbox";
 import {
   ensureWebRtcOffscreenDocument,
@@ -57,6 +64,8 @@ export interface LivePeerIdentity {
 export interface LivePeerPipe {
   ensureDocument(): Promise<void>;
   open(routeId: string, iceServers: readonly RTCIceServer[], remoteDescription?: RTCSessionDescriptionInit): Promise<{ readonly description?: RTCSessionDescriptionInit | null }>;
+  setRemoteDescription(routeId: string, remoteDescription: RTCSessionDescriptionInit): Promise<void>;
+  waitUntilOpen(routeId: string): Promise<void>;
   addCandidate(routeId: string, candidate: RTCIceCandidateInit): Promise<void>;
   send(routeId: string, bytes: Uint8Array): Promise<void>;
   close(routeId: string): Promise<void>;
@@ -73,6 +82,7 @@ interface StoredIdentity {
 }
 
 let current: LivePeerRuntime | null = null;
+const runtimes = new Set<LivePeerRuntime>();
 
 export function chromeLivePeerStorage(): LivePeerStorage {
   return {
@@ -111,11 +121,13 @@ export class MemoryLivePipe implements LivePeerPipe {
   }
 
   async ensureDocument(): Promise<void> {}
-  async open(): Promise<{ readonly description?: RTCSessionDescriptionInit | null }> {
+  async open(_routeId: string, _iceServers: readonly RTCIceServer[], _remoteDescription?: RTCSessionDescriptionInit): Promise<{ readonly description?: RTCSessionDescriptionInit | null }> {
     return {};
   }
-  async addCandidate(): Promise<void> {}
-  async close(): Promise<void> {}
+  async setRemoteDescription(_routeId: string, _remoteDescription: RTCSessionDescriptionInit): Promise<void> {}
+  async waitUntilOpen(_routeId: string): Promise<void> {}
+  async addCandidate(_routeId: string, _candidate: RTCIceCandidateInit): Promise<void> {}
+  async close(_routeId: string): Promise<void> {}
   async send(routeId: string, bytes: Uint8Array): Promise<void> {
     const peer = this.peer;
     if (peer === null) throw new Error("memory live pipe has no peer");
@@ -140,6 +152,16 @@ export class ChromeOffscreenPipe implements LivePeerPipe {
     return { description: result?.description ?? null };
   }
 
+  async setRemoteDescription(routeId: string, remoteDescription: RTCSessionDescriptionInit): Promise<void> {
+    const result = await chrome.runtime.sendMessage({ type: "POMO_WEBRTC_REMOTE", routeId, remoteDescription });
+    if (result?.ok === false) throw new Error(result.error ?? "WebRTC remote description failed");
+  }
+
+  async waitUntilOpen(routeId: string): Promise<void> {
+    const result = await chrome.runtime.sendMessage({ type: "POMO_WEBRTC_WAIT_OPEN", routeId });
+    if (result?.ok === false) throw new Error(result.error ?? "WebRTC datachannel failed");
+  }
+
   async addCandidate(routeId: string, candidate: RTCIceCandidateInit): Promise<void> {
     const result = await chrome.runtime.sendMessage({ type: "POMO_WEBRTC_CANDIDATE", routeId, candidate });
     if (result?.ok === false) throw new Error(result.error ?? "WebRTC candidate failed");
@@ -157,6 +179,7 @@ export class ChromeOffscreenPipe implements LivePeerPipe {
 }
 
 class LivePeerRuntime {
+  closed = false;
   readonly pending = new Map<string, { resolve(response: ReplicaLanResponse): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
 
   constructor(
@@ -214,6 +237,7 @@ class LivePeerRuntime {
   }
 
   reset(): void {
+    this.closed = true;
     for (const waiter of this.pending.values()) {
       clearTimeout(waiter.timer);
       waiter.reject(new Error("live peer reset"));
@@ -230,25 +254,51 @@ export async function installChromeLivePeer(input: {
   readonly inbox?: WebRtcInboxStore;
   readonly obligations?: readonly DurableRouteObligation[];
   readonly identity?: LivePeerIdentity;
+  readonly signalingTransport?: NostrSyncTransport;
 }): Promise<LivePeerIdentity> {
   const identity = input.identity ?? await loadOrCreateLivePeerIdentity(input.storage);
-  const ice = iceFrom(await input.storage.get([LIVE_PEER_ICE_KEY]));
+  const stored = await input.storage.get([LIVE_PEER_ICE_KEY, LIVE_PEERS_KEY, RENDEZVOUS_KEY]);
+  const ice = iceFrom(stored);
   configureWebRtcIce(ice);
   const session = new ReplicaLanSession(identity.deviceId, identity.publicKey, identity.privateKey, input.ingest, input.outbox);
   const pipe = input.pipe ?? (typeof chrome !== "undefined" && chrome.offscreen !== undefined ? new ChromeOffscreenPipe() : null);
   const inbox = input.inbox ?? (typeof indexedDB !== "undefined" ? packagedWebRtcInbox() : null);
   const runtime = new LivePeerRuntime(identity, session, pipe, inbox, input.ingest);
-  const directory = directoryFrom(await input.storage.get([LIVE_PEERS_KEY]));
-  const peerIds = uniquePeerIds(identity.deviceId, directory, input.obligations ?? []);
+  const rendezvous = parseRendezvous(stored[RENDEZVOUS_KEY]);
+  const signaling = rendezvous === null
+    ? null
+    : new WebRtcRendezvousSignaling(
+      identity.deviceId,
+      rendezvous.sessionId,
+      await importRendezvousSignalKey(rendezvous.contentKey),
+      input.signalingTransport ?? new WebSocketNostrTransport(rendezvous.relays),
+      identity.deviceId,
+    );
+  const directory = directoryFrom(stored);
+  const peerIds = uniquePeerIds(identity.deviceId, directory, input.obligations ?? [], rendezvous?.peerDeviceIds ?? []);
+  const injectedPipe = input.pipe !== undefined;
   const peers: ReplicaLanPeer[] = peerIds.flatMap((deviceId) => {
     const endpoint = directory.find((entry) => entry.deviceId === deviceId)?.endpoint;
     if (endpoint !== undefined && endpoint.length > 0) return [httpReplicaPeer(deviceId, endpoint)];
     if (pipe === null) return [];
+    if (signaling === null && !injectedPipe) return [];
+    const servers = iceServers(ice);
     return [{
       deviceId,
       exchange: async (request) => {
-        await pipe.ensureDocument();
-        await pipe.open(deviceId, iceServers(ice));
+        if (signaling !== null) {
+          await createRemoteOffer({
+            localDeviceId: identity.deviceId,
+            peerDeviceId: deviceId,
+            pipe,
+            signaling,
+            iceServers: servers,
+          });
+        } else {
+          await pipe.ensureDocument();
+          await pipe.open(deviceId, servers);
+        }
+        await pipe.waitUntilOpen(deviceId);
         const response = runtime.waitForResponse(deviceId);
         await pipe.send(deviceId, encodeLanRequest(request));
         return response;
@@ -258,7 +308,11 @@ export async function installChromeLivePeer(input: {
   installReplicaLan({ session, peers, ingest: input.ingest });
   installWebRtcInboxRoutes(inbox === null ? [] : [webRtcInboxDrainRoute({ inbox, ingest: input.ingest })]);
   if (pipe instanceof MemoryLivePipe) pipe.onBytes = (routeId, bytes) => runtime.receive(routeId, bytes);
+  runtimes.add(runtime);
   current = runtime;
+  if (signaling !== null && pipe !== null) {
+    void watchIncomingOffers({ runtime, peerIds, directory, pipe, signaling, iceServers: iceServers(ice) });
+  }
   await runtime.pumpInbox();
   return identity;
 }
@@ -335,7 +389,7 @@ class WebSocketNostrTransport implements NostrSyncTransport {
   async publish(event: NostrSyncEvent): Promise<void> {
     await Promise.all(this.relays.map((url) => publishEvent(url, event)));
   }
-  async pull(filter: { readonly sessionId: string; readonly kinds: readonly number[] }): Promise<readonly NostrSyncEvent[]> {
+  async pull(filter: { readonly sessionId: string; readonly kinds: readonly number[]; readonly dTags?: readonly string[] }): Promise<readonly NostrSyncEvent[]> {
     const batches = await Promise.all(this.relays.map((url) => pullEvents(url, filter)));
     return batches.flat();
   }
@@ -361,7 +415,7 @@ async function publishEvent(url: string, event: NostrSyncEvent): Promise<void> {
   });
 }
 
-async function pullEvents(url: string, filter: { readonly sessionId: string; readonly kinds: readonly number[] }): Promise<NostrSyncEvent[]> {
+async function pullEvents(url: string, filter: { readonly sessionId: string; readonly kinds: readonly number[]; readonly dTags?: readonly string[] }): Promise<NostrSyncEvent[]> {
   const socket = new WebSocket(url);
   const events: NostrSyncEvent[] = [];
   await new Promise<void>((resolve, reject) => {
@@ -369,7 +423,7 @@ async function pullEvents(url: string, filter: { readonly sessionId: string; rea
       socket.close();
       resolve();
     }, 2_750);
-    socket.onopen = () => socket.send(JSON.stringify(["REQ", "pomo-sync", { kinds: [...filter.kinds], "#d": [filter.sessionId] }]));
+    socket.onopen = () => socket.send(JSON.stringify(["REQ", "pomo-sync", { kinds: [...filter.kinds], "#d": [...(filter.dTags ?? [filter.sessionId])] }]));
     socket.onerror = () => {
       clearTimeout(timer);
       reject(new Error("nostr pull failed"));
@@ -416,19 +470,121 @@ export async function handleLivePeerRuntimeMessage(message: { readonly type: str
   }
 }
 
+async function createRemoteOffer(input: {
+  readonly localDeviceId: string;
+  readonly peerDeviceId: string;
+  readonly pipe: LivePeerPipe;
+  readonly signaling: WebRtcRendezvousSignaling;
+  readonly iceServers: readonly RTCIceServer[];
+}): Promise<void> {
+  await input.pipe.ensureDocument();
+  const opened = await input.pipe.open(input.peerDeviceId, input.iceServers);
+  const description = opened.description;
+  if (description?.type !== "offer" || description.sdp === undefined || description.sdp.length === 0) {
+    throw new Error("missing local WebRTC offer");
+  }
+  await input.signaling.publish({
+    kind: "sdp-offer",
+    from: input.localDeviceId,
+    to: input.peerDeviceId,
+    sdpType: "offer",
+    sdp: description.sdp,
+  });
+  const answer = await input.signaling.waitFor(input.peerDeviceId, input.localDeviceId, "sdp-answer");
+  await input.pipe.setRemoteDescription(input.peerDeviceId, { type: answer.sdpType, sdp: answer.sdp });
+}
+
+async function acceptRemoteOffer(input: {
+  readonly localDeviceId: string;
+  readonly peerDeviceId: string;
+  readonly pipe: LivePeerPipe;
+  readonly signaling: WebRtcRendezvousSignaling;
+  readonly iceServers: readonly RTCIceServer[];
+  readonly offer: { readonly sdpType: "offer" | "answer"; readonly sdp: string };
+}): Promise<void> {
+  await input.pipe.ensureDocument();
+  const opened = await input.pipe.open(input.peerDeviceId, input.iceServers, { type: input.offer.sdpType, sdp: input.offer.sdp });
+  const description = opened.description;
+  if (description?.type !== "answer" || description.sdp === undefined || description.sdp.length === 0) {
+    throw new Error("missing local WebRTC answer");
+  }
+  await input.signaling.publish({
+    kind: "sdp-answer",
+    from: input.localDeviceId,
+    to: input.peerDeviceId,
+    sdpType: "answer",
+    sdp: description.sdp,
+  });
+}
+
+async function watchIncomingOffers(input: {
+  readonly runtime: LivePeerRuntime;
+  readonly peerIds: readonly string[];
+  readonly directory: readonly LivePeerDirectoryEntry[];
+  readonly pipe: LivePeerPipe;
+  readonly signaling: WebRtcRendezvousSignaling;
+  readonly iceServers: readonly RTCIceServer[];
+}): Promise<void> {
+  const answered = new Set<string>();
+  while (!input.runtime.closed) {
+    for (const peerId of input.peerIds) {
+      const endpoint = input.directory.find((entry) => entry.deviceId === peerId)?.endpoint;
+      if (endpoint !== undefined && endpoint.length > 0) continue;
+      if (answered.has(peerId)) continue;
+      const offer = (await input.signaling.pull(peerId, input.runtime.identity.deviceId)).filter((signal) => signal.kind === "sdp-offer").at(-1);
+      if (offer === undefined) continue;
+      try {
+        await acceptRemoteOffer({
+          localDeviceId: input.runtime.identity.deviceId,
+          peerDeviceId: peerId,
+          pipe: input.pipe,
+          signaling: input.signaling,
+          iceServers: input.iceServers,
+          offer,
+        });
+        answered.add(peerId);
+      } catch {
+        // keep polling; failed or superseded attempts expire
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
 export function resetChromeLivePeer(): void {
-  current?.reset();
+  for (const runtime of runtimes) runtime.reset();
+  runtimes.clear();
   current = null;
   installReplicaLan({ session: null, peers: [] });
   installWebRtcInboxRoutes([]);
 }
 
-function uniquePeerIds(localDeviceId: string, directory: readonly LivePeerDirectoryEntry[], obligations: readonly DurableRouteObligation[]): string[] {
+function uniquePeerIds(
+  localDeviceId: string,
+  directory: readonly LivePeerDirectoryEntry[],
+  obligations: readonly DurableRouteObligation[],
+  extraPeerIds: readonly string[] = [],
+): string[] {
   const ids = new Set<string>();
   for (const entry of directory) ids.add(entry.deviceId);
   for (const peerId of reconstructRoutePeers(obligations)) ids.add(peerId);
+  for (const peerId of extraPeerIds) {
+    if (/^[0-9a-f]{64}$/.test(peerId)) ids.add(peerId);
+  }
   ids.delete(localDeviceId);
   return [...ids].sort();
+}
+
+function parseRendezvous(value: unknown): { sessionId: string; contentKey: Uint8Array; relays: string[]; peerDeviceIds: string[] } | null {
+  if (typeof value !== "object" || value === null) return null;
+  const record = value as { sessionId?: unknown; contentKeyHex?: unknown; relays?: unknown; peerDeviceIds?: unknown };
+  if (typeof record.sessionId !== "string" || typeof record.contentKeyHex !== "string" || !/^[0-9a-f]{64}$/.test(record.contentKeyHex)) return null;
+  return {
+    sessionId: record.sessionId,
+    contentKey: hexToBytes(record.contentKeyHex),
+    relays: Array.isArray(record.relays) ? record.relays.filter((url): url is string => typeof url === "string") : [],
+    peerDeviceIds: Array.isArray(record.peerDeviceIds) ? record.peerDeviceIds.filter((id): id is string => typeof id === "string") : [],
+  };
 }
 
 function directoryFrom(stored: Record<string, unknown>): LivePeerDirectoryEntry[] {
