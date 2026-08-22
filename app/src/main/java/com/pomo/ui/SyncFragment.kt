@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import androidx.navigation.fragment.findNavController
 import com.pomo.MainActivity
 import com.pomo.sync.diagnostics.DiagnosticEvent
 import com.pomo.sync.diagnostics.DiagnosticExporter
@@ -109,6 +110,7 @@ public class SyncFragment : Fragment() {
                         onExportDiagnostics = {
                             diagnosticExport.launch("pomo-diagnostics.ndjson")
                         },
+                        onBack = { findNavController().popBackStack() },
                     )
                 }
             }

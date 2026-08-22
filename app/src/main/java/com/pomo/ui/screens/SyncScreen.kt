@@ -10,12 +10,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -26,7 +35,9 @@ import com.pomo.sync.ui.SyncUiState
 import com.pomo.sync.ui.SyncWorkflow
 import com.pomo.ui.components.PomoButton
 import com.pomo.ui.components.PomoButtonVariant
+import com.pomo.ui.components.SectionHeader
 import com.pomo.ui.theme.JetBrainsMono
+import com.pomo.ui.theme.PomoRadius
 import com.pomo.ui.theme.PomoTokens
 
 @Composable
@@ -37,163 +48,246 @@ public fun SyncScreen(
     onResumeMigration: () -> Unit,
     onConfirmRecovery: () -> Unit,
     onExportDiagnostics: () -> Unit,
+    onBack: () -> Unit,
 ) {
-    LazyColumn(
+    Column(
         modifier =
             Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Sync", style = MaterialTheme.typography.displayMedium)
-                    Text(state.summary, color = PomoTokens.colors.onSurfaceMuted)
-                }
-                Text(
-                    state.health.name.replace('_', ' '),
-                    fontFamily = JetBrainsMono,
-                    color = healthColor(state.health),
+        Row(
+            modifier = Modifier.padding(start = 8.dp, top = 12.dp, end = 20.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back to profile",
+                    tint = MaterialTheme.colorScheme.onSurface,
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.width(4.dp))
             Text(
-                state.detail,
-                style = MaterialTheme.typography.bodyMedium,
-                color = PomoTokens.colors.onSurfaceMuted,
+                "Sync",
+                style = MaterialTheme.typography.displayMedium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
         }
-        item { SignalRail(state.signals) }
-        item {
-            PomoButton(
-                onClick = onRetry,
-                enabled = !state.retryPending,
-                variant = PomoButtonVariant.Tonal,
-            ) {
-                Text(if (state.retryPending) "Retry scheduled" else "Retry now")
-            }
-            Text(
-                "Schedules the ordinary drain. Safety state is preserved.",
-                style = MaterialTheme.typography.bodySmall,
-                color = PomoTokens.colors.onSurfaceFaint,
-            )
-        }
-        item { WorkflowSection("Admission", state.admission, onResumeAdmission) }
-        item { WorkflowSection("Migration", state.migration, onResumeMigration) }
-        item {
-            SectionTitle("Data History")
-            Text(
-                "Causal chronology · provenance · disposition · projection effect",
-                color = PomoTokens.colors.onSurfaceMuted,
-            )
-        }
-        if (state.history.isEmpty()) {
+
+        LazyColumn(
+            contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 96.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp),
+        ) {
             item {
-                Text(
-                    "No synchronized Operations yet. Local history remains available.",
-                    color = PomoTokens.colors.onSurfaceMuted,
-                )
+                SyncCard {
+                    Text(
+                        state.health.name.replace('_', ' '),
+                        fontFamily = JetBrainsMono,
+                        fontWeight = FontWeight.SemiBold,
+                        color = healthColor(state.health),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        state.summary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        state.detail,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PomoButton(
+                        onClick = onRetry,
+                        enabled = !state.retryPending,
+                        variant = PomoButtonVariant.Tonal,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (state.retryPending) "Retry scheduled" else "Retry now")
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Schedules the ordinary drain. Safety state is preserved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PomoTokens.colors.onSurfaceFaint,
+                    )
+                }
+            }
+            item {
+                SectionBlock(title = "Signal rail") {
+                    SignalRail(state.signals)
+                }
+            }
+            item {
+                SectionBlock(title = "Admission") {
+                    WorkflowBody(state.admission, "Admission", onResumeAdmission)
+                }
+            }
+            item {
+                SectionBlock(title = "Migration") {
+                    WorkflowBody(state.migration, "Migration", onResumeMigration)
+                }
+            }
+            item {
+                SectionBlock(title = "Data History") {
+                    Text(
+                        "Causal chronology · provenance · disposition · projection effect",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    if (state.history.isEmpty()) {
+                        Text(
+                            "No synchronized Operations yet. Local history remains available.",
+                            color = PomoTokens.colors.onSurfaceMuted,
+                        )
+                    } else {
+                        state.history.forEachIndexed { index, item ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(vertical = 10.dp),
+                                    color = PomoTokens.colors.outline,
+                                )
+                            }
+                            HistoryRow(item)
+                        }
+                    }
+                }
+            }
+            item {
+                SectionBlock(title = "Recovery workbench") {
+                    Text(
+                        "${state.recovery.anchor ?: "No anchor"} · ${state.recovery.comparison}",
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    if (state.recovery.compensatingOperations.isEmpty()) {
+                        Text(
+                            "No compensating Operations selected.",
+                            color = PomoTokens.colors.onSurfaceFaint,
+                        )
+                    } else {
+                        state.recovery.compensatingOperations.forEach {
+                            Text("• $it", fontFamily = JetBrainsMono)
+                        }
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    PomoButton(
+                        onClick = onConfirmRecovery,
+                        enabled =
+                            state.recovery.compensatingOperations.isNotEmpty() &&
+                                !state.recovery.independentConfirmationRequired,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Confirm forward restore")
+                    }
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        "Creates a Safety checkpoint first. Active phases and authority cannot be rewound.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = PomoTokens.colors.onSurfaceFaint,
+                    )
+                }
+            }
+            item {
+                SectionBlock(title = "Diagnostics") {
+                    Text(
+                        "Sanitized local evidence only. No implicit upload or centralized telemetry.",
+                        color = PomoTokens.colors.onSurfaceMuted,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PomoButton(
+                        onClick = onExportDiagnostics,
+                        variant = PomoButtonVariant.Tonal,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Export diagnostics")
+                    }
+                }
             }
         }
-        items(state.history) { HistoryRow(it) }
-        item {
-            SectionTitle("Recovery workbench")
-            Text(
-                "${state.recovery.anchor ?: "No anchor"} · ${state.recovery.comparison}",
-                color = PomoTokens.colors.onSurfaceMuted,
-            )
-            if (state.recovery.compensatingOperations.isEmpty()) {
-                Text(
-                    "No compensating Operations selected.",
-                    color = PomoTokens.colors.onSurfaceFaint,
-                )
-            }
-            state.recovery.compensatingOperations.forEach {
-                Text("• $it", fontFamily = JetBrainsMono)
-            }
-            Spacer(Modifier.height(8.dp))
-            PomoButton(
-                onClick = onConfirmRecovery,
-                enabled =
-                    state.recovery.compensatingOperations.isNotEmpty() &&
-                        !state.recovery.independentConfirmationRequired,
-            ) {
-                Text("Confirm forward restore")
-            }
-            Text(
-                "Creates a Safety checkpoint first. Active phases and authority cannot be rewound.",
-                style = MaterialTheme.typography.bodySmall,
-                color = PomoTokens.colors.onSurfaceFaint,
-            )
-        }
-        item {
-            SectionTitle("Diagnostics")
-            Text(
-                "Sanitized local evidence only. No implicit upload or centralized telemetry.",
-                color = PomoTokens.colors.onSurfaceMuted,
-            )
-            Spacer(Modifier.height(8.dp))
-            PomoButton(onClick = onExportDiagnostics, variant = PomoButtonVariant.Tonal) {
-                Text("Export diagnostics")
-            }
+    }
+}
+
+@Composable
+private fun SectionBlock(
+    title: String,
+    content: @Composable () -> Unit,
+) {
+    Column {
+        SectionHeader(title, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
+        SyncCard(content)
+    }
+}
+
+@Composable
+private fun SyncCard(content: @Composable () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(PomoRadius.Lg),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+    ) {
+        Column(Modifier.padding(16.dp)) {
+            content()
         }
     }
 }
 
 @Composable
 private fun SignalRail(signals: List<SyncSignal>) {
-    Column(Modifier.fillMaxWidth()) {
-        SectionTitle("Signal rail")
-        signals.forEachIndexed { index, signal ->
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(signal.label, color = PomoTokens.colors.onSurfaceMuted)
-                Text(
-                    signal.value,
-                    fontFamily = JetBrainsMono,
-                    fontWeight = FontWeight.SemiBold,
-                    color =
-                        if (signal.attention) {
-                            PomoTokens.colors.accent
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                )
-            }
-            if (index != signals.lastIndex) {
-                HorizontalDivider(color = PomoTokens.colors.outline)
-            }
+    if (signals.isEmpty()) {
+        Text("No signals yet.", color = PomoTokens.colors.onSurfaceMuted)
+        return
+    }
+    signals.forEachIndexed { index, signal ->
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(signal.label, color = PomoTokens.colors.onSurfaceMuted)
+            Text(
+                signal.value,
+                fontFamily = JetBrainsMono,
+                fontWeight = FontWeight.SemiBold,
+                color =
+                    if (signal.attention) {
+                        PomoTokens.colors.accent
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    },
+            )
+        }
+        if (index != signals.lastIndex) {
+            HorizontalDivider(color = PomoTokens.colors.outline)
         }
     }
 }
 
 @Composable
-private fun WorkflowSection(
-    title: String,
+private fun WorkflowBody(
     workflow: SyncWorkflow,
+    title: String,
     onResume: () -> Unit,
 ) {
-    Column {
-        SectionTitle(title)
-        Text(workflow.stage, color = PomoTokens.colors.onSurfaceMuted)
-        Text(
-            workflow.fingerprint ?: "Fingerprint pending",
-            fontFamily = JetBrainsMono,
-            style = MaterialTheme.typography.bodySmall,
-            color = PomoTokens.colors.onSurfaceFaint,
-        )
-        if (workflow.resumable) {
-            Spacer(Modifier.height(8.dp))
-            PomoButton(onClick = onResume, variant = PomoButtonVariant.Tonal) {
-                Text("Resume $title")
-            }
+    Text(workflow.stage, color = MaterialTheme.colorScheme.onSurface)
+    Spacer(Modifier.height(4.dp))
+    Text(
+        workflow.fingerprint ?: "Fingerprint pending",
+        fontFamily = JetBrainsMono,
+        style = MaterialTheme.typography.bodySmall,
+        color = PomoTokens.colors.onSurfaceFaint,
+    )
+    if (workflow.resumable) {
+        Spacer(Modifier.height(12.dp))
+        PomoButton(
+            onClick = onResume,
+            variant = PomoButtonVariant.Tonal,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Resume $title")
         }
     }
 }
@@ -208,20 +302,7 @@ private fun HistoryRow(item: SyncHistoryItem) {
             style = MaterialTheme.typography.bodySmall,
             color = PomoTokens.colors.onSurfaceFaint,
         )
-        HorizontalDivider(
-            modifier = Modifier.padding(top = 10.dp),
-            color = PomoTokens.colors.outline,
-        )
     }
-}
-
-@Composable
-private fun SectionTitle(value: String) {
-    Text(
-        value,
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurface,
-    )
 }
 
 @Composable
