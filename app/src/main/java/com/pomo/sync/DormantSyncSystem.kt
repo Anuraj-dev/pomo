@@ -16,6 +16,13 @@ internal class DormantSyncSystem(
         testSystemStarted = true
     }
 
+    fun start() {
+        check(mode.testArtifact || mode.productionActivated) {
+            "Dormant synchronization is unavailable in production"
+        }
+        testSystemStarted = true
+    }
+
     fun ingestFromReplica(signedEnvelope: ByteArray): String {
         check(testSystemStarted) { "Dormant synchronization is unavailable in production" }
         return ingress.ingest(signedEnvelope.copyOf())

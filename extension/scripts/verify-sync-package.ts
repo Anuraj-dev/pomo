@@ -1,9 +1,13 @@
 import { readdir } from "node:fs/promises";
 
 const dist = new URL("../dist/", import.meta.url);
+const fixture = await Bun.file(new URL("../../sync-protocol/fixtures/system-generation.json", import.meta.url)).json() as { readonly productionActivation: boolean; readonly suite: number; readonly generation: number };
 const metadata = await Bun.file(new URL("sync-build-metadata.json", dist)).json() as { readonly productionActivation: boolean; readonly testArtifact: boolean; readonly suite: number; readonly generation: number };
 const expectedTestArtifact = process.argv.includes("--test");
-if (metadata.productionActivation || metadata.testArtifact !== expectedTestArtifact || metadata.suite !== 1 || metadata.generation !== 1) throw new Error(`unexpected sync package metadata: ${JSON.stringify(metadata)}`);
+const expectedProductionActivation = !expectedTestArtifact && fixture.productionActivation === true;
+if (metadata.productionActivation !== expectedProductionActivation || metadata.testArtifact !== expectedTestArtifact || metadata.suite !== fixture.suite || metadata.generation !== fixture.generation) {
+  throw new Error(`unexpected sync package metadata: ${JSON.stringify({ metadata, expectedProductionActivation, expectedTestArtifact, fixture })}`);
+}
 const manifest = await Bun.file(new URL("manifest.json", dist)).json() as Record<string, unknown>;
 if (manifest["manifest_version"] !== 3 || "host_permissions" in manifest) throw new Error("packaged extension must remain MV3 with no ambient host permissions");
 const files = await readdir(dist); const textFiles = files.filter((file) => /\.(?:html|js|css)$/.test(file));

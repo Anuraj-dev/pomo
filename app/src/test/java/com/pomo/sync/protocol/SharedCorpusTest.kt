@@ -20,9 +20,16 @@ public class SharedCorpusTest {
         val fixture = resource("fixtures/system-generation.json")
         assertEquals(PomoSuite.ID, fixture.get("suite").asInt)
         assertEquals(PomoSuite.INITIAL_GENERATION, fixture.get("generation").asLong)
-        assertEquals(false, fixture.get("productionActivation").asBoolean)
         assertEquals("authenticated-tombstone-only", fixture.string("deletionRule"))
         assertEquals("android-room", fixture.string("historyAuthority"))
+        val matrix = resource("activation/physical-matrix.json")
+        val activated = fixture.get("productionActivation").asBoolean
+        if (activated) {
+            assertTrue(physicalActivationEvidenceComplete(matrix))
+        } else {
+            assertEquals(false, activated)
+            assertTrue(physicalMatrixSchemaValid(matrix))
+        }
     }
 
     @Test
@@ -259,6 +266,70 @@ public class SharedCorpusTest {
                 )
             }
         }
+    }
+
+    private fun physicalMatrixSchemaValid(matrix: JsonObject): Boolean {
+        val allowed = setOf("PASS_PHYSICAL", "FAIL_PHYSICAL", "BLOCKED")
+        val required =
+            setOf(
+                "android-android",
+                "android-chrome",
+                "chrome-chrome",
+                "lan",
+                "direct-internet",
+                "turn",
+                "webdav-providers",
+                "offline-duration",
+                "lifecycle-loss",
+                "recovery",
+                "migration",
+                "conflict",
+                "performance",
+            )
+        val seen = mutableSetOf<String>()
+        for (element in matrix.getAsJsonArray("rows")) {
+            val row = element.asJsonObject
+            val id = row.string("id")
+            val status = row.string("status")
+            seen.add(id)
+            if (status !in allowed) return false
+            if (status == "BLOCKED" && row.string("blockedReason").isBlank()) return false
+        }
+        return seen.containsAll(required)
+    }
+
+    private fun physicalActivationEvidenceComplete(matrix: JsonObject): Boolean {
+        val rows = matrix.getAsJsonArray("rows")
+        val required =
+            setOf(
+                "android-android",
+                "android-chrome",
+                "chrome-chrome",
+                "lan",
+                "direct-internet",
+                "turn",
+                "webdav-providers",
+                "offline-duration",
+                "lifecycle-loss",
+                "recovery",
+                "migration",
+                "conflict",
+                "performance",
+            )
+        val seen = mutableSetOf<String>()
+        for (element in rows) {
+            val row = element.asJsonObject
+            val id = row.string("id")
+            seen.add(id)
+            if (id in required &&
+                (row.string("status") != "PASS_PHYSICAL" || row.string("evidence").isBlank())
+            ) {
+                return false
+            }
+        }
+        return seen.containsAll(required) &&
+            matrix.string("commit").isNotBlank() &&
+            matrix.getAsJsonObject("artifactVersions").string("androidDevDebugSha256").isNotBlank()
     }
 
     private fun resource(path: String): JsonObject {

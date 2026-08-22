@@ -59,7 +59,9 @@ and received high-S signatures are rejected.
   activation crash points exercised by both runtimes.
 - `fixtures/system-generation.json` freezes suite, generation, formats,
   authenticated-tombstone deletion, Room history authority, and dormant
-  production activation.
+  production activation. Gradle prod flavor and the Chrome production package
+  read this flag. The physical gate in `activation/physical-matrix.json` must
+  be all `PASS_PHYSICAL` before the flag may become true.
 
 Hex is lowercase in this corpus. Empty octet strings are `""`. Fixture-only
 private keys are public test material and must never enter a production key

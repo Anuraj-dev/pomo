@@ -3,6 +3,8 @@
 Pomo is mobile-primary. The live production path is still the phone service and
 the independent Chrome timer engine. A dormant Operation-journal Replica is
 packaged beside that path and does not author live Work blocks until activation.
+Activation is the isolated fixture flip in `docs/sync-merge-order.md`, gated by
+`sync-protocol/activation/physical-matrix.json`.
 
 ## Source Of Truth
 

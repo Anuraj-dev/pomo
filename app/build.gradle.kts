@@ -5,6 +5,14 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint")
 }
 
+fun syncProductionActivationFromFixture(): Boolean {
+    val json = rootProject.file("sync-protocol/fixtures/system-generation.json").readText()
+    val match =
+        Regex(""""productionActivation"\s*:\s*(true|false)""").find(json)
+            ?: error("productionActivation missing from system-generation.json")
+    return match.groupValues[1].toBoolean()
+}
+
 android {
     namespace = "com.pomo"
     compileSdk = 35
@@ -44,12 +52,17 @@ android {
         create("dev") {
             dimension = "environment"
             buildConfigField("boolean", "POMO_SYNC_TEST_ARTIFACT", "true")
+            // Test APKs expose the packaged system. They never carry production activation.
             buildConfigField("boolean", "POMO_SYNC_PRODUCTION_ACTIVATION", "false")
         }
         create("prod") {
             dimension = "environment"
             buildConfigField("boolean", "POMO_SYNC_TEST_ARTIFACT", "false")
-            buildConfigField("boolean", "POMO_SYNC_PRODUCTION_ACTIVATION", "false")
+            buildConfigField(
+                "boolean",
+                "POMO_SYNC_PRODUCTION_ACTIVATION",
+                syncProductionActivationFromFixture().toString(),
+            )
         }
     }
 

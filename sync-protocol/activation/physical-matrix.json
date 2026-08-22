@@ -1,0 +1,124 @@
+{
+  "schema": 1,
+  "suite": 1,
+  "generation": 1,
+  "evidenceClass": "PHYSICAL_PROVIDER",
+  "commit": "",
+  "artifactVersions": {
+    "androidDevDebugSha256": "",
+    "androidProdDebugSha256": "",
+    "chromeTestZipSha256": ""
+  },
+  "allowedStatuses": ["PASS_PHYSICAL", "FAIL_PHYSICAL", "BLOCKED"],
+  "activationPolicy": {
+    "productionActivationRequires": "every required row PASS_PHYSICAL with non-empty versioned evidence",
+    "failPhysicalRoutesTo": "focused repair PR; do not weaken protocol or delete evidence",
+    "blockedPreventsActivation": true
+  },
+  "rows": [
+    {
+      "id": "android-android",
+      "scenario": "Android to Android",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Live Android host has no WorkManager drain and no Replica LAN session. Packaged kernel and DirectSyncCoordinator are in-process only."
+    },
+    {
+      "id": "android-chrome",
+      "scenario": "Android to Chrome",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "No live cross-runtime replica loop. Chrome service worker does not drain to a phone, and the phone does not drain to Chrome."
+    },
+    {
+      "id": "chrome-chrome",
+      "scenario": "Chrome to Chrome",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "WebRTC transport objects exist. The packaged extension does not run a live peer session from the service worker."
+    },
+    {
+      "id": "lan",
+      "scenario": "LAN",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "No NSD or other LAN discovery is wired to OperationKernel ingress."
+    },
+    {
+      "id": "direct-internet",
+      "scenario": "Direct internet",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Nostr rendezvous is not a live host route."
+    },
+    {
+      "id": "turn",
+      "scenario": "TURN",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "TURN is not configured or measured as a live connectivity provider."
+    },
+    {
+      "id": "webdav-providers",
+      "scenario": "Multiple WebDAV providers",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "WebDAV mailbox codec tests are not provider behavior. No live Mailbox is attached."
+    },
+    {
+      "id": "offline-duration",
+      "scenario": "Offline duration",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Cannot measure catch-up after offline work until a replica drain exists."
+    },
+    {
+      "id": "lifecycle-loss",
+      "scenario": "Lifecycle loss",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Process death and reboot do not currently resume a replica session."
+    },
+    {
+      "id": "recovery",
+      "scenario": "Recovery",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Recovery artifacts and confirm UI are packaged. End-to-end restore across two devices is not runnable without a replica loop."
+    },
+    {
+      "id": "migration",
+      "scenario": "Migration",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Migration staging exists. Atomic cutover is forbidden while productionActivation is false."
+    },
+    {
+      "id": "conflict",
+      "scenario": "Conflict",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "Kernel settlement tests are CI conformance, not two-device physical conflict."
+    },
+    {
+      "id": "performance",
+      "scenario": "Performance",
+      "required": true,
+      "status": "BLOCKED",
+      "evidence": "",
+      "blockedReason": "sync-host-evidence measures the reference Bun host. Packaged phone and browser timing is not collected."
+    }
+  ]
+}
