@@ -1,5 +1,5 @@
 import { bufferOf } from "../../shared/bytes";
-import { bytesToHex } from "../../shared/hex";
+import { bytesToHex, hexToBytes } from "../../shared/hex";
 import { CoseOperationSigner, CoseOperationVerifier } from "../crypto/CoseOperation";
 import { allowAllOperationAuthorization, OperationKernel } from "../kernel/OperationKernel";
 import { SharedPreferenceProjection } from "../materialize/sharedPreferences";
@@ -13,6 +13,7 @@ import {
   decodeLanResponse,
   encodeLanRequest,
   encodeLanResponse,
+  httpReplicaPeer,
   installReplicaLan,
   type ReplicaLanPeer,
   type ReplicaLanResponse,
@@ -24,6 +25,8 @@ import {
   webRtcInboxDrainRoute,
   type WebRtcInboxStore,
 } from "./webRtcInbox";
+import { installNostrRendezvousRoutes, NostrRendezvousSession, type NostrSyncEvent, type NostrSyncTransport } from "./nostrRendezvous";
+import { installWebDavMailboxFromConfig, type MailboxEndpointConfig } from "./webDavMailbox";
 import {
   ensureWebRtcOffscreenDocument,
   reconstructRoutePeers,
@@ -34,6 +37,8 @@ import {
 export const LIVE_PEER_IDENTITY_KEY = "pomo:sync:live-peer-identity";
 export const LIVE_PEERS_KEY = "pomo:sync:live-peers";
 export const LIVE_PEER_ICE_KEY = "pomo:sync:webrtc-ice";
+export const RENDEZVOUS_KEY = "pomo:sync:rendezvous";
+export const MAILBOX_KEY = "pomo:sync:mailboxes";
 
 const EXCHANGE_TIMEOUT_MS = 5_000;
 
@@ -59,6 +64,7 @@ export interface LivePeerPipe {
 
 export interface LivePeerDirectoryEntry {
   readonly deviceId: string;
+  readonly endpoint?: string;
 }
 
 interface StoredIdentity {
@@ -234,16 +240,21 @@ export async function installChromeLivePeer(input: {
   const runtime = new LivePeerRuntime(identity, session, pipe, inbox, input.ingest);
   const directory = directoryFrom(await input.storage.get([LIVE_PEERS_KEY]));
   const peerIds = uniquePeerIds(identity.deviceId, directory, input.obligations ?? []);
-  const peers: ReplicaLanPeer[] = pipe === null ? [] : peerIds.map((deviceId) => ({
-    deviceId,
-    exchange: async (request) => {
-      await pipe.ensureDocument();
-      await pipe.open(deviceId, iceServers(ice));
-      const response = runtime.waitForResponse(deviceId);
-      await pipe.send(deviceId, encodeLanRequest(request));
-      return response;
-    },
-  }));
+  const peers: ReplicaLanPeer[] = peerIds.flatMap((deviceId) => {
+    const endpoint = directory.find((entry) => entry.deviceId === deviceId)?.endpoint;
+    if (endpoint !== undefined && endpoint.length > 0) return [httpReplicaPeer(deviceId, endpoint)];
+    if (pipe === null) return [];
+    return [{
+      deviceId,
+      exchange: async (request) => {
+        await pipe.ensureDocument();
+        await pipe.open(deviceId, iceServers(ice));
+        const response = runtime.waitForResponse(deviceId);
+        await pipe.send(deviceId, encodeLanRequest(request));
+        return response;
+      },
+    }];
+  });
   installReplicaLan({ session, peers, ingest: input.ingest });
   installWebRtcInboxRoutes(inbox === null ? [] : [webRtcInboxDrainRoute({ inbox, ingest: input.ingest })]);
   if (pipe instanceof MemoryLivePipe) pipe.onBytes = (routeId, bytes) => runtime.receive(routeId, bytes);
@@ -254,10 +265,6 @@ export async function installChromeLivePeer(input: {
 
 export async function ensurePackagedChromeLivePeer(): Promise<LivePeerIdentity | null> {
   if (typeof chrome === "undefined" || chrome.storage?.local === undefined) return current?.identity ?? null;
-  if (current !== null) {
-    await current.pumpInbox();
-    return current.identity;
-  }
   const storage = chromeLivePeerStorage();
   const identity = await loadOrCreateLivePeerIdentity(storage);
   const keys = new Map<string, CryptoKey>([[identity.deviceId, identity.publicCryptoKey]]);
@@ -275,7 +282,122 @@ export async function ensurePackagedChromeLivePeer(): Promise<LivePeerIdentity |
     ingest: (wire) => kernel.ingest(wire),
     outbox: async () => envelopesFrom(await dao.reconstruct()),
   });
+  await installConfiguredCatchUpRoutes(storage, identity, (wire) => kernel.ingest(wire));
   return identity;
+}
+
+async function installConfiguredCatchUpRoutes(
+  storage: LivePeerStorage,
+  identity: LivePeerIdentity,
+  ingest: (wire: Uint8Array) => Promise<string> | string,
+): Promise<void> {
+  const stored = await storage.get([MAILBOX_KEY, RENDEZVOUS_KEY]);
+  const mailboxes = mailboxConfigs(stored[MAILBOX_KEY]);
+  if (mailboxes.length > 0) {
+    await installWebDavMailboxFromConfig({
+      deviceId: identity.deviceId,
+      publicKey: identity.publicKey,
+      privateKey: identity.privateKey,
+      endpoints: mailboxes,
+      ingest,
+    });
+  }
+  const rendezvous = stored[RENDEZVOUS_KEY];
+  if (typeof rendezvous === "object" && rendezvous !== null) {
+    const record = rendezvous as {
+      sessionId?: unknown;
+      contentKeyHex?: unknown;
+      relays?: unknown;
+      peerDeviceIds?: unknown;
+    };
+    if (typeof record.sessionId === "string" && typeof record.contentKeyHex === "string" && /^[0-9a-f]{64}$/.test(record.contentKeyHex)) {
+      const contentKey = hexToBytes(record.contentKeyHex);
+      const peerDeviceIds = Array.isArray(record.peerDeviceIds) ? record.peerDeviceIds.filter((id): id is string => typeof id === "string") : [];
+      const relays = Array.isArray(record.relays) ? record.relays.filter((url): url is string => typeof url === "string") : [];
+      const session = new NostrRendezvousSession(
+        identity.deviceId,
+        identity.publicKey,
+        identity.privateKey,
+        record.sessionId,
+        contentKey,
+        new WebSocketNostrTransport(relays),
+        peerDeviceIds,
+        ingest,
+        identity.deviceId,
+      );
+      installNostrRendezvousRoutes([session.drainRoute()]);
+    }
+  }
+}
+
+class WebSocketNostrTransport implements NostrSyncTransport {
+  constructor(private readonly relays: readonly string[]) {}
+  async publish(event: NostrSyncEvent): Promise<void> {
+    await Promise.all(this.relays.map((url) => publishEvent(url, event)));
+  }
+  async pull(filter: { readonly sessionId: string; readonly kinds: readonly number[] }): Promise<readonly NostrSyncEvent[]> {
+    const batches = await Promise.all(this.relays.map((url) => pullEvents(url, filter)));
+    return batches.flat();
+  }
+}
+
+async function publishEvent(url: string, event: NostrSyncEvent): Promise<void> {
+  const socket = new WebSocket(url);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.close();
+      reject(new Error("nostr publish timed out"));
+    }, 2_750);
+    socket.onopen = () => socket.send(JSON.stringify(["EVENT", event]));
+    socket.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("nostr publish failed"));
+    };
+    socket.onmessage = () => {
+      clearTimeout(timer);
+      socket.close();
+      resolve();
+    };
+  });
+}
+
+async function pullEvents(url: string, filter: { readonly sessionId: string; readonly kinds: readonly number[] }): Promise<NostrSyncEvent[]> {
+  const socket = new WebSocket(url);
+  const events: NostrSyncEvent[] = [];
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      socket.close();
+      resolve();
+    }, 2_750);
+    socket.onopen = () => socket.send(JSON.stringify(["REQ", "pomo-sync", { kinds: [...filter.kinds], "#d": [filter.sessionId] }]));
+    socket.onerror = () => {
+      clearTimeout(timer);
+      reject(new Error("nostr pull failed"));
+    };
+    socket.onmessage = (message) => {
+      if (typeof message.data !== "string") return;
+      const frame = JSON.parse(message.data) as unknown;
+      if (!Array.isArray(frame)) return;
+      if (frame[0] === "EVENT" && typeof frame[2] === "object" && frame[2] !== null) events.push(frame[2] as NostrSyncEvent);
+      if (frame[0] === "EOSE") {
+        clearTimeout(timer);
+        socket.close();
+        resolve();
+      }
+    };
+  });
+  return events;
+}
+
+function mailboxConfigs(value: unknown): MailboxEndpointConfig[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry !== "object" || entry === null) return [];
+    const record = entry as Record<string, unknown>;
+    if (typeof record.mailboxId !== "string" || typeof record.baseUrl !== "string" || typeof record.authorization !== "string") return [];
+    const peerDeviceIds = Array.isArray(record.peerDeviceIds) ? record.peerDeviceIds.filter((id): id is string => typeof id === "string") : [];
+    return [{ mailboxId: record.mailboxId, baseUrl: record.baseUrl, authorization: record.authorization, peerDeviceIds }];
+  });
 }
 
 export async function receiveLivePeerBytes(routeId: string, bytes: Uint8Array): Promise<void> {
@@ -315,7 +437,9 @@ function directoryFrom(stored: Record<string, unknown>): LivePeerDirectoryEntry[
   return raw.flatMap((entry) => {
     if (typeof entry !== "object" || entry === null) return [];
     const deviceId = (entry as { deviceId?: unknown }).deviceId;
-    return typeof deviceId === "string" && /^[0-9a-f]{64}$/.test(deviceId) ? [{ deviceId }] : [];
+    const endpoint = (entry as { endpoint?: unknown }).endpoint;
+    if (typeof deviceId !== "string" || !/^[0-9a-f]{64}$/.test(deviceId)) return [];
+    return [{ deviceId, endpoint: typeof endpoint === "string" ? endpoint : undefined }];
   });
 }
 
