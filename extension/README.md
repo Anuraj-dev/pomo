@@ -50,10 +50,10 @@ build validation run in CI rather than locally.
   wrapping key kept in `storage.local` (`pomo:keyring`); the passphrase recovery
   file is extension-specific. A corrupted keyring never mints a replacement
   identity; the worker stays available to restore that recovery file.
-- Portable backup: `pomo-backup` v1 is the Android Room backup shape. Exporting
-  or importing it from either surface carries history, Crew memberships,
-  identity, and cached projections. It is a sensitive user-owned JSON file when
-  Crew memberships are present; export it only to trusted storage.
+- Legacy import: `pomo-backup` v1 is a sensitivity-warned, read-only import
+  format. It may carry history, Crew membership, identity, and cached projection
+  data, so it belongs only in trusted storage. It never grants or activates sync
+  authority; current Recovery artifacts are required for that.
 - Zero host permissions: Nostr relay traffic is plain WebSockets.
 - Known platform constraint: Chrome toolbar badges fit roughly 4 characters,
   so the badge shows `M:SS` under 10 minutes and `Nm` above — the plan's

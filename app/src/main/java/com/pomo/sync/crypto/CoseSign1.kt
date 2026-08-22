@@ -80,7 +80,7 @@ internal object CoseSign1 {
             (fields[3] as? CborValue.Bytes)?.value
                 ?: throw IllegalArgumentException("COSE signature must be a byte string")
 
-        require(OperationCodec.encodeUnsigned(operation).contentEquals(canonicalUnsigned)) {
+        require(OperationCodec.encodeUnsignedForVerification(operation).contentEquals(canonicalUnsigned)) {
             "COSE Operation must match its canonical payload"
         }
         val expectedProtected = protectedHeaders(operation)
@@ -110,9 +110,9 @@ internal object CoseSign1 {
                         CborValue.Array(
                             criticalLabels.map(CborValue::Integer),
                         ),
-                    CborValue.Integer(PomoSuite.COSE_SUITE_LABEL) to CborValue.Integer(PomoSuite.ID.toLong()),
+                    CborValue.Integer(PomoSuite.COSE_SUITE_LABEL) to CborValue.Integer(operation.suite.toLong()),
                     CborValue.Integer(PomoSuite.COSE_GENERATION_LABEL) to
-                        CborValue.Integer(PomoSuite.INITIAL_GENERATION),
+                        CborValue.Integer(operation.suiteGeneration),
                     CborValue.Integer(PomoSuite.COSE_OBJECT_KIND_LABEL) to CborValue.Integer(PomoSuite.COSE_OPERATION_KIND),
                     CborValue.Integer(PomoSuite.COSE_SCHEMA_LABEL) to CborValue.Integer(PomoSuite.COSE_OPERATION_SCHEMA),
                     CborValue.Integer(PomoSuite.COSE_DEVICE_ID_LABEL) to CborValue.Bytes(operation.deviceId.copy()),

@@ -2,6 +2,7 @@ import { canonicalUnsignedOperation, assertOperationIdentity, compareBytes, oper
 import { hexToBytes } from "../../shared/hex";
 import {
   OperationKind,
+  OPERATION_DISPOSITIONS,
   POMO_SUITE_1,
   POMO_SUITE_GENERATION_1,
   type AuthenticatedOperation,
@@ -9,6 +10,7 @@ import {
   type FrontierEntry,
   type KernelSummary,
   type OperationDisposition,
+  type RejectedDisposition,
   type UnsignedOperation,
   type VerifiedCheckpoint,
 } from "../protocol/types";
@@ -16,7 +18,13 @@ import {
 export interface OperationVerifier {
   verify(signedEnvelope: Uint8Array): Promise<AuthenticatedOperation>;
 }
-
+export type OperationAuthorizationDecision = "AUTHORIZED" | "REJECTED_INVALID" | "QUARANTINED_FORK";
+export interface OperationAuthorizationPolicy {
+  authorize(operation: AuthenticatedOperation): OperationAuthorizationDecision;
+}
+export const allowAllOperationAuthorization: OperationAuthorizationPolicy = {
+  authorize: () => "AUTHORIZED",
+};
 export interface OperationSigner {
   sign(operation: UnsignedOperation, payload: Uint8Array, canonicalUnsigned: Uint8Array, operationId: string): Promise<Uint8Array>;
 }
@@ -24,6 +32,8 @@ export interface OperationSigner {
 export interface OperationJournal {
   /** Implementations must commit every entry or none of them. */
   recordBatch(entries: readonly OperationJournalEntry[]): Promise<void>;
+  recordRejected?(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void>;
+  recordCheckpoint?(checkpoint: VerifiedCheckpoint, entries: readonly OperationJournalEntry[]): Promise<void>;
 }
 
 export interface OperationJournalEntry {
@@ -34,6 +44,8 @@ export interface OperationJournalEntry {
 
 export interface OperationMaterializer {
   validate(operation: AuthenticatedOperation): void;
+  /** Validate and stage accepted append-only Operations without rebuilding the full projection. */
+  prepareAccepted?(operations: readonly AuthenticatedOperation[]): () => void;
   /** Validate and stage without changing visible state; the returned activation must be synchronous and infallible. */
   prepareReplace(
     checkpointPreferences: readonly { readonly key: string; readonly value: string }[],
@@ -79,19 +91,42 @@ interface KernelStateSnapshot {
   readonly checkpointPreferences: Map<string, string>;
 }
 
+interface AppendFeedUndo {
+  readonly feed: FeedState;
+  readonly sequence: number;
+  readonly accepted: AuthenticatedOperation | undefined;
+  readonly pending: AuthenticatedOperation | undefined;
+  readonly candidate: AuthenticatedOperation | undefined;
+  readonly head: number;
+  readonly headHash: string | null;
+}
+
+interface AppendMutation {
+  readonly feedsCreated: FeedKey[];
+  readonly feedChanges: AppendFeedUndo[];
+  readonly feedChangeKeys: WeakMap<FeedState, Set<number>>;
+  readonly knownAdded: string[];
+  readonly knownRemoved: string[];
+}
+
 export class OperationKernel {
   readonly #feeds = new Map<FeedKey, FeedState>();
   readonly #knownIds = new Set<string>();
   readonly #quarantined = new Set<string>();
   readonly #checkpointPreferences = new Map<string, string>();
+  readonly #dispositionCounts = new Map<OperationDisposition, number>(
+    OPERATION_DISPOSITIONS.map((disposition) => [disposition, 0] as const),
+  );
   #mutationTail: Promise<void> = Promise.resolve();
   #uncommittedSnapshot: KernelStateSnapshot | null = null;
+  #appendMutation: AppendMutation | null = null;
 
   constructor(
     private readonly verifier: OperationVerifier,
     private readonly signer: OperationSigner,
     private readonly journal: OperationJournal,
     private readonly materializer: OperationMaterializer,
+    private readonly authorization: OperationAuthorizationPolicy,
   ) {}
 
   author(request: AuthorRequest): Promise<AuthorResult> {
@@ -155,8 +190,22 @@ export class OperationKernel {
   async #ingest(signedEnvelope: Uint8Array, localAuthor: boolean): Promise<OperationDisposition> {
     let operation: AuthenticatedOperation;
     try {
-      operation = await this.#authenticate(signedEnvelope);
+      operation = await this.verifier.verify(signedEnvelope);
+      if (!equalBytes(operation.signedEnvelope, signedEnvelope)) throw new Error("verifier changed signed envelope");
     } catch {
+      await this.#recordRejected(signedEnvelope, "REJECTED_INVALID");
+      return "REJECTED_INVALID";
+    }
+    if (operation.unsigned.suite !== POMO_SUITE_1 ||
+        operation.unsigned.suiteGeneration !== POMO_SUITE_GENERATION_1) {
+      await this.#recordRejected(signedEnvelope, "REJECTED_UNSUPPORTED_SUITE");
+      return "REJECTED_UNSUPPORTED_SUITE";
+    }
+    try {
+      await assertOperationIdentity(operation.unsigned, operation.payload, operation.canonicalUnsigned, operation.operationId);
+      this.materializer.validate(operation);
+    } catch {
+      await this.#recordRejected(signedEnvelope, "REJECTED_INVALID");
       return "REJECTED_INVALID";
     }
     return this.#ingestAuthenticated(operation, localAuthor);
@@ -172,9 +221,15 @@ export class OperationKernel {
 
   async #ingestAuthenticated(operation: AuthenticatedOperation, localAuthor: boolean): Promise<OperationDisposition> {
     if (this.#knownIds.has(operation.operationId)) {
-      await this.journal.recordBatch([{ operation, disposition: "DUPLICATE", localAuthor }]);
+      await this.#recordBatch([{ operation, disposition: "DUPLICATE", localAuthor }]);
       return "DUPLICATE";
     }
+    const authorization = this.authorization.authorize(operation);
+    if (authorization === "REJECTED_INVALID") {
+      await this.#recordBatch([{ operation, disposition: "REJECTED_INVALID", localAuthor }]);
+      return "REJECTED_INVALID";
+    }
+    if (authorization === "QUARANTINED_FORK") return this.#quarantineAuthorized(operation, localAuthor);
     const key = this.#feedKey(operation.unsigned);
     const existingFeed = this.#feeds.get(key);
     const feed = existingFeed ?? this.#newFeed();
@@ -190,59 +245,122 @@ export class OperationKernel {
     let disposition: OperationDisposition;
     if (feed.forkedAt !== null && operation.unsigned.sequence >= feed.forkedAt) {
       disposition = "QUARANTINED_FORK";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       this.#quarantined.add(operation.operationId);
     } else if (operation.unsigned.sequence <= feed.head) {
       disposition = "REJECTED_INVALID";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
     } else if (operation.unsigned.sequence !== feed.head + 1) {
       disposition = "PENDING_GAP";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       feed.pending.set(operation.unsigned.sequence, operation);
     } else if (operation.unsigned.previousHash !== feed.headHash) {
       disposition = "REJECTED_INVALID";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
     } else if (!this.#causalReady(operation)) {
       disposition = "PENDING_CAUSAL";
-      await this.journal.recordBatch([{ operation, disposition, localAuthor }]);
+      await this.#recordBatch([{ operation, disposition, localAuthor }]);
       if (existingFeed === undefined) this.#feeds.set(key, feed);
       this.#knownIds.add(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       feed.pending.set(operation.unsigned.sequence, operation);
     } else {
       disposition = "ACCEPTED";
-      const snapshot = this.#captureState();
+      const appendMutation: AppendMutation | null = this.materializer.prepareAccepted === undefined ? null : {
+        feedsCreated: [], feedChanges: [], feedChangeKeys: new WeakMap(), knownAdded: [], knownRemoved: [],
+      } satisfies AppendMutation;
+      this.#appendMutation = appendMutation;
+      const snapshot = appendMutation === null ? this.#captureState() : null;
       this.#uncommittedSnapshot = snapshot;
-      if (existingFeed === undefined) this.#feeds.set(key, feed);
+      if (existingFeed === undefined) {
+        this.#feeds.set(key, feed);
+        appendMutation?.feedsCreated.push(key);
+      }
+      this.#recordAppendFeedChange(feed, operation.unsigned.sequence);
       this.#knownIds.add(operation.operationId);
+      appendMutation?.knownAdded.push(operation.operationId);
       feed.candidates.set(operation.unsigned.sequence, operation);
       this.#accept(feed, operation);
       const transitions = this.#drainAll();
       let activateMaterialization: () => void;
       try {
-        activateMaterialization = this.materializer.prepareReplace(
+        const accepted = [operation, ...transitions.filter(({ disposition }) => disposition === "ACCEPTED").map(({ operation: acceptedOperation }) => acceptedOperation)];
+        activateMaterialization = this.materializer.prepareAccepted?.(accepted) ?? this.materializer.prepareReplace(
           this.#checkpointPreferenceEntries(),
           this.#acceptedInMaterializationOrder(),
         );
-        await this.journal.recordBatch([{ operation, disposition, localAuthor }, ...transitions]);
+        await this.#recordBatch([{ operation, disposition, localAuthor }, ...transitions]);
       } catch (error) {
-        this.#restoreState(snapshot);
+        if (snapshot === null) this.#rollbackAppendMutation(appendMutation!);
+        else this.#restoreState(snapshot);
+        this.#appendMutation = null;
         this.#uncommittedSnapshot = null;
         throw error;
       }
       activateMaterialization();
+      this.#appendMutation = null;
       this.#uncommittedSnapshot = null;
     }
     return disposition;
   }
 
+  async #quarantineAuthorized(operation: AuthenticatedOperation, localAuthor: boolean): Promise<"QUARANTINED_FORK"> {
+    const snapshot = this.#captureState();
+    const key = this.#feedKey(operation.unsigned);
+    const feed = this.#feeds.get(key) ?? this.#newFeed();
+    this.#feeds.set(key, feed);
+    feed.forkedAt = Math.min(feed.forkedAt ?? operation.unsigned.sequence, operation.unsigned.sequence);
+    feed.candidates.set(operation.unsigned.sequence, operation);
+    this.#knownIds.add(operation.operationId);
+    this.#quarantined.add(operation.operationId);
+    try {
+      await this.#recordBatch([{ operation, disposition: "QUARANTINED_FORK", localAuthor }]);
+      return "QUARANTINED_FORK";
+    } catch (error) {
+      this.#restoreState(snapshot);
+      throw error;
+    }
+  }
+
   summarize(): KernelSummary {
+    const mutation = this.#appendMutation;
+    if (mutation !== null) {
+      const currentChanges = mutation.feedChanges.map((change) => ({
+        ...change,
+        accepted: change.feed.accepted.get(change.sequence),
+        pending: change.feed.pending.get(change.sequence),
+        candidate: change.feed.candidates.get(change.sequence),
+        head: change.feed.head,
+        headHash: change.feed.headHash,
+      }));
+      const createdFeeds = mutation.feedsCreated.map((key) => [key, this.#feeds.get(key)!] as const);
+      this.#rollbackAppendMutation(mutation);
+      const summary = this.#summarizeCurrent();
+      for (const [key, feed] of createdFeeds) this.#feeds.set(key, feed);
+      for (const change of currentChanges) {
+        if (change.accepted === undefined) change.feed.accepted.delete(change.sequence);
+        else change.feed.accepted.set(change.sequence, change.accepted);
+        if (change.pending === undefined) change.feed.pending.delete(change.sequence);
+        else change.feed.pending.set(change.sequence, change.pending);
+        if (change.candidate === undefined) change.feed.candidates.delete(change.sequence);
+        else change.feed.candidates.set(change.sequence, change.candidate);
+        change.feed.head = change.head;
+        change.feed.headHash = change.headHash;
+      }
+      for (const id of mutation.knownAdded) this.#knownIds.add(id);
+      for (const id of mutation.knownRemoved) this.#knownIds.delete(id);
+      return summary;
+    }
+    return this.#summarizeCurrent();
+  }
+
+  #summarizeCurrent(): KernelSummary {
     const visibleFeeds = this.#uncommittedSnapshot?.feeds ?? this.#feeds;
     const visibleQuarantined = this.#uncommittedSnapshot?.quarantined ?? this.#quarantined;
     const heads = new Map<FeedKey, { sequence: number; headHash: string | null }>();
@@ -261,7 +379,16 @@ export class OperationKernel {
       }
       if (feed.forkedAt !== null) forks.add(`${key}@${feed.forkedAt}`);
     }
-    return { heads, gaps, causalWaits, forks, accepted, pending, quarantined: visibleQuarantined.size };
+    return {
+      heads,
+      gaps,
+      causalWaits,
+      forks,
+      accepted,
+      pending,
+      quarantined: visibleQuarantined.size,
+      dispositionCounts: new Map(this.#dispositionCounts),
+    };
   }
 
   restore(checkpoint: VerifiedCheckpoint, trailing: readonly Uint8Array[]): Promise<"RESTORED" | "REJECTED_CHECKPOINT"> {
@@ -276,6 +403,7 @@ export class OperationKernel {
     } catch {
       return "REJECTED_CHECKPOINT";
     }
+    const existingKnownIds = new Set(this.#knownIds);
     const restored = new Map<FeedKey, FeedState>();
     for (const checkpointFeed of checkpoint.feeds) {
       try {
@@ -293,7 +421,7 @@ export class OperationKernel {
       validate: (operation) => this.materializer.validate(operation),
       prepareReplace: () => () => {},
       replace: () => {},
-    });
+    }, this.authorization);
     for (const [key, feed] of restored) {
       staged.#feeds.set(key, feed);
       for (const id of feed.checkpointIds.values()) staged.#knownIds.add(id);
@@ -304,6 +432,14 @@ export class OperationKernel {
     }
     const materialized = staged.#acceptedInMaterializationOrder();
     const trailingOperations = materialized.filter((operation) => !staged.#isCheckpointCovered(operation.operationId));
+    const acceptedById = new Map(materialized.map((operation) => [operation.operationId, operation]));
+    const checkpointFrontier = [...restored.entries()].flatMap(([feedKey, feed]) =>
+      feed.headHash === null ? [] : [{ feedKey, sequence: feed.head, operationId: feed.headHash }],
+    );
+    if (trailingOperations.some((operation) =>
+      !staged.#dominatesCheckpointFrontier(operation, checkpointFrontier, acceptedById))) {
+      return "REJECTED_CHECKPOINT";
+    }
     let activateMaterialization: () => void;
     try {
       activateMaterialization = this.materializer.prepareReplace(staged.#checkpointPreferenceEntries(), materialized);
@@ -311,13 +447,15 @@ export class OperationKernel {
       return "REJECTED_CHECKPOINT";
     }
     try {
-      if (trailingOperations.length > 0) {
-        await this.journal.recordBatch(trailingOperations.map((operation) => ({
+      const entries = trailingOperations.filter((operation) => !existingKnownIds.has(operation.operationId)).map((operation) => ({
           operation,
           disposition: "ACCEPTED" as const,
           localAuthor: false,
-        })));
-      }
+        }));
+      if (this.journal.recordCheckpoint !== undefined) {
+        await this.journal.recordCheckpoint(checkpoint, entries);
+        for (const entry of entries) this.#recordDisposition(entry.disposition);
+      } else if (entries.length > 0) await this.#recordBatch(entries);
     } catch {
       return "REJECTED_CHECKPOINT";
     }
@@ -331,6 +469,20 @@ export class OperationKernel {
     this.#checkpointPreferences.clear();
     for (const [key, value] of staged.#checkpointPreferences) this.#checkpointPreferences.set(key, value);
     return "RESTORED";
+  }
+
+  async #recordBatch(entries: readonly OperationJournalEntry[]): Promise<void> {
+    await this.journal.recordBatch(entries);
+    for (const entry of entries) this.#recordDisposition(entry.disposition);
+  }
+
+  async #recordRejected(rawWire: Uint8Array, disposition: RejectedDisposition): Promise<void> {
+    await this.journal.recordRejected?.(rawWire.slice(), disposition);
+    this.#recordDisposition(disposition);
+  }
+
+  #recordDisposition(disposition: OperationDisposition): void {
+    this.#dispositionCounts.set(disposition, this.#dispositionCounts.get(disposition)! + 1);
   }
 
   #cloneFeed(feed: FeedState): FeedState {
@@ -381,7 +533,7 @@ export class OperationKernel {
         this.#checkpointPreferenceEntries(),
         this.#acceptedInMaterializationOrder(),
       );
-      await this.journal.recordBatch([
+      await this.#recordBatch([
         { operation: incoming, disposition: "QUARANTINED_FORK", localAuthor },
         ...reclassifications,
       ]);
@@ -468,6 +620,7 @@ export class OperationKernel {
   }
 
   #accept(feed: FeedState, operation: AuthenticatedOperation): void {
+    this.#recordAppendFeedChange(feed, operation.unsigned.sequence);
     feed.pending.delete(operation.unsigned.sequence);
     feed.accepted.set(operation.unsigned.sequence, operation);
     feed.head = operation.unsigned.sequence;
@@ -490,12 +643,15 @@ export class OperationKernel {
       for (const feed of this.#feeds.values()) {
         const next = feed.pending.get(feed.head + 1);
         if (next !== undefined && next.unsigned.previousHash !== feed.headHash) {
+          this.#recordAppendFeedChange(feed, next.unsigned.sequence);
           feed.pending.delete(next.unsigned.sequence);
           feed.candidates.delete(next.unsigned.sequence);
           this.#knownIds.delete(next.operationId);
+          this.#appendMutation?.knownRemoved.push(next.operationId);
           transitions.push({ operation: next, disposition: "REJECTED_INVALID", localAuthor: false });
           advanced = true;
         } else if (next !== undefined && this.#causalReady(next)) {
+          this.#recordAppendFeedChange(feed, next.unsigned.sequence);
           this.#accept(feed, next);
           transitions.push({ operation: next, disposition: "ACCEPTED", localAuthor: false });
           advanced = true;
@@ -503,6 +659,40 @@ export class OperationKernel {
       }
     }
     return transitions;
+  }
+
+  #recordAppendFeedChange(feed: FeedState, sequence: number): void {
+    const mutation = this.#appendMutation;
+    if (mutation === null) return;
+    const changedSequences = mutation.feedChangeKeys.get(feed) ?? new Set<number>();
+    if (changedSequences.has(sequence)) return;
+    changedSequences.add(sequence);
+    mutation.feedChangeKeys.set(feed, changedSequences);
+    mutation.feedChanges.push({
+      feed,
+      sequence,
+      accepted: feed.accepted.get(sequence),
+      pending: feed.pending.get(sequence),
+      candidate: feed.candidates.get(sequence),
+      head: feed.head,
+      headHash: feed.headHash,
+    });
+  }
+
+  #rollbackAppendMutation(mutation: AppendMutation): void {
+    for (const change of [...mutation.feedChanges].reverse()) {
+      if (change.accepted === undefined) change.feed.accepted.delete(change.sequence);
+      else change.feed.accepted.set(change.sequence, change.accepted);
+      if (change.pending === undefined) change.feed.pending.delete(change.sequence);
+      else change.feed.pending.set(change.sequence, change.pending);
+      if (change.candidate === undefined) change.feed.candidates.delete(change.sequence);
+      else change.feed.candidates.set(change.sequence, change.candidate);
+      change.feed.head = change.head;
+      change.feed.headHash = change.headHash;
+    }
+    for (const id of mutation.knownAdded) this.#knownIds.delete(id);
+    for (const id of mutation.knownRemoved) this.#knownIds.add(id);
+    for (const key of mutation.feedsCreated) this.#feeds.delete(key);
   }
 
   #dependenciesSatisfied(
@@ -536,6 +726,39 @@ export class OperationKernel {
       }
     }
     return true;
+  }
+
+  #dominatesCheckpointFrontier(
+    operation: AuthenticatedOperation,
+    checkpointFrontier: readonly { readonly feedKey: FeedKey; readonly sequence: number; readonly operationId: string }[],
+    acceptedById: ReadonlyMap<string, AuthenticatedOperation>,
+  ): boolean {
+    return checkpointFrontier.every((target) =>
+      this.#reachesCheckpointHead(operation, target, acceptedById, new Set()));
+  }
+
+  #reachesCheckpointHead(
+    operation: AuthenticatedOperation,
+    target: { readonly feedKey: FeedKey; readonly sequence: number; readonly operationId: string },
+    acceptedById: ReadonlyMap<string, AuthenticatedOperation>,
+    visited: Set<string>,
+  ): boolean {
+    if (visited.has(operation.operationId)) return false;
+    visited.add(operation.operationId);
+    const unsigned = operation.unsigned;
+    if (this.#feedKey(unsigned) === target.feedKey && unsigned.sequence > target.sequence) return true;
+    if (unsigned.frontier.some((entry) =>
+      this.#feedKey(entry) === target.feedKey &&
+      entry.sequence === target.sequence &&
+      entry.headHash === target.operationId)) return true;
+    if (unsigned.previousHash !== null) {
+      const previous = acceptedById.get(unsigned.previousHash);
+      if (previous !== undefined && this.#reachesCheckpointHead(previous, target, acceptedById, visited)) return true;
+    }
+    return unsigned.frontier.some((entry) => {
+      const dependency = acceptedById.get(entry.headHash);
+      return dependency !== undefined && this.#reachesCheckpointHead(dependency, target, acceptedById, visited);
+    });
   }
 
   #quarantineUnavailableDependents(transitioned = new Set<string>()): OperationJournalEntry[] {

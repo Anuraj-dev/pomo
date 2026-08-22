@@ -7,6 +7,14 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import com.pomo.sync.persistence.SyncCheckpointOperationEntity
+import com.pomo.sync.persistence.SyncCheckpointProjectionEntity
+import com.pomo.sync.persistence.SyncDao
+import com.pomo.sync.persistence.SyncDispositionEventEntity
+import com.pomo.sync.persistence.SyncFeedHeadEntity
+import com.pomo.sync.persistence.SyncOperationEntity
+import com.pomo.sync.persistence.SyncOutboxEntity
+import com.pomo.sync.persistence.SyncPreferenceProjectionEntity
 
 @Database(
     entities = [
@@ -16,14 +24,23 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         CrewDailyAggregateEntity::class,
         CrewHiddenMemberEntity::class,
         CrewRelayStateEntity::class,
+        SyncOperationEntity::class,
+        SyncFeedHeadEntity::class,
+        SyncPreferenceProjectionEntity::class,
+        SyncOutboxEntity::class,
+        SyncDispositionEventEntity::class,
+        SyncCheckpointOperationEntity::class,
+        SyncCheckpointProjectionEntity::class,
     ],
-    version = 7,
+    version = 9,
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
     public abstract fun historyDao(): HistoryDao
 
     public abstract fun crewDao(): CrewDao
+
+    internal abstract fun syncDao(): SyncDao
 
     public companion object {
         @Volatile
@@ -45,6 +62,8 @@ public abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_4_5)
                 .addMigrations(MIGRATION_5_6)
                 .addMigrations(MIGRATION_6_7)
+                .addMigrations(MIGRATION_7_8)
+                .addMigrations(MIGRATION_8_9)
                 .build()
         }
 
@@ -87,6 +106,117 @@ public abstract class AppDatabase : RoomDatabase() {
             object : Migration(6, 7) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE `crew_snapshots` ADD COLUMN `statsJson` TEXT")
+                }
+            }
+
+        public val MIGRATION_7_8: Migration =
+            object : Migration(7, 8) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    createSyncTables(db)
+                }
+            }
+
+        private fun createSyncTables(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_operations` (
+                    `operationId` TEXT NOT NULL,
+                    `memberId` TEXT NOT NULL,
+                    `deviceId` TEXT NOT NULL,
+                    `incarnationId` TEXT NOT NULL,
+                    `sequence` INTEGER NOT NULL,
+                    `previousOperationId` TEXT,
+                    `signedWire` BLOB NOT NULL,
+                    `preferenceKey` TEXT NOT NULL,
+                    `preferenceValue` TEXT NOT NULL,
+                    `disposition` TEXT NOT NULL,
+                    `localAuthor` INTEGER NOT NULL,
+                    PRIMARY KEY(`operationId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_operations_deviceId_incarnationId_sequence` " +
+                    "ON `sync_operations` (`deviceId`, `incarnationId`, `sequence`)",
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_operations_disposition` " +
+                    "ON `sync_operations` (`disposition`)",
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_feed_heads` (
+                    `deviceId` TEXT NOT NULL,
+                    `incarnationId` TEXT NOT NULL,
+                    `sequence` INTEGER NOT NULL,
+                    `operationId` TEXT,
+                    `forkedAt` INTEGER,
+                    PRIMARY KEY(`deviceId`, `incarnationId`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_preference_projection` (
+                    `preferenceKey` TEXT NOT NULL,
+                    `preferenceValue` TEXT NOT NULL,
+                    `operationId` TEXT NOT NULL,
+                    PRIMARY KEY(`preferenceKey`)
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_outbox` (
+                    `operationId` TEXT NOT NULL,
+                    `signedWire` BLOB NOT NULL,
+                    `state` TEXT NOT NULL,
+                    `attemptCount` INTEGER NOT NULL,
+                    PRIMARY KEY(`operationId`),
+                    FOREIGN KEY(`operationId`) REFERENCES `sync_operations`(`operationId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent(),
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_sync_outbox_state` ON `sync_outbox` (`state`)")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `sync_disposition_events` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `operationId` TEXT,
+                    `disposition` TEXT NOT NULL,
+                    `signedWire` BLOB NOT NULL
+                )
+                """.trimIndent(),
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_sync_disposition_events_disposition` " +
+                    "ON `sync_disposition_events` (`disposition`)",
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sync_checkpoint_operations` (" +
+                    "`deviceId` TEXT NOT NULL, `incarnationId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, " +
+                    "`operationId` TEXT NOT NULL, PRIMARY KEY(`deviceId`, `incarnationId`, `sequence`))",
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `sync_checkpoint_projection` (" +
+                    "`preferenceKey` TEXT NOT NULL, `preferenceValue` TEXT NOT NULL, " +
+                    "PRIMARY KEY(`preferenceKey`))",
+            )
+        }
+
+        public val MIGRATION_8_9: Migration =
+            object : Migration(8, 9) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `sync_checkpoint_operations` (" +
+                            "`deviceId` TEXT NOT NULL, `incarnationId` TEXT NOT NULL, `sequence` INTEGER NOT NULL, " +
+                            "`operationId` TEXT NOT NULL, PRIMARY KEY(`deviceId`, `incarnationId`, `sequence`))",
+                    )
+                    db.execSQL(
+                        "CREATE TABLE IF NOT EXISTS `sync_checkpoint_projection` (" +
+                            "`preferenceKey` TEXT NOT NULL, `preferenceValue` TEXT NOT NULL, PRIMARY KEY(`preferenceKey`))",
+                    )
                 }
             }
 

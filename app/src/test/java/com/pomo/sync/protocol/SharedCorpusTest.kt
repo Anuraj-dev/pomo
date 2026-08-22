@@ -16,6 +16,16 @@ import java.security.KeyPair
 
 public class SharedCorpusTest {
     @Test
+    public fun systemGenerationIsExactAndDormant() {
+        val fixture = resource("fixtures/system-generation.json")
+        assertEquals(PomoSuite.ID, fixture.get("suite").asInt)
+        assertEquals(PomoSuite.INITIAL_GENERATION, fixture.get("generation").asLong)
+        assertEquals(false, fixture.get("productionActivation").asBoolean)
+        assertEquals("authenticated-tombstone-only", fixture.string("deletionRule"))
+        assertEquals("android-room", fixture.string("historyAuthority"))
+    }
+
+    @Test
     public fun operationCorpusProducesFrozenCanonicalIdentity() {
         val fixture = resource("fixtures/operation.json").getAsJsonArray("cases")[0].asJsonObject
         val payloadFixture = fixture.getAsJsonObject("payload")

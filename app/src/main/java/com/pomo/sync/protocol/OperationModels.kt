@@ -148,7 +148,19 @@ internal enum class IngestDisposition {
     PENDING_CAUSAL,
     QUARANTINED_FORK,
     REJECTED_INVALID,
+    REJECTED_UNSUPPORTED_SUITE,
 }
+
+internal data class OperationReclassification(
+    val operation: AuthenticatedOperation,
+    val disposition: IngestDisposition,
+)
+
+internal data class OperationCommit(
+    val operation: AuthenticatedOperation,
+    val disposition: IngestDisposition,
+    val localAuthor: Boolean,
+)
 
 internal data class KernelSummary(
     val heads: Map<String, Pair<Long, ProtocolBytes?>>,
@@ -158,6 +170,8 @@ internal data class KernelSummary(
     val accepted: Int,
     val pending: Int,
     val quarantined: Int,
+    val rejected: Int,
+    val dispositionCounts: Map<IngestDisposition, Int>,
 )
 
 internal data class CheckpointFeed(

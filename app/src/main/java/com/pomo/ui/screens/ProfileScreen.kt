@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Photo
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.LocalFireDepartment
 import androidx.compose.material.icons.outlined.TaskAlt
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -76,6 +77,7 @@ public fun ProfileScreen(
     onAvatarRemove: () -> Unit,
     onOpenAchievements: () -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenSync: () -> Unit,
 ) {
     val scroll = rememberScrollState()
     var editing by remember { mutableStateOf(false) }
@@ -128,6 +130,13 @@ public fun ProfileScreen(
         )
 
         Spacer(Modifier.height(8.dp))
+
+        MenuRow(
+            icon = Icons.Default.Sync,
+            label = "Sync",
+            subtitle = "Signals, Data History, and Recovery",
+            onClick = onOpenSync,
+        )
 
         MenuRow(
             icon = Icons.Default.Settings,

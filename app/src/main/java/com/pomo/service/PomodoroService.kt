@@ -28,6 +28,8 @@ import com.pomo.network.SessionImportPayloads
 import com.pomo.network.TimerAdoptPayloads
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
+import com.pomo.sync.ui.SyncSafetyGate
+import com.pomo.sync.ui.timerControlsAllowed
 import com.pomo.timer.OfflineTimer
 import com.pomo.timer.TimerObserver
 import com.pomo.timer.TimerState
@@ -487,6 +489,10 @@ public class PomodoroService : Service(), TimerObserver {
 
     private suspend fun executeCommand(command: TimerCommand): TimerState =
         commandMutex.withLock {
+            if (!timerControlsAllowed(SyncSafetyGate.state)) {
+                Log.w(TAG, "Ignoring timer command $command because the affected Active phase is frozen")
+                return@withLock currentState.copy()
+            }
             withContext(Dispatchers.Main) {
                 // Acting on the timer from any surface acknowledges (and silences) a ring.
                 if (cueEngine.isRinging()) cueEngine.stop()

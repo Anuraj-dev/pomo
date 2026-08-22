@@ -7,7 +7,9 @@
     "build": "bun scripts/build.ts",
     "watch": "bun scripts/build.ts --watch",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "sync:gates": "bun scripts/sync-performance-gates.ts",
+    "sync:verify-package": "bun scripts/verify-sync-package.ts"
   },
   "dependencies": {
     "@hpke/core": "1.9.0",

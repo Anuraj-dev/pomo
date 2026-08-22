@@ -1,5 +1,6 @@
 import { bootInstrument } from "../../shared/instrument";
 import { requiredElement } from "../../shared/surface";
+import { bootSyncPanel } from "../../sync/ui/syncPanel";
 
 bootInstrument(document.body, {
   phaseEl: requiredElement("phase"),
@@ -11,3 +12,4 @@ bootInstrument(document.body, {
   resetEl: requiredElement("reset"),
   toggleText: (state) => (state.status === "running" ? "Pause" : "Start"),
 });
+bootSyncPanel(requiredElement("syncPanel"), "compact");

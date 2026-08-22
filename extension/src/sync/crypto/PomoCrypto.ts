@@ -199,7 +199,16 @@ function hpkeSuite(): CipherSuite {
 }
 
 export async function generateHpkeRecipientKeyPair(): Promise<CryptoKeyPair> {
-  return await hpkeSuite().kem.generateKeyPair();
+  const generated = await hpkeSuite().kem.generateKeyPair();
+  const privateJwk = await crypto.subtle.exportKey("jwk", generated.privateKey);
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    privateJwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
+  return { publicKey: generated.publicKey, privateKey };
 }
 
 export async function serializeHpkePublicKey(publicKey: CryptoKey): Promise<Uint8Array> {
@@ -217,7 +226,13 @@ export async function importHpkeP256KeyPair(jwk: JsonWebKey): Promise<CryptoKeyP
   }
   const suite = hpkeSuite();
   const publicKey = await suite.kem.importKey("jwk", { kty: "EC", crv: "P-256", x: jwk.x, y: jwk.y }, true);
-  const privateKey = await suite.kem.importKey("jwk", jwk, false);
+  const privateKey = await crypto.subtle.importKey(
+    "jwk",
+    jwk,
+    { name: "ECDH", namedCurve: "P-256" },
+    false,
+    ["deriveBits"],
+  );
   return { publicKey, privateKey };
 }
 

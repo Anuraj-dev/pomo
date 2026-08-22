@@ -1,6 +1,6 @@
 import { utf8ToBytes } from "../../shared/bytes";
 import { hexToBytes } from "../../shared/hex";
-import { assertOperationIdentity, decodeUnsignedOperation, operationId } from "../protocol/operation";
+import { assertOperationIdentity, assertOperationIdentityForVerification, decodeUnsignedOperation, decodeUnsignedOperationForVerification, operationId } from "../protocol/operation";
 import { CborTag, decodeCanonicalCbor, encodeCanonicalCbor, type CborKey, type CborValue } from "../protocol/cbor";
 import { POMO_SUITE_1, POMO_SUITE_GENERATION_1, type AuthenticatedOperation, type UnsignedOperation } from "../protocol/types";
 import { signP256LowS, verifyP256LowS } from "./PomoCrypto";
@@ -23,7 +23,6 @@ const EXTERNAL_AAD = utf8ToBytes("Pomo/Operation/1");
 function equalBytes(left: Uint8Array, right: Uint8Array): boolean {
   return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
-
 function asArray(value: CborValue, length: number, name: string): readonly CborValue[] {
   if (!Array.isArray(value) || value.length !== length) throw new Error(`${name} must be a ${length}-item array`);
   return value;
@@ -34,13 +33,13 @@ function asBytes(value: CborValue, name: string): Uint8Array {
   return value;
 }
 
-function protectedHeaders(deviceId: Uint8Array): ReadonlyMap<CborKey, CborValue> {
+function protectedHeaders(deviceId: Uint8Array, suite: number = POMO_SUITE_1, generation: number = POMO_SUITE_GENERATION_1): ReadonlyMap<CborKey, CborValue> {
   if (deviceId.length !== 32) throw new Error("COSE Device ID must be 32 bytes");
   return new Map<CborKey, CborValue>([
     [HEADER_ALGORITHM, COSE_ALGORITHM],
     [HEADER_CRITICAL, [...CRITICAL_HEADERS]],
-    [HEADER_SUITE, POMO_SUITE_1],
-    [HEADER_SUITE_GENERATION, POMO_SUITE_GENERATION_1],
+    [HEADER_SUITE, suite],
+    [HEADER_SUITE_GENERATION, generation],
     [HEADER_OBJECT_KIND, OPERATION_OBJECT_KIND],
     [HEADER_OBJECT_SCHEMA, OPERATION_OBJECT_SCHEMA],
     [HEADER_DEVICE_ID, deviceId],
@@ -51,8 +50,8 @@ function signatureStructure(protectedBytes: Uint8Array, payload: Uint8Array): Ui
   return encodeCanonicalCbor(["Signature1", protectedBytes, EXTERNAL_AAD, payload]);
 }
 
-export function coseProtectedHeaders(deviceId: Uint8Array): Uint8Array {
-  return encodeCanonicalCbor(protectedHeaders(deviceId));
+export function coseProtectedHeaders(deviceId: Uint8Array, suite: number = POMO_SUITE_1, generation: number = POMO_SUITE_GENERATION_1): Uint8Array {
+  return encodeCanonicalCbor(protectedHeaders(deviceId, suite, generation));
 }
 
 export function coseSignatureStructure(protectedBytes: Uint8Array, payload: Uint8Array): Uint8Array {
@@ -88,9 +87,9 @@ export function decodeCoseOperation(envelope: Uint8Array): DecodedCoseOperation 
   const canonicalUnsigned = asBytes(fields[2]!, "COSE payload");
   const signature = asBytes(fields[3]!, "COSE signature");
   if (signature.length !== 64) throw new Error("COSE ESP256 signature must be 64 bytes");
-  const operation = decodeUnsignedOperation(canonicalUnsigned);
+  const operation = decodeUnsignedOperationForVerification(canonicalUnsigned);
   const deviceId = hexToBytes(operation.deviceId);
-  const expectedProtected = encodeCanonicalCbor(protectedHeaders(deviceId));
+  const expectedProtected = encodeCanonicalCbor(protectedHeaders(deviceId, operation.suite, operation.suiteGeneration));
   if (!equalBytes(protectedBytes, expectedProtected)) throw new Error("COSE protected headers do not match POMO-SUITE-1");
   return { canonicalUnsigned, operation, deviceId, signature, signatureInput: signatureStructure(protectedBytes, canonicalUnsigned) };
 }
@@ -150,7 +149,7 @@ export class CoseOperationVerifier implements OperationVerifier {
       operationId: id,
       signedEnvelope: wire.slice(),
     };
-    await assertOperationIdentity(unsigned, payload, decoded.canonicalUnsigned, id);
+    await assertOperationIdentityForVerification(unsigned, payload, decoded.canonicalUnsigned, id);
     return authenticated;
   }
 }

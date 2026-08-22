@@ -19,14 +19,14 @@ public class OperationKernelTest {
 
     @Test
     public fun preferenceTracerBulletAuthorsStoresIngestsAndMaterializesRawWire() {
-        val stored = mutableListOf<AuthenticatedOperation>()
-        val kernel = kernel(OperationStore { operations -> stored += operations })
+        val stored = mutableListOf<OperationCommit>()
+        val kernel = kernel(OperationStore { commits -> stored += commits })
         val authored = kernel.author(authorRequest("bell")) as AuthorResult.Authored
 
         assertEquals(IngestDisposition.ACCEPTED, authored.disposition)
         assertEquals(1, stored.size)
         assertEquals(IngestDisposition.DUPLICATE, kernel.ingest(authored.value.signedEnvelope))
-        assertEquals(1, stored.size)
+        assertEquals(listOf(IngestDisposition.ACCEPTED, IngestDisposition.DUPLICATE), stored.map { it.disposition })
         assertEquals("bell", kernel.materializedPreference("timer.sound"))
         assertEquals(1, kernel.summarize().accepted)
     }
@@ -55,8 +55,8 @@ public class OperationKernelTest {
 
     @Test
     public fun rejectedFeedContinuityDoesNotEnterDurableStore() {
-        val stored = mutableListOf<AuthenticatedOperation>()
-        val kernel = kernel(OperationStore { operations -> stored += operations })
+        val stored = mutableListOf<OperationCommit>()
+        val kernel = kernel(OperationStore { commits -> stored += commits })
         val firstPayload = payload("bell")
         val first = authenticated(operation(1, null, firstPayload), firstPayload)
         val invalidPayload = payload("chime")
@@ -64,7 +64,11 @@ public class OperationKernelTest {
 
         assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(first.signedEnvelope))
         assertEquals(IngestDisposition.REJECTED_INVALID, kernel.ingest(invalid.signedEnvelope))
-        assertEquals(listOf(first.operationId), stored.map { it.operationId })
+        assertEquals(listOf(IngestDisposition.ACCEPTED, IngestDisposition.REJECTED_INVALID), stored.map { it.disposition })
+        assertEquals(
+            listOf(first.operationId),
+            stored.filter { it.disposition == IngestDisposition.ACCEPTED }.map { it.operation.operationId },
+        )
     }
 
     @Test
@@ -333,7 +337,7 @@ public class OperationKernelTest {
         val secondPayload = payload("chime")
         val second = authenticated(operation(2, first.operationId, secondPayload), secondPayload)
         val checkpoint = KernelCheckpoint(PomoSuite.ID, PomoSuite.INITIAL_GENERATION, emptyList(), emptyList())
-        val kernel = kernel(OperationStore { operations -> batches.add(operations.toList()) })
+        val kernel = kernel(OperationStore { commits -> batches.add(commits.map { it.operation }) })
 
         assertEquals(
             RestoreResult.RESTORED,
@@ -350,7 +354,7 @@ public class OperationKernelTest {
         val firstPayload = payload("bell")
         val first = authenticated(operation(1, null, firstPayload), firstPayload)
         val checkpoint = KernelCheckpoint(PomoSuite.ID, PomoSuite.INITIAL_GENERATION, emptyList(), emptyList())
-        val kernel = kernel(OperationStore { operations -> persisted += operations })
+        val kernel = kernel(OperationStore { commits -> persisted += commits.map { it.operation } })
 
         assertEquals(IngestDisposition.ACCEPTED, kernel.ingest(first.signedEnvelope))
         assertEquals(listOf(first.operationId), persisted.map { it.operationId })
@@ -381,9 +385,9 @@ public class OperationKernelTest {
         val persisted = mutableListOf<AuthenticatedOperation>()
         var rejectBatch = false
         val store =
-            OperationStore { operations ->
+            OperationStore { commits ->
                 if (rejectBatch) throw IllegalStateException("atomic write failed")
-                persisted += operations
+                persisted += commits.map { it.operation }
             }
         val kernel = kernel(store)
         val activePayload = payload("bell")
@@ -436,7 +440,7 @@ public class OperationKernelTest {
         val trailingPayload = payload("chime")
         val trailing = authenticated(operation(1, null, trailingPayload, deviceId = id(3)), trailingPayload)
         val persisted = mutableListOf<AuthenticatedOperation>()
-        val kernel = kernel(OperationStore { operations -> persisted += operations })
+        val kernel = kernel(OperationStore { commits -> persisted += commits.map { it.operation } })
 
         assertEquals(
             RestoreResult.REJECTED_CHECKPOINT,

@@ -38,6 +38,7 @@ import {
   type PomoRequest,
   type PomoResponse,
 } from "../shared/messages";
+import { parseSyncUiState, SYNC_UI_STATE_KEY } from "../sync/ui/syncUiState";
 
 const ALARM_NAME = "pomo-tick";
 const ALARM_PERIOD_MINUTES = 0.5;
@@ -606,6 +607,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   await ensureDb();
   switch (request.type) {
     case "pomo:command":
+      if (await timerControlsAreFrozen()) return { ok: false, error: "timer controls are frozen while sync safety is unresolved" };
       switch (request.command) {
         case "toggle": {
           const before = engine.snapshot();
@@ -808,6 +810,17 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       } catch (error) {
         return { ok: false, error: error instanceof Error ? error.message : String(error) };
       }
+  }
+}
+
+async function timerControlsAreFrozen(): Promise<boolean> {
+  const stored = await chrome.storage.local.get(SYNC_UI_STATE_KEY);
+  const raw = stored[SYNC_UI_STATE_KEY];
+  if (raw === undefined) return false;
+  try {
+    return parseSyncUiState(raw).timerControlsFrozen;
+  } catch {
+    return true;
   }
 }
 

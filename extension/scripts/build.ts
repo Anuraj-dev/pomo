@@ -1,4 +1,4 @@
-import { rmSync, cpSync, watch } from "node:fs";
+import { rmSync, cpSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateIcons } from "./gen-icons";
 
@@ -12,7 +12,9 @@ const entries: Array<[string, string, "esm" | "iife"]> = [
   ["src/surfaces/popup/main.ts", "popup.js", "esm"],
   ["src/surfaces/sidepanel/main.ts", "sidepanel.js", "esm"],
   ["src/surfaces/crew/main.ts", "crew.js", "esm"],
+  ["src/sync/transport/offscreenWebRtc.ts", "offscreen-webrtc.js", "esm"],
 ];
+if (process.env["POMO_SYNC_TEST_ARTIFACT"] === "true") entries.push(["src/sync/testArtifact.ts", "sync-test.js", "esm"]);
 
 async function build() {
   rmSync(dist, { recursive: true, force: true });
@@ -24,7 +26,10 @@ async function build() {
       target: "browser",
       format,
       sourcemap: "linked",
-      define: { "process.env.NODE_ENV": '"production"' },
+      define: {
+        "process.env.NODE_ENV": '"production"',
+        __POMO_SYNC_TEST_ARTIFACT__: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true" ? "true" : "false",
+      },
     });
     if (!res.success) {
       for (const log of res.logs) console.error(log);
@@ -32,13 +37,17 @@ async function build() {
     }
   }
   cpSync(join(root, "manifest.json"), join(dist, "manifest.json"));
-  for (const f of ["newtab.html", "popup.html", "sidepanel.html", "crew.html"]) {
+  for (const f of ["newtab.html", "popup.html", "sidepanel.html", "crew.html", "offscreen-webrtc.html"]) {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
-  for (const f of ["newtab.css", "popup.css", "sidepanel.css", "crew.css"]) {
+  for (const f of ["newtab.css", "popup.css", "sidepanel.css", "crew.css", "sync.css"]) {
     cpSync(join(root, "src", "surfaces", f), join(dist, f));
   }
   cpSync(join(src, "shared", "tokens.css"), join(dist, "tokens.css"));
+  writeFileSync(
+    join(dist, "sync-build-metadata.json"),
+    `${JSON.stringify({ schema: 1, productionActivation: false, testArtifact: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true", suite: 1, generation: 1 }, null, 2)}\n`,
+  );
   generateIcons();
   console.log("build ok -> dist/");
 }

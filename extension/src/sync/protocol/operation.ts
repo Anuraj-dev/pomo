@@ -34,10 +34,12 @@ export function compareBytes(left: Uint8Array, right: Uint8Array): number {
   return left.length - right.length;
 }
 
-export function validateUnsignedOperation(operation: UnsignedOperation): void {
-  if (operation.suite !== POMO_SUITE_1 || operation.suiteGeneration !== POMO_SUITE_GENERATION_1) {
+function validateUnsignedOperationFields(operation: UnsignedOperation, allowUnsupportedSuite: boolean): void {
+  if (!allowUnsupportedSuite && (operation.suite !== POMO_SUITE_1 || operation.suiteGeneration !== POMO_SUITE_GENERATION_1)) {
     throw new Error("unsupported Pomo suite or generation");
   }
+  requireUint(operation.suite, "suite");
+  requireUint(operation.suiteGeneration, "suiteGeneration");
   requireHex(operation.memberId, HASH_BYTES, "memberId");
   requireHex(operation.deviceId, HASH_BYTES, "deviceId");
   requireHex(operation.incarnationId, INCARNATION_BYTES, "incarnationId");
@@ -64,9 +66,13 @@ export function validateUnsignedOperation(operation: UnsignedOperation): void {
   }
 }
 
-export function canonicalUnsignedOperation(operation: UnsignedOperation): Uint8Array {
+export function validateUnsignedOperation(operation: UnsignedOperation): void {
+  validateUnsignedOperationFields(operation, false);
+}
+
+function encodeCanonicalUnsignedOperation(operation: UnsignedOperation, allowUnsupportedSuite: boolean): Uint8Array {
   const normalized: UnsignedOperation = { ...operation, frontier: [...operation.frontier].sort(compareFrontier) };
-  validateUnsignedOperation(normalized);
+  validateUnsignedOperationFields(normalized, allowUnsupportedSuite);
   return encodeCanonicalCbor([
     normalized.suite,
     normalized.suiteGeneration,
@@ -88,6 +94,15 @@ export function canonicalUnsignedOperation(operation: UnsignedOperation): Uint8A
   ]);
 }
 
+export function canonicalUnsignedOperation(operation: UnsignedOperation): Uint8Array {
+  return encodeCanonicalUnsignedOperation(operation, false);
+}
+
+/** Preserve authenticated bytes for the kernel's distinct unsupported-suite disposition. */
+export function canonicalUnsignedOperationForVerification(operation: UnsignedOperation): Uint8Array {
+  return encodeCanonicalUnsignedOperation(operation, true);
+}
+
 function asArray(value: CborValue, name: string, length: number): readonly CborValue[] {
   if (!Array.isArray(value) || value.length !== length) throw new Error(`${name} must be a ${length}-item array`);
   return value;
@@ -103,7 +118,7 @@ function asBytes(value: CborValue, name: string, length: number): Uint8Array {
   return value;
 }
 
-export function decodeUnsignedOperation(bytes: Uint8Array): UnsignedOperation {
+function decodeUnsignedOperationFields(bytes: Uint8Array, allowUnsupportedSuite: boolean): UnsignedOperation {
   const fields = asArray(decodeCanonicalCbor(bytes), "Operation", 12);
   if (!Array.isArray(fields[7])) throw new Error("frontier must be an array");
   const frontier = fields[7].map((raw, index) => {
@@ -130,8 +145,17 @@ export function decodeUnsignedOperation(bytes: Uint8Array): UnsignedOperation {
     kind: asUint(fields[10]!, "kind") as OperationKind,
     payloadHash: bytesToHex(asBytes(fields[11]!, "payloadHash", HASH_BYTES)),
   };
-  validateUnsignedOperation(operation);
+  validateUnsignedOperationFields(operation, allowUnsupportedSuite);
   return operation;
+}
+
+export function decodeUnsignedOperation(bytes: Uint8Array): UnsignedOperation {
+  return decodeUnsignedOperationFields(bytes, false);
+}
+
+/** Decode enough authenticated structure to let the kernel classify an unsupported suite distinctly. */
+export function decodeUnsignedOperationForVerification(bytes: Uint8Array): UnsignedOperation {
+  return decodeUnsignedOperationFields(bytes, true);
 }
 
 export async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
@@ -153,6 +177,19 @@ export async function assertOperationIdentity(
   claimedId: string,
 ): Promise<void> {
   const canonical = canonicalUnsignedOperation(operation);
+  if (!equalBytes(canonical, claimedCanonical)) throw new Error("canonical Operation bytes do not match content");
+  if ((await payloadHash(payload)) !== operation.payloadHash) throw new Error("Operation payload hash mismatch");
+  requireHex(claimedId, HASH_BYTES, "operationId");
+  if ((await operationId(canonical)) !== claimedId) throw new Error("Operation ID mismatch");
+}
+
+export async function assertOperationIdentityForVerification(
+  operation: UnsignedOperation,
+  payload: Uint8Array,
+  claimedCanonical: Uint8Array,
+  claimedId: string,
+): Promise<void> {
+  const canonical = canonicalUnsignedOperationForVerification(operation);
   if (!equalBytes(canonical, claimedCanonical)) throw new Error("canonical Operation bytes do not match content");
   if ((await payloadHash(payload)) !== operation.payloadHash) throw new Error("Operation payload hash mismatch");
   requireHex(claimedId, HASH_BYTES, "operationId");

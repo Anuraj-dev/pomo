@@ -1,5 +1,6 @@
 import { bootInstrument, refreshStats } from "../../shared/instrument";
 import { requiredElement } from "../../shared/surface";
+import { bootSyncPanel } from "../../sync/ui/syncPanel";
 
 const todayCountEl = requiredElement("todayCount");
 const totalMinutesEl = requiredElement("totalMinutes");
@@ -27,3 +28,4 @@ historyLinkEl.addEventListener("click", () => {
 crewLinkEl.addEventListener("click", () => {
   void chrome.tabs.create({ url: chrome.runtime.getURL("crew.html") });
 });
+bootSyncPanel(requiredElement("syncPanel"), "panel");
