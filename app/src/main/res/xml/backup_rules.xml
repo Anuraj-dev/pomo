@@ -5,4 +5,5 @@
     <include domain="database" path="pomo.db-shm"/>
     <include domain="database" path="pomo.db-wal"/>
     <exclude domain="sharedpref" path="pairing_prefs.xml"/>
+    <exclude domain="file" path="pomo-device/"/>
 </full-backup-content>

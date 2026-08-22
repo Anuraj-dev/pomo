@@ -30,5 +30,5 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
-  "permissions": ["alarms", "notifications", "offscreen", "storage", "sidePanel", "tabs"]
+  "permissions": ["alarms", "notifications", "offscreen", "storage", "unlimitedStorage", "sidePanel", "tabs"]
 }

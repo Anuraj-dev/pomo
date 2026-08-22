@@ -9,7 +9,7 @@ import {
   SYNC_OUTBOX_STORE,
   SYNC_PREFERENCE_STORE,
 } from "../../db/schema";
-import { decodeSharedPreferenceFact } from "../materialize/sharedPreferences";
+import { preferenceProjectionOrEmpty } from "../protocol/domainPayload";
 import { assertOperationIdentity, compareBytes } from "../protocol/operation";
 import {
   POMO_SUITE_1,
@@ -394,7 +394,7 @@ export class IndexedDbOperationDao {
     await assertOperationIdentity(operation.unsigned, operation.payload, operation.canonicalUnsigned, operation.operationId);
     requireHex(operation.operationId, 64, "operationId");
     if (operation.signedEnvelope.length === 0) throw new Error("authenticated raw wire must not be empty");
-    const fact = decodeSharedPreferenceFact(operation.payload);
+    const fact = preferenceProjectionOrEmpty(operation.unsigned.kind, operation.payload);
     const feedKey = `${operation.unsigned.deviceId}:${operation.unsigned.incarnationId}` as FeedKey;
     return {
       input,
@@ -485,6 +485,7 @@ export class IndexedDbOperationDao {
     const winners = new Map<string, SyncPreferenceRow>();
     for (const preference of checkpointPreferences) winners.set(preference.key, { key: preference.key, value: preference.value, operationId: `checkpoint:${preference.key}` });
     for (const operation of accepted) {
+      if (operation.preferenceKey.length === 0) continue;
       winners.set(operation.preferenceKey, {
         key: operation.preferenceKey,
         value: operation.preferenceValue,

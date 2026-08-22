@@ -16,10 +16,24 @@ public class AuthorizationLedgerTest {
         admission.verifyFingerprints(initial.memberId, initial.deviceId, initial.transcriptHash)
         val resumed = AdmissionSession.resume(admission.snapshot())
         assertEquals(AdmissionStage.MUTUAL_FINGERPRINT_VERIFIED, resumed.snapshot().stage)
+        resumed.advance(AdmissionStage.INVENTORY_COMPLETE)
+        resumed.advance(AdmissionStage.LOCAL_EXPORT_SAVED)
+        resumed.advance(AdmissionStage.RECOVERY_ANCHOR_CREATED)
+        resumed.advance(AdmissionStage.PLAN_APPROVED)
         resumed.advance(AdmissionStage.AUTHORIZATION_COMMITTED)
         resumed.advance(AdmissionStage.BASELINE_VERIFIED)
         resumed.advance(AdmissionStage.READY_ACK_COMMITTED)
         assertEquals(AdmissionStage.READY_ACK_COMMITTED, resumed.snapshot().stage)
+    }
+
+    @Test
+    public fun differentMemberIdentityBlocksBeforeAuthorization() {
+        val initial = AdmissionSnapshot(id(1), id(2), id(3), id(4), AdmissionStage.OFFER_CREATED)
+        val admission = AdmissionSession.create(initial)
+        admission.verifyFingerprints(initial.memberId, initial.deviceId, initial.transcriptHash)
+        admission.blockDifferentMember()
+        assertEquals(AdmissionStage.IDENTITY_BLOCKED, admission.snapshot().stage)
+        assertTrue(runCatching { admission.advance(AdmissionStage.INVENTORY_COMPLETE) }.isFailure)
     }
 
     @Test

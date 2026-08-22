@@ -110,7 +110,8 @@ internal class OperationKernel(
         if (feed?.pending?.isNotEmpty() == true) missing += "COMPLETE_LOCAL_FEED"
         if (missing.isNotEmpty()) return AuthorResult.Blocked(missing)
 
-        val payload = OperationCodec.encodePreference(request.preference)
+        val payload = request.payload ?: OperationCodec.encodePreference(checkNotNull(request.preference))
+        DomainPayload.requireValid(request.kind, payload)
         val operation =
             UnsignedOperation(
                 memberId = request.memberId,
@@ -124,6 +125,7 @@ internal class OperationKernel(
                             ?: compareBytes(left.incarnationId.copy(), right.incarnationId.copy())
                     },
                 authorizationEpoch = request.authorizationEpoch,
+                kind = request.kind,
                 payloadHash = OperationCodec.payloadHash(payload),
             )
         val canonical = OperationCodec.encodeUnsigned(operation)
@@ -410,7 +412,7 @@ internal class OperationKernel(
         require(canonical.contentEquals(authenticated.canonicalUnsigned))
         require(OperationCodec.operationId(canonical) == authenticated.operationId)
         require(OperationCodec.payloadHash(authenticated.canonicalPayload) == authenticated.operation.payloadHash)
-        OperationCodec.decodePreference(authenticated.canonicalPayload)
+        DomainPayload.requireValid(authenticated.operation.kind, authenticated.canonicalPayload)
         expectedOperation?.let { require(it == authenticated.operation) }
         expectedPayload?.let { require(it.contentEquals(authenticated.canonicalPayload)) }
         expectedCanonical?.let { require(it.contentEquals(authenticated.canonicalUnsigned)) }
@@ -574,6 +576,7 @@ internal class OperationKernel(
         materializedPreferences.clear()
         materializedPreferences.putAll(checkpointPreferences)
         causalMaterializationOrder().forEach { authenticated ->
+            if (authenticated.operation.kind != PomoSuite.PREFERENCE_SET_KIND) return@forEach
             val preference = OperationCodec.decodePreference(authenticated.canonicalPayload)
             val value = preference.value as PreferenceValue.Text
             materializedPreferences[preference.key] = value.value

@@ -1,4 +1,5 @@
 import { decodeCanonicalCbor, encodeCanonicalCbor } from "../protocol/cbor";
+import { requireValidDomainPayload } from "../protocol/domainPayload";
 import { OperationKind, type AuthenticatedOperation } from "../protocol/types";
 
 export interface SharedPreferenceFact {
@@ -49,18 +50,13 @@ export class SharedPreferenceProjection {
   readonly #values = new Map<string, string>();
 
   apply(operation: AuthenticatedOperation): void {
-    if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet || operation.unsigned.payloadSchema !== 1) {
-      throw new Error("unsupported shared-preference Operation");
-    }
+    if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet) return;
     const fact = decodeSharedPreferenceFact(operation.payload);
     this.#values.set(fact.key, fact.value);
   }
 
   validate(operation: AuthenticatedOperation): void {
-    if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet || operation.unsigned.payloadSchema !== 1) {
-      throw new Error("unsupported shared-preference Operation");
-    }
-    decodeSharedPreferenceFact(operation.payload);
+    requireValidDomainPayload(operation.unsigned.kind, operation.payload);
   }
 
   value(key: string): string | undefined {
@@ -92,9 +88,7 @@ export class SharedPreferenceProjection {
       return [key, value] as const;
     }));
     for (const operation of operations) {
-      if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet || operation.unsigned.payloadSchema !== 1) {
-        throw new Error("unsupported shared-preference Operation");
-      }
+      if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet) continue;
       const fact = decodeSharedPreferenceFact(operation.payload);
       staged.set(fact.key, fact.value);
     }
@@ -105,10 +99,11 @@ export class SharedPreferenceProjection {
   }
 
   prepareAccepted(operations: readonly AuthenticatedOperation[]): () => void {
-    const updates = operations.map((operation) => {
+    const updates = operations.flatMap((operation) => {
       this.validate(operation);
+      if (operation.unsigned.kind !== OperationKind.SharedPreferenceSet) return [];
       const fact = decodeSharedPreferenceFact(operation.payload);
-      return [fact.key, fact.value] as const;
+      return [[fact.key, fact.value] as const];
     });
     return () => {
       for (const [key, value] of updates) this.#values.set(key, value);

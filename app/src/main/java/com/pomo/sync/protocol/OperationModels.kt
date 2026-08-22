@@ -119,7 +119,9 @@ internal data class AuthorRequest(
     val incarnationId: ProtocolBytes,
     val authorizationEpoch: Long,
     val frontier: List<FeedFrontier>,
-    val preference: PreferenceSet,
+    val preference: PreferenceSet? = null,
+    val kind: Int = PomoSuite.PREFERENCE_SET_KIND,
+    val payload: ByteArray? = null,
     val authorized: Boolean,
     val deviceReady: Boolean,
     val completePrerequisites: Set<String>,
@@ -129,6 +131,8 @@ internal data class AuthorRequest(
         require(deviceId.size == PomoSuite.ID_BYTES)
         require(incarnationId.size == PomoSuite.INCARNATION_BYTES)
         require(authorizationEpoch >= 0)
+        require((preference != null) != (payload != null)) { "Author one domain payload" }
+        require(kind >= 1)
     }
 }
 
@@ -204,6 +208,11 @@ internal object PomoSuite {
     const val INCARNATION_BYTES: Int = 16
     const val PREFERENCE_SCHEMA: Int = 1
     const val PREFERENCE_SET_KIND: Int = 1
+    const val HISTORY_KIND: Int = 2
+    const val TAG_KIND: Int = 3
+    const val PROFILE_KIND: Int = 4
+    const val CREW_KIND: Int = 5
+    const val TIMER_KIND: Int = 6
     const val ESP256: Int = -9
     const val COSE_SIGN1_TAG: Long = 18
     const val COSE_ALGORITHM_LABEL: Long = 1

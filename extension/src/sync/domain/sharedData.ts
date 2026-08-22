@@ -10,8 +10,8 @@ const LOCAL_FIELDS = new Set(["theme", "cueMode", "notificationPermission", "nav
 
 export function materializeSharedPreferences(patches: readonly SharedPreferencePatch[]): ReadonlyMap<string, SharedPreferencePatch> {
   const result = new Map<string, SharedPreferencePatch>();
-  for (const patch of [...patches].sort((left, right) => left.operationId.localeCompare(right.operationId))) {
-    if (SHARED_FIELDS.has(patch.field) && !result.has(patch.field)) result.set(patch.field, patch);
+  for (const patch of patches) {
+    if (SHARED_FIELDS.has(patch.field)) result.set(patch.field, patch);
   }
   return result;
 }

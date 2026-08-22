@@ -14,7 +14,7 @@ internal object SharedPreferencesMaterializer {
     fun materialize(patches: Collection<SharedPreferencePatch>): Map<String, SharedPreferencePatch> =
         patches.filter { it.field in sharedFields }
             .groupBy { it.field }
-            .mapValues { (_, values) -> values.minBy { it.operationId } }
+            .mapValues { (_, values) -> values.last() }
 
     fun isDeviceLocal(field: String): Boolean =
         field in

@@ -8,8 +8,10 @@ phone protocol, firmware, NodeMCU, or desktop-client authority.
 
 ## Tracer operation
 
-`pomo-suite-1.cddl` defines the fixed-position unsigned Operation and its one
-payload, `[1, "focusDurationMinutes", "25"]`. The payload is deterministically
+`pomo-suite-1.cddl` defines the fixed-position unsigned Operation. Kind 1 is the
+shared-preference tracer `[1, "focusDurationMinutes", "25"]`. Kinds 2-6 are
+History, Tag, Profile, Crew, and Timer payloads. Unknown kinds stay in the
+journal and do not write the preference projection. Payloads are deterministically
 encoded and hashed. The unsigned Operation is then deterministically encoded.
 Both suite and suite generation are part of that unsigned meaning; the COSE
 protected header repeats them and verification requires an exact match.

@@ -62,3 +62,12 @@ function parseProgress(value: unknown): SyncUiState["admission"] {
 }
 
 export function scheduleOrdinaryDrain(state: SyncUiState): SyncUiState { return { ...state, retryPending: true }; }
+
+export function timerControlsFrozenFromStorage(raw: unknown): boolean {
+  if (raw === undefined) return false;
+  try {
+    return parseSyncUiState(raw).timerControlsFrozen;
+  } catch {
+    return false;
+  }
+}

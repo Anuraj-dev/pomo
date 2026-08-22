@@ -11,9 +11,12 @@ cutover, dual-write period, or automatic activation in this stage.
   journal, not a database-snapshot transport. Desktop and NodeMCU behavior is
   unchanged and neither becomes a Full Replica.
 - Every synchronized change is an authenticated Operation admitted by
-  `OperationKernel`. Absence, empty storage, corruption, an unreadable replica,
-  or a missing provider object is a Replica failure, never a deletion. Only an
-  explicit authenticated tombstone can delete shared meaning.
+  `OperationKernel`. Kind 1 is the shared-preference tracer. Kinds 2-6 are the
+  dormant domain allowlist: History, Tag, Profile, Crew, Timer. Unknown kinds are
+  retained and forwarded without becoming preference projection. Absence, empty
+  storage, corruption, an unreadable replica, or a missing provider object is a
+  Replica failure, never a deletion. Only an explicit authenticated tombstone can
+  delete shared meaning.
 - There is no fallback cryptography, inferred conflict winner, or snapshot
   synchronization path. Unknown authenticated facts are retained and forwarded;
   unsupported current authority blocks authoring.

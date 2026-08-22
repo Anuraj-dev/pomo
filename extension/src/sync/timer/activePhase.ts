@@ -22,6 +22,7 @@ export interface ActivePhaseProjection {
   readonly completedOperationIds: ReadonlySet<string>;
   readonly timeUncertain: boolean;
   readonly pending: ReadonlySet<string>;
+  readonly staleCommandIds: ReadonlySet<string>;
 }
 export interface TimerCommandRequest { readonly requesterDeviceId: string; readonly phaseId: string; readonly exactCommandHead: string; readonly action: TimerAction }
 const NORMAL_OWNER_ACTIONS = new Set<TimerAction>(["PAUSE", "RESUME", "EXTEND", "SKIP", "RESET", "COMPLETE"]);
@@ -29,7 +30,7 @@ const NORMAL_OWNER_ACTIONS = new Set<TimerAction>(["PAUSE", "RESUME", "EXTEND", 
 export function materializeActivePhase(input: readonly TimerFact[]): ActivePhaseProjection {
   const unique = new Map(input.map((fact) => [fact.operationId, fact]));
   const facts = [...unique.values()].sort((left, right) => left.operationId.localeCompare(right.operationId));
-  if (facts.length === 0) return { phaseId: null, plan: null, heads: new Set(), ownerDeviceId: null, settlementRequired: false, completedOperationIds: new Set(), timeUncertain: false, pending: new Set() };
+  if (facts.length === 0) return { phaseId: null, plan: null, heads: new Set(), ownerDeviceId: null, settlementRequired: false, completedOperationIds: new Set(), timeUncertain: false, pending: new Set(), staleCommandIds: new Set() };
   if (new Set(facts.map((fact) => fact.phaseId)).size !== 1) throw new Error("Projection must target one identified phase");
   const accepted = new Map<string, TimerFact>();
   const pending = new Set<string>();
@@ -55,19 +56,28 @@ export function materializeActivePhase(input: readonly TimerFact[]): ActivePhase
   for (const fact of accepted.values()) {
     if (JSON.stringify(fact.plan) !== JSON.stringify(plan)) throw new Error("Phase plan is locked");
     if (!Number.isSafeInteger(fact.elapsedMillis) || fact.elapsedMillis < 0) throw new Error("invalid elapsed time");
-    if (fact.action === "SETTLE" && fact.parentHeads.size < 2) throw new Error("Settlement must reference every conflicting head");
-    if (NORMAL_OWNER_ACTIONS.has(fact.action)) {
-      const parentId = fact.parentHeads.size === 1 ? [...fact.parentHeads][0] : undefined;
-      const parent = parentId === undefined ? undefined : accepted.get(parentId);
-      if (parent === undefined || fact.ownerDeviceId !== parent.ownerDeviceId || fact.ownershipClaimId !== parent.ownershipClaimId) {
-        throw new Error("Only the uncontested owner may author a normal Timer command");
-      }
+  }
+  const staleCommandIds = new Set<string>();
+  for (const fact of accepted.values()) {
+    if (!NORMAL_OWNER_ACTIONS.has(fact.action)) continue;
+    const parentId = fact.parentHeads.size === 1 ? [...fact.parentHeads][0] : undefined;
+    const parent = parentId === undefined ? undefined : accepted.get(parentId);
+    if (parent === undefined || fact.ownerDeviceId !== parent.ownerDeviceId || fact.ownershipClaimId !== parent.ownershipClaimId) {
+      staleCommandIds.add(fact.operationId);
     }
   }
-  const referenced = new Set([...accepted.values()].flatMap((fact) => [...fact.parentHeads]));
-  const heads = new Set([...accepted.keys()].filter((id) => !referenced.has(id)));
-  const headFacts = [...heads].map((id) => accepted.get(id)!);
-  const settlementRequired = heads.size > 1 || headFacts.filter((fact) => fact.action === "SETTLE").length > 1;
+  for (const id of staleCommandIds) accepted.delete(id);
+  const withoutSettles = new Map([...accepted].filter(([, fact]) => fact.action !== "SETTLE"));
+  const referencedWithoutSettles = new Set([...withoutSettles.values()].flatMap((fact) => [...fact.parentHeads]));
+  const headsWithoutSettles = new Set([...withoutSettles.keys()].filter((id) => !referencedWithoutSettles.has(id)));
+  const validSettles = [...accepted.values()].filter((fact) => fact.action === "SETTLE" && fact.parentHeads.size === headsWithoutSettles.size && [...fact.parentHeads].every((id) => headsWithoutSettles.has(id)) && headsWithoutSettles.size >= 2);
+  const canonical = new Map(withoutSettles);
+  if (validSettles.length === 1) canonical.set(validSettles[0]!.operationId, validSettles[0]!);
+  else for (const settle of validSettles) canonical.set(settle.operationId, settle);
+  const referenced = new Set([...canonical.values()].flatMap((fact) => [...fact.parentHeads]));
+  const heads = new Set([...canonical.keys()].filter((id) => !referenced.has(id)));
+  const headFacts = [...heads].map((id) => canonical.get(id)!);
+  const settlementRequired = heads.size > 1 || validSettles.length > 1;
   const effectiveHead = headFacts.length === 1 ? headFacts[0]! : null;
   return {
     phaseId: facts[0]!.phaseId,
@@ -75,8 +85,9 @@ export function materializeActivePhase(input: readonly TimerFact[]): ActivePhase
     heads,
     ownerDeviceId: effectiveHead?.ownerDeviceId ?? null,
     settlementRequired,
-    completedOperationIds: new Set([...accepted.values()].filter((fact) => fact.action === "COMPLETE").map((fact) => fact.operationId)),
-    timeUncertain: [...accepted.values()].some((fact) => fact.timeUncertain),
+    completedOperationIds: new Set([...canonical.values()].filter((fact) => fact.action === "COMPLETE").map((fact) => fact.operationId)),
+    timeUncertain: [...canonical.values()].some((fact) => fact.timeUncertain),
     pending,
+    staleCommandIds,
   };
 }

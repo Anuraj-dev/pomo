@@ -22,6 +22,7 @@ import com.pomo.R
 import com.pomo.db.HistoryCacheRepository
 import com.pomo.tags.TagStore
 import com.pomo.timer.TimerState
+import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.ui.screens.TimerScreen
 import com.pomo.ui.screens.TimerStats
 import com.pomo.ui.theme.PomoTheme
@@ -115,6 +116,11 @@ public class TimerFragment : Fragment() {
                         currentTag = displayTag,
                         onTagSelected = { showTagPicker = true },
                         availableTags = availableTags,
+                        syncSignals = SyncSafetyGate.state.signals,
+                        onOpenSync = {
+                            runCatching { findNavController().navigate(R.id.navigation_sync) }
+                                .onFailure { Log.w(TAG, "Could not navigate to sync", it) }
+                        },
                     )
 
                     if (showTagPicker) {

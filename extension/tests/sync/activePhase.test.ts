@@ -31,6 +31,28 @@ describe("causal Active phase materialization", () => {
     expect(materializeActivePhase([start, pause]).timeUncertain).toBeTrue();
   });
 
+  test("keeps a knowingly stale owner command in audit without throwing the projection", () => {
+    const start = fact("start", "START", [], "android", "claim-a");
+    const handoff = fact("handoff", "HANDOFF", ["start"], "chrome", "claim-b");
+    const stale = fact("stale-extend", "EXTEND", ["handoff"], "android", "claim-a");
+    const projection = materializeActivePhase([start, handoff, stale]);
+    expect(projection.staleCommandIds).toEqual(new Set(["stale-extend"]));
+    expect(projection.heads).toEqual(new Set(["handoff"]));
+    expect(projection.ownerDeviceId).toBe("chrome");
+  });
+
+  test("settlement is canonical only when it cites every conflict head", () => {
+    const start = fact("start", "START", [], "android", "claim-a");
+    const pause = fact("pause", "PAUSE", ["start"], "android", "claim-a");
+    const takeover = fact("takeover", "PROVISIONAL_TAKEOVER", ["start"], "chrome", "claim-b");
+    const partial = materializeActivePhase([start, pause, takeover, fact("partial", "SETTLE", ["pause"], "chrome", "claim-b")]);
+    expect(partial.heads).toEqual(new Set(["pause", "takeover"]));
+    expect(partial.settlementRequired).toBeTrue();
+    const settled = materializeActivePhase([start, pause, takeover, fact("settle", "SETTLE", ["pause", "takeover"], "chrome", "claim-b")]);
+    expect(settled.heads).toEqual(new Set(["settle"]));
+    expect(settled.settlementRequired).toBeFalse();
+  });
+
   test("keeps descendants pending when an ancestor is still causally incomplete", () => {
     const start = fact("start", "START", [], "android", "claim-a");
     const pendingAncestor = fact("z-ancestor", "PAUSE", ["missing"], "android", "claim-a");

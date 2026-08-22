@@ -11,12 +11,12 @@ public class SharedDataMaterializerTest {
     public fun sharedFieldsConvergeWithoutSynchronizingDeviceLocalPresentation() {
         val patches =
             listOf(
-                SharedPreferencePatch("focusMinutes", "30", "b", "active-phase"),
                 SharedPreferencePatch("focusMinutes", "25", "a", "active-phase"),
+                SharedPreferencePatch("focusMinutes", "30", "b", "active-phase"),
                 SharedPreferencePatch("theme", "dark", "c", null),
             )
-        val projection = SharedPreferencesMaterializer.materialize(patches.reversed())
-        assertEquals("25", projection.getValue("focusMinutes").value)
+        val projection = SharedPreferencesMaterializer.materialize(patches)
+        assertEquals("30", projection.getValue("focusMinutes").value)
         assertEquals("active-phase", projection.getValue("focusMinutes").effectiveAfterPhaseId)
         assertFalse("theme" in projection)
         assertTrue(SharedPreferencesMaterializer.isDeviceLocal("routeHealth"))

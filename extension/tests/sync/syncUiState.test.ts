@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain } from "../../src/sync/ui/syncUiState";
+import { DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain, timerControlsFrozenFromStorage } from "../../src/sync/ui/syncUiState";
 
 describe("sync UI state", () => {
   test("strictly validates all eight domain health states and the four-signal rail", () => {
@@ -13,5 +13,10 @@ describe("sync UI state", () => {
   test("dormant state never freezes the local timer or claims protection", () => {
     expect(DORMANT_SYNC_UI_STATE.timerControlsFrozen).toBeFalse();
     expect(DORMANT_SYNC_UI_STATE.signals[2].value).toBe("Incomplete");
+  });
+  test("corrupt stored sync UI does not freeze the live timer", () => {
+    expect(timerControlsFrozenFromStorage(undefined)).toBeFalse();
+    expect(timerControlsFrozenFromStorage({ version: 1 })).toBeFalse();
+    expect(timerControlsFrozenFromStorage({ ...DORMANT_SYNC_UI_STATE, timerControlsFrozen: true })).toBeTrue();
   });
 });

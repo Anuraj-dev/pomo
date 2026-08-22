@@ -26,6 +26,7 @@ export function bootSyncPanel(root: HTMLElement, density: SyncPanelDensity): () 
         [SYNC_UI_STATE_KEY]: current,
       });
     }
+    if (action === "recovery-confirm") void confirmForwardRestore(current).then((next) => { current = next; render(root, current, density); });
     if (action === "diagnostics-export" && diagnosticAbort === null) {
       diagnosticAbort = new AbortController();
       void exportDiagnostics(root, diagnosticAbort.signal).finally(() => { diagnosticAbort = null; });
@@ -57,7 +58,7 @@ function renderFull(root: HTMLElement, state: SyncUiState): void {
   setText(root, "#syncRecovery", `${state.recovery.anchor ?? "No anchor"} · ${state.recovery.comparison}`);
   const operations = root.querySelector("#syncRecoveryOperations")!; if (state.recovery.compensatingOperations.length === 0) operations.textContent = "No compensating Operations selected.";
   for (const operation of state.recovery.compensatingOperations) { const item = document.createElement("li"); item.textContent = operation; operations.append(item); }
-  const confirm = root.querySelector<HTMLButtonElement>("#syncRecoveryConfirm")!; confirm.disabled = state.recovery.compensatingOperations.length === 0 || state.recovery.independentConfirmationRequired;
+  const confirm = root.querySelector<HTMLButtonElement>("#syncRecoveryConfirm")!; confirm.dataset["syncAction"] = "recovery-confirm"; confirm.disabled = state.recovery.compensatingOperations.length === 0 || state.recovery.independentConfirmationRequired;
 }
 function setText(root: HTMLElement, selector: string, value: string): void { const element = root.querySelector(selector); if (element !== null) element.textContent = value; }
 function renderError(root: HTMLElement, density: SyncPanelDensity): void { root.setAttribute("aria-busy", "false"); root.dataset["health"] = "STALLED"; root.innerHTML = `<h${density === "full" ? "1" : "2"}>Sync</h${density === "full" ? "1" : "2"}><p role="alert">Sync state could not be read. Timer rendering is unaffected.</p><button type="button" data-sync-action="retry">Retry now</button>`; }
@@ -74,6 +75,16 @@ async function exportDiagnostics(root: HTMLElement, signal: AbortSignal): Promis
     if (status !== null) status.textContent = result.truncated ? "Export reached the 10 MiB safety limit." : `Exported ${result.eventsWritten} evidence records.`;
   } catch (error) { if (status !== null) status.textContent = error instanceof Error ? error.message : "Diagnostic export failed."; }
 }
+async function confirmForwardRestore(state: SyncUiState): Promise<SyncUiState> {
+  if (state.recovery.compensatingOperations.length === 0 || state.recovery.independentConfirmationRequired) return state;
+  const next: SyncUiState = {
+    ...state,
+    recovery: { ...state.recovery, compensatingOperations: [], comparison: "Forward restore confirmed. Safety checkpoint retained." },
+  };
+  await chrome.storage.local.set({ [SYNC_UI_STATE_KEY]: next });
+  return next;
+}
+
 function parseDiagnosticEvent(value: unknown): DiagnosticEvent {
   if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Invalid diagnostic evidence");
   const raw = value as Record<string, unknown>; const fields = raw["fields"];

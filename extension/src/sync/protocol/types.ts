@@ -6,6 +6,11 @@ export const POMO_SUITE_GENERATION_1 = 1 as const;
 
 export enum OperationKind {
   SharedPreferenceSet = 1,
+  History = 2,
+  Tag = 3,
+  Profile = 4,
+  Crew = 5,
+  Timer = 6,
 }
 
 export const OPERATION_DISPOSITIONS = [

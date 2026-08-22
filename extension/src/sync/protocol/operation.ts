@@ -53,7 +53,7 @@ function validateUnsignedOperationFields(operation: UnsignedOperation, allowUnsu
   requireUint(operation.payloadSchema, "payloadSchema");
   if (operation.payloadSchema !== 1) throw new Error("unsupported payload schema");
   requireHex(operation.payloadHash, HASH_BYTES, "payloadHash");
-  if (operation.kind !== OperationKind.SharedPreferenceSet) throw new Error("unsupported Operation kind");
+  if (!Number.isSafeInteger(operation.kind) || operation.kind < 1) throw new Error("unsupported Operation kind");
   let previous: FrontierEntry | undefined;
   for (const entry of operation.frontier) {
     requireHex(entry.deviceId, HASH_BYTES, "frontier.deviceId");

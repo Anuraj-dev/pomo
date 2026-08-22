@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { bytesToHex } from "../../src/shared/hex";
 import { allowAllOperationAuthorization, OperationKernel, type AuthorRequest, type OperationAuthorizationPolicy, type OperationJournal, type OperationJournalEntry, type OperationMaterializer, type OperationSigner, type OperationVerifier } from "../../src/sync/kernel/OperationKernel";
 import { SharedPreferenceProjection, encodeSharedPreferenceFact } from "../../src/sync/materialize/sharedPreferences";
+import { encodeCrewPayload, encodeHistoryPayload, encodeProfilePayload, encodeTagPayload, encodeTimerPayload } from "../../src/sync/protocol/domainPayload";
 import { canonicalUnsignedOperation, operationId, payloadHash } from "../../src/sync/protocol/operation";
 import { OperationKind, type AuthenticatedOperation, type OperationDisposition, POMO_SUITE_1, POMO_SUITE_GENERATION_1, type UnsignedOperation } from "../../src/sync/protocol/types";
 
@@ -611,5 +612,25 @@ describe("OperationKernel four-call seam", () => {
       expect(await kernel.restore({ suite: 1, suiteGeneration: 1, feeds: [], materializedPreferences }, [])).toBe("REJECTED_CHECKPOINT");
       expect(projection.value("focusDurationMinutes")).toBe("25");
     }
+  });
+
+  test("authors History, Tag, Profile, Crew, and Timer facts without clobbering preferences", async () => {
+    const { kernel, projection } = harness();
+    expect((await kernel.author(request("25"))).status).toBe("AUTHORED");
+    const families: Array<[OperationKind, Uint8Array]> = [
+      [OperationKind.History, encodeHistoryPayload("CREATE", "block-1", ["phase-1"])],
+      [OperationKind.Tag, encodeTagPayload("tag-work", "Work", 0, false, null)],
+      [OperationKind.Profile, encodeProfilePayload("Snehit", null)],
+      [OperationKind.Crew, encodeCrewPayload("crew-1", true)],
+      [OperationKind.Timer, encodeTimerPayload("START", "phase-1", [], "android", "claim-a")],
+    ];
+    for (const [kind, payload] of families) {
+      const result = await kernel.author({ ...request("25"), payload, kind });
+      expect(result.status).toBe("AUTHORED");
+      if (result.status === "AUTHORED") expect(result.operation.unsigned.kind).toBe(kind);
+    }
+    expect((await kernel.author({ ...request("25"), payload: encodeSharedPreferenceFact("focusDurationMinutes", "ignored"), kind: 99 as OperationKind })).status).toBe("AUTHORED");
+    expect(projection.value("focusDurationMinutes")).toBe("25");
+    expect(kernel.summarize().accepted).toBe(7);
   });
 });
