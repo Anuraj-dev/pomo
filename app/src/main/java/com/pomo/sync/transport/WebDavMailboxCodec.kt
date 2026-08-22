@@ -9,8 +9,7 @@ internal object WebDavMailboxCodec {
     const val ACK_OBJECT_LABEL: String = "pomo-mailbox-ack"
     const val SCHEMA: Long = 1
 
-    fun objectIdForWire(wire: ByteArray): String =
-        PomoCrypto.sha256(wire).joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    fun objectIdForWire(wire: ByteArray): String = PomoCrypto.sha256(wire).joinToString("") { "%02x".format(it.toInt() and 0xff) }
 
     fun offerLocator(deviceId: String): String = "locator-offer-$deviceId"
 

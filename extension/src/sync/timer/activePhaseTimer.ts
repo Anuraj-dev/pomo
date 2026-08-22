@@ -37,7 +37,7 @@ export class ActivePhaseTimer {
     return Math.max(0, current.plan.durationMillis - head.elapsedMillis - live);
   }
 
-  start(plan: PhasePlan, phaseId = crypto.randomUUID()): ActivePhaseProjection {
+  start(plan: PhasePlan, phaseId: string = crypto.randomUUID()): ActivePhaseProjection {
     this.facts.length = 0;
     this.running = true;
     this.phaseAnchorMillis = this.nowMillis();
