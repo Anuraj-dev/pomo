@@ -38,6 +38,14 @@ import {
   type PomoRequest,
   type PomoResponse,
 } from "../shared/messages";
+import { SYNC_ACTIVATION } from "../sync/activation";
+import { IndexedDbOperationDao } from "../sync/storage/IndexedDbOperationDao";
+import { startReplicaTimer } from "../sync/timer/replicaTimerRuntime";
+import { drainOrdinaryOutbox, envelopesFrom } from "../sync/transport/ordinaryDrain";
+import { ingestReplicaLan, replicaLanDrainRoutes } from "../sync/transport/replicaLan";
+import { nostrRendezvousDrainRoutes } from "../sync/transport/nostrRendezvous";
+import { webDavMailboxDrainRoutes } from "../sync/transport/webDavMailbox";
+import { webRtcInboxDrainRoutes } from "../sync/transport/webRtcInbox";
 import {
   completeOrdinaryDrain,
   DORMANT_SYNC_UI_STATE,
@@ -593,6 +601,9 @@ async function init(): Promise<void> {
       console.error("engine restore failed; starting fresh", error);
     }
   }
+  if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
+    startReplicaTimer("chrome-local");
+  }
   await ensureAlarm();
   await consumeOrdinaryDrainRequest();
   await sync();
@@ -838,12 +849,28 @@ async function consumeOrdinaryDrainRequest(): Promise<void> {
   }
   const scheduled = scheduleOrdinaryDrain(ui);
   try {
+    let outcome = "skipped";
+    if (SYNC_ACTIVATION.testArtifact || SYNC_ACTIVATION.productionActivated) {
+      const operationDao = new IndexedDbOperationDao();
+      const result = await drainOrdinaryOutbox({
+        obligations: envelopesFrom(await operationDao.reconstruct()),
+        routes: [
+          ...replicaLanDrainRoutes(),
+          ...webDavMailboxDrainRoutes(),
+          ...nostrRendezvousDrainRoutes(),
+          ...webRtcInboxDrainRoutes(),
+        ],
+        ingest: (wire) => ingestReplicaLan(wire),
+        markDelivered: (operationId) => operationDao.markDelivered(operationId),
+      });
+      outcome = result.localOnly ? "local-only" : "routed";
+    }
     const events = await readDiagnosticEvents();
     events.push({
       monotonicMillis: Date.now(),
       area: "STATE_TRANSITION",
       event: "ordinary-drain-scheduled",
-      fields: { outcome: "local-only" },
+      fields: { outcome },
     });
     const completed = completeOrdinaryDrain(scheduled);
     await chrome.storage.local.set({

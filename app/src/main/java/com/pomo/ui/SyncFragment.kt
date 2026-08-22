@@ -17,7 +17,9 @@ import com.pomo.MainActivity
 import com.pomo.sync.diagnostics.DiagnosticEvent
 import com.pomo.sync.diagnostics.DiagnosticExporter
 import com.pomo.sync.diagnostics.EvidenceArea
+import com.pomo.sync.transport.OrdinaryDrainScheduler
 import com.pomo.sync.ui.SyncSafetyGate
+import com.pomo.sync.ui.completeOrdinaryDrain
 import com.pomo.sync.ui.scheduleOrdinaryDrain
 import com.pomo.ui.screens.SyncScreen
 import com.pomo.ui.theme.PomoTheme
@@ -64,6 +66,12 @@ public class SyncFragment : Fragment() {
                         onRetry = {
                             state = scheduleOrdinaryDrain(state)
                             SyncSafetyGate.state = state
+                            if (OrdinaryDrainScheduler.hostAllowed()) {
+                                OrdinaryDrainScheduler.enqueueNow(requireContext())
+                            } else {
+                                state = completeOrdinaryDrain(state)
+                                SyncSafetyGate.state = state
+                            }
                         },
                         onResumeAdmission = {
                             if (state.admission.resumable) {

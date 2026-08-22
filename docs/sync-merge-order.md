@@ -17,6 +17,21 @@ change. Do not merge activation in the same commit as protocol or host work.
    install, execute `docs/sync-validation-runbook.md`, write evidence into
    `sync-protocol/activation/physical-matrix.json`.
 
+## Live host loop
+
+PR 125 carries ordinary drain, Replica LAN, WebDAV Mailbox routes, Nostr
+rendezvous catch-up, optional TURN ICE config, content-epoch provider wrapping,
+and the kernel-backed `ActivePhaseTimer` on the same branch. Product
+`OfflineTimer` / `TimerEngine` still drive notifications and widgets; the
+active-phase journal is the sync-facing timer authority on test artifacts.
+
+Next:
+
+1. Collect physical matrix evidence.
+2. Isolated activation PR only after every required row is `PASS_PHYSICAL`.
+
+Do not open the activation PR while any required row is `BLOCKED`.
+
 ## After evidence
 
 5. Isolated activation PR, produced by

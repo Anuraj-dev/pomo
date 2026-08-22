@@ -5,6 +5,20 @@ Pomo packages the complete peer-sync generation as a dormant system. Android
 production artifacts keep `productionActivation=false`. There is no migration
 cutover, dual-write period, or automatic activation in this stage.
 
+Test artifacts run an ordinary drain host. Android schedules it with WorkManager.
+Chrome runs it from the service worker when Retry now is pressed or a drain
+request is stored. The host walks the durable outbox, offers at most 256
+envelopes, and clears an obligation only after a signed durable ack is
+persisted. Replica LAN is a live drain route: Android advertises
+`_pomo-replica._tcp`, accepts a length-prefixed CBOR session, and ingest goes
+through `OperationKernel`. Chrome uses the same session codec against whatever
+peers the directory currently holds. Configured WebDAV Mailboxes are also ordinary drain routes: immutable operation
+objects plus overwriteable offer and ack locators, with outbox clearance only
+after a signed durable peer ack. Chrome also attaches encrypted Nostr rendezvous
+catch-up and optional WebRTC inbox/TURN ICE config. Provider object bytes can be
+wrapped under the current content-epoch key. A drain with no configured peer
+route stays local-only.
+
 ## Authority and safety boundary
 
 - Android Room remains canonical history. IndexedDB is the Chrome Full Replica

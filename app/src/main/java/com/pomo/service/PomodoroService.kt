@@ -28,6 +28,10 @@ import com.pomo.network.SessionImportPayloads
 import com.pomo.network.TimerAdoptPayloads
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.stats.StatsAggregator
+import com.pomo.sync.timer.ReplicaTimerRuntime
+import com.pomo.sync.transport.OrdinaryDrainScheduler
+import com.pomo.sync.transport.ReplicaLanRuntime
+import com.pomo.sync.transport.WebDavMailboxRuntime
 import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.sync.ui.timerControlsAllowed
 import com.pomo.timer.OfflineTimer
@@ -125,6 +129,24 @@ public class PomodoroService : Service(), TimerObserver {
         activePhoneServerPort = prefs.phoneServerPort
         phoneServer = PhoneServer(this, activePhoneServerPort)
         serviceAdvertiser = PomoServiceAdvertiser.forContext(this)
+        if (OrdinaryDrainScheduler.hostAllowed()) {
+            try {
+                ReplicaLanRuntime.start(this)
+            } catch (error: Exception) {
+                Log.w(TAG, "Replica LAN session failed to start", error)
+            }
+            try {
+                WebDavMailboxRuntime.start(this)
+            } catch (error: Exception) {
+                Log.w(TAG, "WebDAV mailbox routes failed to start", error)
+            }
+            val installId =
+                android.provider.Settings.Secure.getString(
+                    contentResolver,
+                    android.provider.Settings.Secure.ANDROID_ID,
+                ) ?: "android-local"
+            ReplicaTimerRuntime.start(installId)
+        }
 
         val savedState = prefs.loadTimerState()
         var shouldCompleteRestoredTimer = false
@@ -251,6 +273,9 @@ public class PomodoroService : Service(), TimerObserver {
             Log.w(TAG, "Failed to unregister network callback", e)
         }
         serviceScope.cancel()
+        ReplicaTimerRuntime.stop()
+        WebDavMailboxRuntime.stop()
+        ReplicaLanRuntime.stop()
         // Unregister the advertisement before killing the server, so a client never
         // resolves a record pointing at a socket that has already closed.
         serviceAdvertiser.stop()

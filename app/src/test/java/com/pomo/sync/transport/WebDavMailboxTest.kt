@@ -40,6 +40,11 @@ public class WebDavMailboxTest {
                     ): Boolean = true
 
                     override fun get(objectId: String): ByteArray? = null
+
+                    override fun put(
+                        objectId: String,
+                        bytes: ByteArray,
+                    ) = Unit
                 },
             ).protect(listOf(expected))
         assertEquals(MailboxFailure.MISSING_OBJECT, missing.failure)
@@ -58,6 +63,11 @@ public class WebDavMailboxTest {
                     ): Boolean = error("WEBDAV_401")
 
                     override fun get(objectId: String): ByteArray? = null
+
+                    override fun put(
+                        objectId: String,
+                        bytes: ByteArray,
+                    ) = Unit
                 },
             ).protect(listOf(expected))
         assertEquals(MailboxFailure.CREDENTIAL, unauthorized.failure)
@@ -74,6 +84,13 @@ public class WebDavMailboxTest {
         }
 
         override fun get(objectId: String): ByteArray? = objects[objectId]?.copyOf()
+
+        override fun put(
+            objectId: String,
+            bytes: ByteArray,
+        ) {
+            objects[objectId] = bytes.copyOf()
+        }
     }
 
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
