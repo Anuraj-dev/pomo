@@ -11,9 +11,12 @@ cutover, dual-write period, or automatic activation in this stage.
   journal, not a database-snapshot transport. Desktop and NodeMCU behavior is
   unchanged and neither becomes a Full Replica.
 - Every synchronized change is an authenticated Operation admitted by
-  `OperationKernel`. Absence, empty storage, corruption, an unreadable replica,
-  or a missing provider object is a Replica failure, never a deletion. Only an
-  explicit authenticated tombstone can delete shared meaning.
+  `OperationKernel`. Kind 1 is the shared-preference tracer. Kinds 2-6 are the
+  dormant domain allowlist: History, Tag, Profile, Crew, Timer. Unknown kinds are
+  retained and forwarded without becoming preference projection. Absence, empty
+  storage, corruption, an unreadable replica, or a missing provider object is a
+  Replica failure, never a deletion. Only an explicit authenticated tombstone can
+  delete shared meaning.
 - There is no fallback cryptography, inferred conflict winner, or snapshot
   synchronization path. Unknown authenticated facts are retained and forwarded;
   unsupported current authority blocks authoring.
@@ -58,8 +61,13 @@ rewound.
 | CI conformance | Android and Bun test reports | Shared corpus, crash boundaries, parser fuzz, domain invariants | Provider or device behavior |
 | Host benchmark | `sync-host-evidence` | Reference-host latency, throughput, batch, memory-ceiling, and blocking budgets | Packaged browser/phone timing |
 | Packaged-runtime structural | `android-sync-artifacts`, `chrome-sync-artifacts` | Both modes package, MV3 constraints, dormant flags, no remote executable dependency | Runtime timing or connectivity |
-| Provider | Not produced in this stage | Nothing | WebDAV, Nostr, or TURN service behavior |
-| Physical | Not produced in this stage | Nothing | Phone, NodeMCU, firmware, desktop, radio, or network behavior |
+| Provider | `physical-matrix.json` provider rows | Versioned PASS_PHYSICAL / FAIL_PHYSICAL / BLOCKED after the runbook | CI does not log into WebDAV, Nostr, or TURN |
+| Physical | `physical-matrix.json` device rows | Versioned PASS_PHYSICAL / FAIL_PHYSICAL / BLOCKED after the runbook | CI does not prove phone, browser, radio, or network behavior |
+
+The matrix file is `sync-protocol/activation/physical-matrix.json`. The procedure
+is `docs/sync-validation-runbook.md`. Merge order is `docs/sync-merge-order.md`.
+`bun --cwd extension run sync:verify-activation-gate` fails the build if
+`productionActivation` is true while any required row is not `PASS_PHYSICAL`.
 
 The diagnostics export is explicit, local, cancellable, streamed from a bounded
 evidence source, and capped at 10 MiB. It aliases Device and Operation references
@@ -70,7 +78,7 @@ diagnostic export implicitly.
 ## Release note
 
 This release candidate packages dormant peer synchronization, Data History,
-Recovery, compatibility, migration staging, and local diagnostic export on
-Android and Chrome. Existing unmigrated timer and history behavior remains the
-active production path. Production migration and activation require the
-separate cutover stage and are intentionally unavailable here.
+Recovery, compatibility, migration staging, local diagnostic export, and the
+issue 120 validation bundle on Android and Chrome. Existing unmigrated timer
+and history behavior remains the active production path. Production migration
+and activation stay off until the physical matrix is all `PASS_PHYSICAL`.

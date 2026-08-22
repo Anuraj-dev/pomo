@@ -195,9 +195,48 @@ describe("Member Identity and causal authorization", () => {
     admission.verifyFingerprints(initial.memberId, initial.deviceId, initial.transcriptHash);
     const resumed = new AdmissionSession(admission.snapshot());
     expect(() => resumed.advance("BASELINE_VERIFIED")).toThrow(/skipped/);
+    resumed.advance("INVENTORY_COMPLETE");
+    resumed.advance("LOCAL_EXPORT_SAVED");
+    resumed.advance("RECOVERY_ANCHOR_CREATED");
+    resumed.advance("PLAN_APPROVED");
     resumed.advance("AUTHORIZATION_COMMITTED");
     resumed.advance("BASELINE_VERIFIED");
     resumed.advance("READY_ACK_COMMITTED");
     expect(resumed.snapshot().stage).toBe("READY_ACK_COMMITTED");
+  });
+
+  test("identity block after authorization is revocation", () => {
+    const admission = new AdmissionSession({
+      memberId: "00".repeat(32),
+      admissionId: "11".repeat(32),
+      deviceId: "22".repeat(32),
+      transcriptHash: "33".repeat(32),
+      stage: "OFFER_CREATED",
+    });
+    admission.verifyFingerprints("00".repeat(32), "22".repeat(32), "33".repeat(32));
+    admission.advance("INVENTORY_COMPLETE");
+    admission.advance("LOCAL_EXPORT_SAVED");
+    admission.advance("RECOVERY_ANCHOR_CREATED");
+    admission.advance("PLAN_APPROVED");
+    admission.advance("AUTHORIZATION_COMMITTED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+    admission.advance("BASELINE_VERIFIED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+    admission.advance("READY_ACK_COMMITTED");
+    expect(() => admission.blockDifferentMember()).toThrow(/revocation/);
+  });
+
+  test("blocks a different Member Identity before authorization", () => {
+    const admission = new AdmissionSession({
+      memberId: "00".repeat(32),
+      admissionId: "11".repeat(32),
+      deviceId: "22".repeat(32),
+      transcriptHash: "33".repeat(32),
+      stage: "OFFER_CREATED",
+    });
+    admission.verifyFingerprints("00".repeat(32), "22".repeat(32), "33".repeat(32));
+    admission.blockDifferentMember();
+    expect(admission.snapshot().stage).toBe("IDENTITY_BLOCKED");
+    expect(() => admission.advance("INVENTORY_COMPLETE")).toThrow(/Blocked identity/);
   });
 });

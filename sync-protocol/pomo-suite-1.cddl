@@ -33,7 +33,7 @@ unsigned-operation = [
   frontier : [* frontier-entry],
   authorization-epoch : uint,
   payload-schema : 1,
-  operation-kind : 1,
+  operation-kind : uint .ge 1,
   payload-hash : bstr .size 32
 ]
 
@@ -44,13 +44,18 @@ frontier-entry = [
   head-operation-id : bstr .size 32
 ]
 
-; Ticket #102 carries one synchronized Shared preference fact.
+; Kind 1 remains the #102 tracer bullet. Kinds 2-6 are the dormant domain allowlist.
+; Unknown kinds stay authenticated journal facts and are not preference-projected.
 preference-payload = [
-  ; Payload schema/version, independent from unsigned-operation.operation-kind.
   schema : 1,
   key : tstr .size (1..128),
   value : tstr .size (0..4096)
 ]
+history-payload = [2, action : tstr, block-id : tstr, details : [* tstr]]
+tag-payload = [3, tag-id : tstr, name : tstr, palette-slot : uint, archived : bool, merged-into : tstr / nil]
+profile-payload = [4, name : tstr, photo-blob-id : tstr / nil]
+crew-payload = [5, crew-id : tstr, join : bool]
+timer-payload = [6, action : tstr, phase-id : tstr, parent-heads : [* tstr], owner-device-id : tstr, ownership-claim-id : tstr]
 
 ; Operation ID input, before SHA-256.
 operation-id-domain = [

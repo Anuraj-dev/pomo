@@ -37,6 +37,48 @@ public class ActivePhaseMaterializerTest {
     }
 
     @Test
+    public fun staleOwnerCommandAfterHandoffLeavesTheJournalWithoutThrowing() {
+        val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
+        val handoff = fact("handoff", TimerAction.HANDOFF, setOf("start"), "chrome", "claim-b")
+        val stale = fact("stale-extend", TimerAction.EXTEND, setOf("handoff"), "android", "claim-a")
+        val projection = ActivePhaseMaterializer.materialize(listOf(start, handoff, stale))
+        assertEquals(setOf("stale-extend"), projection.staleCommandIds)
+        assertEquals(setOf("handoff"), projection.heads)
+        assertEquals("chrome", projection.ownerDeviceId)
+        assertFalse(projection.settlementRequired)
+    }
+
+    @Test
+    public fun descendantsOfStaleOwnerCommandsLeaveCanonicalState() {
+        val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
+        val handoff = fact("handoff", TimerAction.HANDOFF, setOf("start"), "chrome", "claim-b")
+        val stale = fact("stale-extend", TimerAction.EXTEND, setOf("handoff"), "android", "claim-a")
+        val descendant = fact("stale-complete", TimerAction.COMPLETE, setOf("stale-extend"), "android", "claim-a")
+        val projection = ActivePhaseMaterializer.materialize(listOf(start, handoff, stale, descendant))
+        assertEquals(setOf("stale-extend", "stale-complete"), projection.staleCommandIds)
+        assertEquals(setOf("handoff"), projection.heads)
+        assertTrue(projection.completedOperationIds.isEmpty())
+        assertEquals("chrome", projection.ownerDeviceId)
+        assertFalse(projection.settlementRequired)
+    }
+
+    @Test
+    public fun settlementMustCiteEveryConflictHead() {
+        val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
+        val pause = fact("pause", TimerAction.PAUSE, setOf("start"), "android", "claim-a")
+        val takeover = fact("takeover", TimerAction.PROVISIONAL_TAKEOVER, setOf("start"), "chrome", "claim-b")
+        val incomplete = fact("partial", TimerAction.SETTLE, setOf("pause"), "chrome", "claim-b")
+        val incompleteProjection = ActivePhaseMaterializer.materialize(listOf(start, pause, takeover, incomplete))
+        assertEquals(setOf("pause", "takeover"), incompleteProjection.heads)
+        assertTrue(incompleteProjection.settlementRequired)
+        val complete = fact("settle", TimerAction.SETTLE, setOf("pause", "takeover"), "chrome", "claim-b")
+        val settled = ActivePhaseMaterializer.materialize(listOf(start, pause, takeover, complete))
+        assertEquals(setOf("settle"), settled.heads)
+        assertFalse(settled.settlementRequired)
+        assertEquals("chrome", settled.ownerDeviceId)
+    }
+
+    @Test
     public fun descendantsOfPendingParentsRemainPending() {
         val start = fact("start", TimerAction.START, emptySet(), "android", "claim-a")
         val orphanParent = fact("orphan-parent", TimerAction.HANDOFF, setOf("missing"), "chrome", "claim-b")

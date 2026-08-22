@@ -38,9 +38,14 @@ internal data class MemberIdentity(
 internal enum class AdmissionStage {
     OFFER_CREATED,
     MUTUAL_FINGERPRINT_VERIFIED,
+    INVENTORY_COMPLETE,
+    LOCAL_EXPORT_SAVED,
+    RECOVERY_ANCHOR_CREATED,
+    PLAN_APPROVED,
     AUTHORIZATION_COMMITTED,
     BASELINE_VERIFIED,
     READY_ACK_COMMITTED,
+    IDENTITY_BLOCKED,
 }
 
 internal enum class AuthorityFactKind {

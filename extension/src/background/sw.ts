@@ -38,7 +38,15 @@ import {
   type PomoRequest,
   type PomoResponse,
 } from "../shared/messages";
-import { parseSyncUiState, SYNC_UI_STATE_KEY } from "../sync/ui/syncUiState";
+import {
+  completeOrdinaryDrain,
+  DORMANT_SYNC_UI_STATE,
+  parseSyncUiState,
+  scheduleOrdinaryDrain,
+  SYNC_DRAIN_REQUEST_KEY,
+  SYNC_UI_STATE_KEY,
+  timerControlsFrozenFromStorage,
+} from "../sync/ui/syncUiState";
 
 const ALARM_NAME = "pomo-tick";
 const ALARM_PERIOD_MINUTES = 0.5;
@@ -586,6 +594,7 @@ async function init(): Promise<void> {
     }
   }
   await ensureAlarm();
+  await consumeOrdinaryDrainRequest();
   await sync();
 }
 
@@ -815,13 +824,43 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
 
 async function timerControlsAreFrozen(): Promise<boolean> {
   const stored = await chrome.storage.local.get(SYNC_UI_STATE_KEY);
-  const raw = stored[SYNC_UI_STATE_KEY];
-  if (raw === undefined) return false;
+  return timerControlsFrozenFromStorage(stored[SYNC_UI_STATE_KEY]);
+}
+
+async function consumeOrdinaryDrainRequest(): Promise<void> {
+  const stored = await chrome.storage.local.get([SYNC_DRAIN_REQUEST_KEY, SYNC_UI_STATE_KEY]);
+  if (stored[SYNC_DRAIN_REQUEST_KEY] === undefined) return;
+  let ui = DORMANT_SYNC_UI_STATE;
   try {
-    return parseSyncUiState(raw).timerControlsFrozen;
+    if (stored[SYNC_UI_STATE_KEY] !== undefined) ui = parseSyncUiState(stored[SYNC_UI_STATE_KEY]);
   } catch {
-    return true;
+    ui = DORMANT_SYNC_UI_STATE;
   }
+  const scheduled = scheduleOrdinaryDrain(ui);
+  try {
+    const events = await readDiagnosticEvents();
+    events.push({
+      monotonicMillis: Date.now(),
+      area: "STATE_TRANSITION",
+      event: "ordinary-drain-scheduled",
+      fields: { outcome: "local-only" },
+    });
+    const completed = completeOrdinaryDrain(scheduled);
+    await chrome.storage.local.set({
+      [SYNC_UI_STATE_KEY]: completed,
+      "pomo:sync:diagnostic-events": events.slice(-200),
+    });
+    await chrome.storage.local.remove(SYNC_DRAIN_REQUEST_KEY);
+  } catch (error) {
+    await chrome.storage.local.set({ [SYNC_UI_STATE_KEY]: scheduled });
+    throw error;
+  }
+}
+
+async function readDiagnosticEvents(): Promise<Array<{ monotonicMillis: number; area: string; event: string; fields: Record<string, string> }>> {
+  const stored = await chrome.storage.local.get("pomo:sync:diagnostic-events");
+  const raw = stored["pomo:sync:diagnostic-events"];
+  return Array.isArray(raw) ? raw as Array<{ monotonicMillis: number; area: string; event: string; fields: Record<string, string> }> : [];
 }
 
 function logTopLevelError(context: string): (error: unknown) => void {
@@ -847,6 +886,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
       return syncAfterWrites();
     })
     .catch(logTopLevelError("alarm"));
+});
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || changes[SYNC_DRAIN_REQUEST_KEY] === undefined) return;
+  void initOnce().then(() => consumeOrdinaryDrainRequest()).catch(logTopLevelError("ordinary-drain"));
 });
 
 chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {

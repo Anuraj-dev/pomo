@@ -20,9 +20,16 @@ public class SharedCorpusTest {
         val fixture = resource("fixtures/system-generation.json")
         assertEquals(PomoSuite.ID, fixture.get("suite").asInt)
         assertEquals(PomoSuite.INITIAL_GENERATION, fixture.get("generation").asLong)
-        assertEquals(false, fixture.get("productionActivation").asBoolean)
         assertEquals("authenticated-tombstone-only", fixture.string("deletionRule"))
         assertEquals("android-room", fixture.string("historyAuthority"))
+        val matrix = resource("activation/physical-matrix.json")
+        val activated = fixture.get("productionActivation").asBoolean
+        if (activated) {
+            assertTrue(physicalActivationEvidenceComplete(matrix))
+        } else {
+            assertEquals(false, activated)
+            assertTrue(physicalMatrixSchemaValid(matrix))
+        }
     }
 
     @Test
@@ -261,6 +268,49 @@ public class SharedCorpusTest {
         }
     }
 
+    private fun physicalMatrixSchemaValid(matrix: JsonObject): Boolean {
+        if (matrix.int("schema") != 1) return false
+        if (matrix.int("suite") != 1) return false
+        if (matrix.int("generation") != 1) return false
+        val allowed = setOf("PASS_PHYSICAL", "FAIL_PHYSICAL", "BLOCKED")
+        val required = REQUIRED_MATRIX_ROWS
+        val seen = mutableSetOf<String>()
+        for (element in matrix.getAsJsonArray("rows")) {
+            val row = element.asJsonObject
+            val id = row.string("id")
+            if (!seen.add(id)) return false
+            val status = row.string("status")
+            if (status !in allowed) return false
+            if (status == "BLOCKED" && row.string("blockedReason").isBlank()) return false
+            if (id in required && !row.get("required").asBoolean) return false
+            if (status == "PASS_PHYSICAL" && !hasVersionedEvidence(row.string("evidence"))) return false
+            if (status == "FAIL_PHYSICAL" && !hasVersionedEvidence(row.string("evidence"))) return false
+        }
+        return seen.containsAll(required)
+    }
+
+    private fun physicalActivationEvidenceComplete(matrix: JsonObject): Boolean {
+        if (!physicalMatrixSchemaValid(matrix)) return false
+        val required = REQUIRED_MATRIX_ROWS
+        val seen = mutableSetOf<String>()
+        for (element in matrix.getAsJsonArray("rows")) {
+            val row = element.asJsonObject
+            val id = row.string("id")
+            seen.add(id)
+            if (id in required && row.string("status") != "PASS_PHYSICAL") return false
+        }
+        val artifacts = matrix.getAsJsonObject("artifactVersions")
+        return seen.containsAll(required) &&
+            hasVersionedEvidence(matrix.string("commit")) &&
+            isSha256Hex(artifacts.string("androidDevDebugSha256")) &&
+            isSha256Hex(artifacts.string("androidProdDebugSha256")) &&
+            isSha256Hex(artifacts.string("chromeTestZipSha256"))
+    }
+
+    private fun hasVersionedEvidence(value: String): Boolean = GIT_COMMIT.containsMatchIn(value)
+
+    private fun isSha256Hex(value: String): Boolean = SHA256_HEX.matches(value)
+
     private fun resource(path: String): JsonObject {
         val stream = checkNotNull(javaClass.classLoader?.getResourceAsStream(path)) { "Missing shared corpus $path" }
         return stream.reader(StandardCharsets.UTF_8).use { JsonParser.parseReader(it).asJsonObject }
@@ -285,4 +335,25 @@ public class SharedCorpusTest {
     }
 
     private fun ByteArray.hex(): String = joinToString("") { "%02x".format(it.toInt() and 0xff) }
+
+    private companion object {
+        val REQUIRED_MATRIX_ROWS: Set<String> =
+            setOf(
+                "android-android",
+                "android-chrome",
+                "chrome-chrome",
+                "lan",
+                "direct-internet",
+                "turn",
+                "webdav-providers",
+                "offline-duration",
+                "lifecycle-loss",
+                "recovery",
+                "migration",
+                "conflict",
+                "performance",
+            )
+        val GIT_COMMIT: Regex = Regex("[0-9a-fA-F]{40}")
+        val SHA256_HEX: Regex = Regex("^[0-9a-fA-F]{64}$")
+    }
 }

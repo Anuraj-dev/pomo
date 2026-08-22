@@ -18,7 +18,7 @@ internal object OperationCodec {
             require(operation.suiteGeneration == PomoSuite.INITIAL_GENERATION)
         }
         require(operation.payloadSchema == PomoSuite.PREFERENCE_SCHEMA)
-        require(operation.kind == PomoSuite.PREFERENCE_SET_KIND)
+        require(operation.kind >= 1)
         val sortedFrontier =
             operation.frontier.sortedWith { left, right ->
                 compareBytes(left.deviceId.copy(), right.deviceId.copy()).takeIf { it != 0 }

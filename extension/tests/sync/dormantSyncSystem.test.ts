@@ -7,5 +7,14 @@ test("test artifact uses authenticated ingress while production stays dormant", 
   system.startTestArtifact(); const source = new Uint8Array([1, 2, 3]); expect(await system.ingestFromReplica(source)).toBe("ACCEPTED"); source.fill(0);
   expect(received.value).toEqual(new Uint8Array([1, 2, 3])); expect(system.productionMigrationCutoverAllowed()).toBeFalse();
   const production = new DormantSyncSystem({ async ingest() { return "ACCEPTED"; } }, { productionActivated: false, testArtifact: false });
-  expect(() => production.startTestArtifact()).toThrow(/production/); expect(production.productionMigrationCutoverAllowed()).toBeFalse();
+  expect(() => production.startTestArtifact()).toThrow(/production/); expect(() => production.start()).toThrow(/production/); expect(production.productionMigrationCutoverAllowed()).toBeFalse();
+});
+
+test("production activation flag starts ingress without allowing migration cutover", async () => {
+  const received: { value: Uint8Array | null } = { value: null };
+  const system = new DormantSyncSystem({ async ingest(wire) { received.value = wire; return "ACCEPTED"; } }, { productionActivated: true, testArtifact: false });
+  system.start();
+  expect(await system.ingestFromReplica(new Uint8Array([9]))).toBe("ACCEPTED");
+  expect(received.value).toEqual(new Uint8Array([9]));
+  expect(system.productionMigrationCutoverAllowed()).toBeFalse();
 });

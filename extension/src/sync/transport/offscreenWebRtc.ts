@@ -46,9 +46,38 @@ async function handle(message: RouteMessage): Promise<unknown> {
   state.channel?.close(); state.peer.close(); routes.delete(message.routeId); return { ok: true };
 }
 
+function openInbox(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open("pomo-webrtc-inbox", 1);
+    request.onupgradeneeded = () => {
+      if (!request.result.objectStoreNames.contains("inbox")) request.result.createObjectStore("inbox", { keyPath: "id", autoIncrement: true });
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function stageInbound(routeId: string, bytes: number[]): Promise<void> {
+  const db = await openInbox();
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction("inbox", "readwrite");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.objectStore("inbox").put({ routeId, bytes, receivedAt: Date.now() });
+    });
+  } finally {
+    db.close();
+  }
+}
+
 function bind(routeId: string, state: { channel: RTCDataChannel | null }, channel: RTCDataChannel): void {
   channel.binaryType = "arraybuffer";
   channel.bufferedAmountLowThreshold = 262_144;
-  channel.onmessage = (event) => { if (event.data instanceof ArrayBuffer) void chrome.runtime.sendMessage({ type: "POMO_WEBRTC_BYTES", routeId, bytes: [...new Uint8Array(event.data)] }); };
+  channel.onmessage = (event) => {
+    if (!(event.data instanceof ArrayBuffer)) return;
+    const bytes = [...new Uint8Array(event.data)];
+    void stageInbound(routeId, bytes).then(() => chrome.runtime.sendMessage({ type: "POMO_WEBRTC_BYTES", routeId, bytes }));
+  };
   state.channel = channel;
 }

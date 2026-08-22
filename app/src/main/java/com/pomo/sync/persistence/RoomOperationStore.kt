@@ -3,12 +3,11 @@ package com.pomo.sync.persistence
 import com.pomo.db.AppDatabase
 import com.pomo.sync.crypto.CoseOperationWire
 import com.pomo.sync.protocol.AuthenticatedOperation
+import com.pomo.sync.protocol.DomainPayload
 import com.pomo.sync.protocol.IngestDisposition
 import com.pomo.sync.protocol.KernelCheckpoint
-import com.pomo.sync.protocol.OperationCodec
 import com.pomo.sync.protocol.OperationCommit
 import com.pomo.sync.protocol.OperationStore
-import com.pomo.sync.protocol.PreferenceValue
 
 internal enum class SyncCommitBoundary {
     BEFORE_OPERATION,
@@ -339,6 +338,7 @@ internal class RoomOperationStore(
         causalMaterializationOrder(
             dao.acceptedOperations().filterNot { operation -> operation.operationId in checkpointOperationIds },
         ).forEach { operation ->
+            if (operation.preferenceKey.isEmpty()) return@forEach
             dao.upsertProjection(
                 SyncPreferenceProjectionEntity(
                     operation.preferenceKey,
@@ -400,8 +400,11 @@ internal class RoomOperationStore(
         disposition: IngestDisposition,
         localAuthor: Boolean,
     ): SyncOperationEntity {
-        val preference = OperationCodec.decodePreference(authenticated.canonicalPayload)
-        val value = (preference.value as PreferenceValue.Text).value
+        val preference =
+            DomainPayload.preferenceProjectionOrEmpty(
+                authenticated.operation.kind,
+                authenticated.canonicalPayload,
+            )
         return SyncOperationEntity(
             operationId = authenticated.operationId.toString(),
             memberId = authenticated.operation.memberId.toString(),
@@ -410,8 +413,8 @@ internal class RoomOperationStore(
             sequence = authenticated.operation.sequence,
             previousOperationId = authenticated.operation.previousOperationId?.toString(),
             signedWire = authenticated.signedEnvelope.copyOf(),
-            preferenceKey = preference.key,
-            preferenceValue = value,
+            preferenceKey = preference.first,
+            preferenceValue = preference.second,
             disposition = disposition.name,
             localAuthor = localAuthor,
         )

@@ -1,12 +1,15 @@
 # Architecture
 
-Pomo is mobile-primary: the Android app is the canonical Pomodoro system,
-and every control surface talks to the phone-owned service state.
+Pomo is mobile-primary. The live production path is still the phone service and
+the independent Chrome timer engine. A dormant Operation-journal Replica is
+packaged beside that path and does not author live Work blocks until activation.
+Activation is the isolated fixture flip in `docs/sync-merge-order.md`, gated by
+`sync-protocol/activation/physical-matrix.json`.
 
 ## Source Of Truth
 
-`PomodoroService` is the write boundary for timer state. These inputs all route
-through service methods:
+Until Migration cutover, `PomodoroService` is the write boundary for the live
+Android timer. These inputs all route through service methods:
 
 - Timer screen buttons
 - Notification actions
@@ -15,12 +18,12 @@ through service methods:
 - The NodeMCU desk device, through the same authenticated HTTP commands
   (including offline history import and live timer adopt)
 
-Room is the canonical history store. Desktop clients may display or cache data,
-but they should not merge, overwrite, or author timer/history state. The desk
-may append completed offline sessions and hand over a live timer under the
-least-remaining adopt rule (phone stopped always; same session always; both
-live only when desk remaining is strictly less); it does not dual-own the clock
-while synced.
+Room is the canonical live history store. The dormant sync journal is a separate
+authenticated Operation log. Desktop clients may display or cache data, but they
+should not merge, overwrite, or author timer/history state. The desk may append
+completed offline sessions and hand over a live timer under the least-remaining
+adopt rule. It does not dual-own the clock while synced. NodeMCU is out of Full
+Replica scope.
 
 ## Runtime Flow
 

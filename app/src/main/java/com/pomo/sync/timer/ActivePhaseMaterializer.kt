@@ -47,6 +47,7 @@ internal data class ActivePhaseProjection(
     val completedOperationIds: Set<String>,
     val timeUncertain: Boolean,
     val pending: Set<String>,
+    val staleCommandIds: Set<String>,
 )
 
 internal data class TimerCommandRequest(
@@ -60,10 +61,19 @@ internal object ActivePhaseMaterializer {
     fun materialize(input: Collection<TimerFact>): ActivePhaseProjection {
         val facts = input.distinctBy { it.operationId }.sortedBy { it.operationId }
         if (facts.isEmpty()) {
-            return ActivePhaseProjection(null, null, emptySet(), null, false, emptySet(), false, emptySet())
+            return ActivePhaseProjection(
+                null,
+                null,
+                emptySet(),
+                null,
+                false,
+                emptySet(),
+                false,
+                emptySet(),
+                emptySet(),
+            )
         }
         require(facts.map { it.phaseId }.distinct().size == 1) { "Projection must target one identified phase" }
-        val byId = facts.associateBy { it.operationId }
         val accepted = linkedMapOf<String, TimerFact>()
         val remaining = facts.toMutableList()
         var progressed = true
@@ -86,23 +96,52 @@ internal object ActivePhaseMaterializer {
         accepted.values.forEach { fact ->
             require(fact.plan == plan) { "Handoff and commands cannot rewrite the locked Phase plan" }
             require(fact.elapsedMillis >= 0)
-            if (fact.action == TimerAction.SETTLE) require(fact.parentHeads.size >= 2)
-            if (fact.action in normalOwnerActions) {
-                val parent =
-                    fact.parentHeads.singleOrNull()?.let(accepted::get)
-                        ?: error("Normal Timer command requires one exact command head")
-                require(fact.ownerDeviceId == parent.ownerDeviceId && fact.ownershipClaimId == parent.ownershipClaimId) {
-                    "Only the uncontested owner may author a normal Timer command"
-                }
+        }
+        val staleCommandIds = linkedSetOf<String>()
+        accepted.values.filter { it.action in normalOwnerActions }.forEach { fact ->
+            val parent = fact.parentHeads.singleOrNull()?.let(accepted::get)
+            if (parent == null ||
+                fact.ownerDeviceId != parent.ownerDeviceId ||
+                fact.ownershipClaimId != parent.ownershipClaimId
+            ) {
+                staleCommandIds += fact.operationId
             }
         }
-        val referenced = accepted.values.flatMapTo(linkedSetOf()) { it.parentHeads }
-        val heads = accepted.keys.filterTo(linkedSetOf()) { it !in referenced }
-        val headFacts = heads.mapNotNull(byId::get)
-        val settlementRequired = heads.size > 1 || headFacts.count { it.action == TimerAction.SETTLE } > 1
+        staleCommandIds.forEach { accepted.remove(it) }
+        var pruned = true
+        while (pruned) {
+            pruned = false
+            val present = accepted.keys
+            val orphaned = accepted.values.filter { fact -> fact.parentHeads.any { it !in present } }
+            for (fact in orphaned) {
+                accepted.remove(fact.operationId)
+                staleCommandIds += fact.operationId
+                pruned = true
+            }
+        }
+        val withoutSettles = accepted.filterValues { it.action != TimerAction.SETTLE }
+        val referencedWithoutSettles = withoutSettles.values.flatMapTo(linkedSetOf()) { it.parentHeads }
+        val headsWithoutSettles =
+            withoutSettles.keys.filterTo(linkedSetOf()) { it !in referencedWithoutSettles }
+        val validSettles =
+            accepted.values.filter { fact ->
+                fact.action == TimerAction.SETTLE && fact.parentHeads == headsWithoutSettles && headsWithoutSettles.size >= 2
+            }
+        val canonical =
+            if (validSettles.size == 1) {
+                withoutSettles + (validSettles.single().operationId to validSettles.single())
+            } else {
+                accepted.filterKeys { id ->
+                    accepted[id]?.action != TimerAction.SETTLE || validSettles.any { it.operationId == id }
+                }
+            }
+        val referenced = canonical.values.flatMapTo(linkedSetOf()) { it.parentHeads }
+        val heads = canonical.keys.filterTo(linkedSetOf()) { it !in referenced }
+        val headFacts = heads.mapNotNull(canonical::get)
+        val settlementRequired = heads.size > 1 || validSettles.size > 1
         val settled = headFacts.singleOrNull()?.takeIf { it.action == TimerAction.SETTLE }
         val effectiveHead = settled ?: headFacts.singleOrNull()
-        val completions = accepted.values.filter { it.action == TimerAction.COMPLETE }.mapTo(linkedSetOf()) { it.operationId }
+        val completions = canonical.values.filter { it.action == TimerAction.COMPLETE }.mapTo(linkedSetOf()) { it.operationId }
         return ActivePhaseProjection(
             phaseId = facts.first().phaseId,
             plan = plan,
@@ -110,8 +149,9 @@ internal object ActivePhaseMaterializer {
             ownerDeviceId = effectiveHead?.ownerDeviceId,
             settlementRequired = settlementRequired,
             completedOperationIds = completions,
-            timeUncertain = accepted.values.any { it.timeUncertain },
+            timeUncertain = canonical.values.any { it.timeUncertain },
             pending = pending,
+            staleCommandIds = staleCommandIds,
         )
     }
 

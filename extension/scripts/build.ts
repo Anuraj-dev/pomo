@@ -1,6 +1,23 @@
-import { rmSync, cpSync, watch, writeFileSync } from "node:fs";
+import { rmSync, cpSync, watch, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { generateIcons } from "./gen-icons";
+import { evaluateActivationGate, type PhysicalMatrix } from "./activationGate";
+
+const generation = JSON.parse(
+  readFileSync(join(import.meta.dir, "../../sync-protocol/fixtures/system-generation.json"), "utf8"),
+) as { readonly productionActivation: boolean; readonly suite: number; readonly generation: number };
+const matrix = JSON.parse(
+  readFileSync(join(import.meta.dir, "../../sync-protocol/activation/physical-matrix.json"), "utf8"),
+) as PhysicalMatrix;
+const gate = evaluateActivationGate({
+  productionActivation: generation.productionActivation === true,
+  matrix,
+});
+if (!gate.ok) {
+  throw new Error(`physical activation gate failed:\n${gate.errors.join("\n")}`);
+}
+const testArtifact = process.env["POMO_SYNC_TEST_ARTIFACT"] === "true";
+const productionActivation = !testArtifact && generation.productionActivation === true;
 
 const root = join(import.meta.dir, "..");
 const src = join(root, "src");
@@ -14,7 +31,7 @@ const entries: Array<[string, string, "esm" | "iife"]> = [
   ["src/surfaces/crew/main.ts", "crew.js", "esm"],
   ["src/sync/transport/offscreenWebRtc.ts", "offscreen-webrtc.js", "esm"],
 ];
-if (process.env["POMO_SYNC_TEST_ARTIFACT"] === "true") entries.push(["src/sync/testArtifact.ts", "sync-test.js", "esm"]);
+if (testArtifact) entries.push(["src/sync/testArtifact.ts", "sync-test.js", "esm"]);
 
 async function build() {
   rmSync(dist, { recursive: true, force: true });
@@ -28,7 +45,8 @@ async function build() {
       sourcemap: "linked",
       define: {
         "process.env.NODE_ENV": '"production"',
-        __POMO_SYNC_TEST_ARTIFACT__: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true" ? "true" : "false",
+        __POMO_SYNC_TEST_ARTIFACT__: testArtifact ? "true" : "false",
+        __POMO_SYNC_PRODUCTION_ACTIVATION__: productionActivation ? "true" : "false",
       },
     });
     if (!res.success) {
@@ -46,7 +64,7 @@ async function build() {
   cpSync(join(src, "shared", "tokens.css"), join(dist, "tokens.css"));
   writeFileSync(
     join(dist, "sync-build-metadata.json"),
-    `${JSON.stringify({ schema: 1, productionActivation: false, testArtifact: process.env["POMO_SYNC_TEST_ARTIFACT"] === "true", suite: 1, generation: 1 }, null, 2)}\n`,
+    `${JSON.stringify({ schema: 1, productionActivation, testArtifact, suite: generation.suite, generation: generation.generation }, null, 2)}\n`,
   );
   generateIcons();
   console.log("build ok -> dist/");

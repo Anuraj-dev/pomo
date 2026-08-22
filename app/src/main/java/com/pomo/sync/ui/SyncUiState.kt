@@ -81,6 +81,8 @@ public data class SyncUiState(
 
 public fun scheduleOrdinaryDrain(state: SyncUiState): SyncUiState = state.copy(retryPending = true)
 
+public fun completeOrdinaryDrain(state: SyncUiState): SyncUiState = state.copy(retryPending = false)
+
 public fun timerControlsAllowed(state: SyncUiState): Boolean =
     !(state.affectedTimerDomain && state.health in setOf(SyncHealth.CONFLICT, SyncHealth.SAFE_MODE))
 

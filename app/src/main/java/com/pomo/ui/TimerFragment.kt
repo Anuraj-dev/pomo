@@ -20,6 +20,7 @@ import com.google.android.material.transition.MaterialFadeThrough
 import com.pomo.MainActivity
 import com.pomo.R
 import com.pomo.db.HistoryCacheRepository
+import com.pomo.sync.ui.SyncSafetyGate
 import com.pomo.tags.TagStore
 import com.pomo.timer.TimerState
 import com.pomo.ui.screens.TimerScreen
@@ -115,6 +116,11 @@ public class TimerFragment : Fragment() {
                         currentTag = displayTag,
                         onTagSelected = { showTagPicker = true },
                         availableTags = availableTags,
+                        syncSignals = SyncSafetyGate.state.signals,
+                        onOpenSync = {
+                            runCatching { findNavController().navigate(R.id.navigation_sync) }
+                                .onFailure { Log.w(TAG, "Could not navigate to sync", it) }
+                        },
                     )
 
                     if (showTagPicker) {

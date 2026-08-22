@@ -166,7 +166,9 @@ Own a focus session from start to finish as a live performance readout. The phon
   join-code-based comparison of focus telemetry; the app remains local-first
   and has no login or Pomo-owned social backend.
 - An AI coach or recommendation surface.
-- Cross-device sync beyond the existing LAN desktop client. Phone remains the source of truth.
+- Shipping peer sync as a public product before the dormant Android/Chrome
+  Replica system is physically validated and explicitly activated. Until then
+  the live timer and history stay on the unmigrated phone and extension engines.
 - Custom illustration sets or mascots. Visual identity rests on type, color, motion.
 - Warm or "cozy" aesthetics. This product is sharp, not soft.
 

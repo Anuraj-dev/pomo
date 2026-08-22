@@ -1,4 +1,5 @@
 import { canonicalUnsignedOperation, assertOperationIdentity, compareBytes, operationId, payloadHash } from "../protocol/operation";
+import { requireValidDomainPayload } from "../protocol/domainPayload";
 import { hexToBytes } from "../../shared/hex";
 import {
   OperationKind,
@@ -65,6 +66,7 @@ export interface AuthorRequest {
   readonly authorizationEpoch: number;
   readonly frontier: readonly FrontierEntry[];
   readonly payload: Uint8Array;
+  readonly kind?: OperationKind;
   readonly completePrerequisites: ReadonlySet<string>;
   readonly authorized: boolean;
   readonly deviceReady: boolean;
@@ -143,6 +145,7 @@ export class OperationKernel {
     if (feed !== undefined && feed.pending.size > 0) missing.add("COMPLETE_LOCAL_FEED");
     if (missing.size > 0) return { status: "BLOCKED_PREREQUISITE", missing };
     try {
+      requireValidDomainPayload(request.kind ?? OperationKind.SharedPreferenceSet, request.payload);
       const operation: UnsignedOperation = {
         suite: POMO_SUITE_1,
         suiteGeneration: POMO_SUITE_GENERATION_1,
@@ -156,7 +159,7 @@ export class OperationKernel {
           compareBytes(hexToBytes(left.incarnationId), hexToBytes(right.incarnationId))),
         authorizationEpoch: request.authorizationEpoch,
         payloadSchema: 1,
-        kind: OperationKind.SharedPreferenceSet,
+        kind: request.kind ?? OperationKind.SharedPreferenceSet,
         payloadHash: await payloadHash(request.payload),
       };
       const canonical = canonicalUnsignedOperation(operation);

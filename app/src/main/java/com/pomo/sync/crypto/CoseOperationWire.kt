@@ -3,6 +3,7 @@ package com.pomo.sync.crypto
 import com.pomo.sync.protocol.AuthenticatedOperation
 import com.pomo.sync.protocol.CborValue
 import com.pomo.sync.protocol.DeterministicCbor
+import com.pomo.sync.protocol.DomainPayload
 import com.pomo.sync.protocol.OperationCodec
 import com.pomo.sync.protocol.OperationSigner
 import com.pomo.sync.protocol.OperationVerifier
@@ -30,7 +31,7 @@ internal object CoseOperationWire {
         canonicalPayload: ByteArray,
         privateKey: PrivateKey,
     ): AuthenticatedOperation {
-        OperationCodec.decodePreference(canonicalPayload)
+        DomainPayload.requireValid(operation.kind, canonicalPayload)
         require(OperationCodec.payloadHash(canonicalPayload) == operation.payloadHash)
         val canonicalUnsigned = OperationCodec.encodeUnsigned(operation)
         val cose = CoseSign1.sign(operation, canonicalUnsigned, privateKey)
@@ -63,7 +64,7 @@ internal object CoseOperationWire {
                 ?: throw IllegalArgumentException("Operation fact payload must be a byte string")
         val canonicalUnsigned = CoseSign1.embeddedPayload(cose)
         val operation = OperationCodec.decodeUnsignedForVerification(canonicalUnsigned)
-        OperationCodec.decodePreference(payload)
+        DomainPayload.requireValid(operation.kind, payload)
         require(OperationCodec.payloadHash(payload) == operation.payloadHash)
         CoseSign1.verify(cose, operation, canonicalUnsigned, publicKey)
         return AuthenticatedOperation(

@@ -9,7 +9,9 @@
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "sync:gates": "bun scripts/sync-performance-gates.ts",
-    "sync:verify-package": "bun scripts/verify-sync-package.ts"
+    "sync:verify-package": "bun scripts/verify-sync-package.ts",
+    "sync:verify-activation-gate": "bun scripts/verify-activation-gate.ts",
+    "sync:apply-production-activation": "bun scripts/apply-production-activation.ts"
   },
   "dependencies": {
     "@hpke/core": "1.9.0",

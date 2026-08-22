@@ -32,6 +32,31 @@ public class OperationKernelTest {
     }
 
     @Test
+    public fun allowlistFamiliesAuthorWithoutBecomingPreferenceProjection() {
+        val kernel = kernel()
+        assertEquals(IngestDisposition.ACCEPTED, (kernel.author(authorRequest("bell")) as AuthorResult.Authored).disposition)
+        val families =
+            listOf(
+                PomoSuite.HISTORY_KIND to DomainPayload.encodeHistory("CREATE", "block-1", listOf("phase-1")),
+                PomoSuite.TAG_KIND to DomainPayload.encodeTag("tag-work", "Work", 0, false, null),
+                PomoSuite.PROFILE_KIND to DomainPayload.encodeProfile("Snehit", null),
+                PomoSuite.CREW_KIND to DomainPayload.encodeCrew("crew-1", true),
+                PomoSuite.TIMER_KIND to DomainPayload.encodeTimer("START", "phase-1", emptyList(), "android", "claim-a"),
+            )
+        families.forEach { (kind, payload) ->
+            val result = kernel.author(authorRequest("bell").copy(preference = null, kind = kind, payload = payload))
+            assertTrue(result is AuthorResult.Authored)
+            assertEquals(IngestDisposition.ACCEPTED, (result as AuthorResult.Authored).disposition)
+            assertEquals(kind, result.value.operation.kind)
+        }
+        val unknown = OperationCodec.encodePreference(PreferenceSet("timer.sound", PreferenceValue.Text("ignored")))
+        val opaque = kernel.author(authorRequest("bell").copy(preference = null, kind = 99, payload = unknown))
+        assertTrue(opaque is AuthorResult.Authored)
+        assertEquals("bell", kernel.materializedPreference("timer.sound"))
+        assertEquals(7, kernel.summarize().accepted)
+    }
+
+    @Test
     public fun authoredOperationIsDetachedFromRetainedKernelState() {
         val kernel = kernel()
         val authored = kernel.author(authorRequest("bell")) as AuthorResult.Authored

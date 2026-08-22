@@ -11,6 +11,10 @@ export interface AdmissionSnapshot {
 const STAGES: readonly AdmissionStage[] = [
   "OFFER_CREATED",
   "MUTUAL_FINGERPRINT_VERIFIED",
+  "INVENTORY_COMPLETE",
+  "LOCAL_EXPORT_SAVED",
+  "RECOVERY_ANCHOR_CREATED",
+  "PLAN_APPROVED",
   "AUTHORIZATION_COMMITTED",
   "BASELINE_VERIFIED",
   "READY_ACK_COMMITTED",
@@ -37,8 +41,16 @@ export class AdmissionSession {
   }
 
   advance(next: AdmissionStage): void {
+    if (this.#current.stage === "IDENTITY_BLOCKED") throw new Error("Blocked identity cannot continue admission");
     const index = STAGES.indexOf(this.#current.stage);
     if (STAGES[index + 1] !== next) throw new Error("Admission stages cannot be skipped or rewound");
     this.#current = { ...this.#current, stage: next };
+  }
+
+  blockDifferentMember(): void {
+    if (this.#current.stage === "AUTHORIZATION_COMMITTED" || STAGES.indexOf(this.#current.stage) > STAGES.indexOf("AUTHORIZATION_COMMITTED")) {
+      throw new Error("After authorization, cancel becomes revocation");
+    }
+    this.#current = { ...this.#current, stage: "IDENTITY_BLOCKED" };
   }
 }

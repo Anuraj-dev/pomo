@@ -65,9 +65,39 @@ public class SyncFragment : Fragment() {
                             state = scheduleOrdinaryDrain(state)
                             SyncSafetyGate.state = state
                         },
-                        onResumeAdmission = {},
-                        onResumeMigration = {},
-                        onConfirmRecovery = {},
+                        onResumeAdmission = {
+                            if (state.admission.resumable) {
+                                state =
+                                    state.copy(
+                                        admission = state.admission.copy(stage = "Resumed locally"),
+                                    )
+                                SyncSafetyGate.state = state
+                            }
+                        },
+                        onResumeMigration = {
+                            if (state.migration.resumable) {
+                                state =
+                                    state.copy(
+                                        migration = state.migration.copy(stage = "Resumed locally"),
+                                    )
+                                SyncSafetyGate.state = state
+                            }
+                        },
+                        onConfirmRecovery = {
+                            if (state.recovery.compensatingOperations.isNotEmpty() &&
+                                !state.recovery.independentConfirmationRequired
+                            ) {
+                                state =
+                                    state.copy(
+                                        recovery =
+                                            state.recovery.copy(
+                                                compensatingOperations = emptyList(),
+                                                comparison = "Forward restore confirmed. Safety checkpoint retained.",
+                                            ),
+                                    )
+                                SyncSafetyGate.state = state
+                            }
+                        },
                         onExportDiagnostics = {
                             diagnosticExport.launch("pomo-diagnostics.ndjson")
                         },

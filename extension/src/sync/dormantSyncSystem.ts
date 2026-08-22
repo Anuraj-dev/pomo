@@ -13,6 +13,10 @@ export class DormantSyncSystem {
     if (!this.mode.testArtifact || this.mode.productionActivated) throw new Error("Dormant synchronization is unavailable in production");
     this.#started = true;
   }
+  start(): void {
+    if (!this.mode.testArtifact && !this.mode.productionActivated) throw new Error("Dormant synchronization is unavailable in production");
+    this.#started = true;
+  }
   async ingestFromReplica(signedEnvelope: Uint8Array): Promise<string> {
     if (!this.#started) throw new Error("Dormant synchronization is unavailable in production");
     return await this.ingress.ingest(signedEnvelope.slice());

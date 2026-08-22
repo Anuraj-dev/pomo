@@ -8,8 +8,10 @@ phone protocol, firmware, NodeMCU, or desktop-client authority.
 
 ## Tracer operation
 
-`pomo-suite-1.cddl` defines the fixed-position unsigned Operation and its one
-payload, `[1, "focusDurationMinutes", "25"]`. The payload is deterministically
+`pomo-suite-1.cddl` defines the fixed-position unsigned Operation. Kind 1 is the
+shared-preference tracer `[1, "focusDurationMinutes", "25"]`. Kinds 2-6 are
+History, Tag, Profile, Crew, and Timer payloads. Unknown kinds stay in the
+journal and do not write the preference projection. Payloads are deterministically
 encoded and hashed. The unsigned Operation is then deterministically encoded.
 Both suite and suite generation are part of that unsigned meaning; the COSE
 protected header repeats them and verification requires an exact match.
@@ -57,7 +59,9 @@ and received high-S signatures are rejected.
   activation crash points exercised by both runtimes.
 - `fixtures/system-generation.json` freezes suite, generation, formats,
   authenticated-tombstone deletion, Room history authority, and dormant
-  production activation.
+  production activation. Gradle prod flavor and the Chrome production package
+  read this flag. The physical gate in `activation/physical-matrix.json` must
+  be all `PASS_PHYSICAL` before the flag may become true.
 
 Hex is lowercase in this corpus. Empty octet strings are `""`. Fixture-only
 private keys are public test material and must never enter a production key

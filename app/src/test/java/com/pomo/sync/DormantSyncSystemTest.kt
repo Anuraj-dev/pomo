@@ -34,6 +34,25 @@ public class DormantSyncSystemTest {
                 mode = SyncActivationMode(productionActivated = false, testArtifact = false),
             )
         assertTrue(runCatching { system.startTestArtifact() }.isFailure)
+        assertTrue(runCatching { system.start() }.isFailure)
+        assertFalse(system.productionMigrationCutoverAllowed())
+    }
+
+    @Test
+    public fun productionActivationFlagStartsIngressWithoutCutover() {
+        var received: ByteArray? = null
+        val system =
+            DormantSyncSystem(
+                ingress =
+                    AuthenticatedOperationIngress { wire ->
+                        received = wire
+                        "ACCEPTED"
+                    },
+                mode = SyncActivationMode(productionActivated = true, testArtifact = false),
+            )
+        system.start()
+        assertEquals("ACCEPTED", system.ingestFromReplica(byteArrayOf(9)))
+        assertTrue(received?.contentEquals(byteArrayOf(9)) == true)
         assertFalse(system.productionMigrationCutoverAllowed())
     }
 }

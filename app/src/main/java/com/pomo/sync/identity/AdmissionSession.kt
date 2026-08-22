@@ -29,9 +29,18 @@ internal class AdmissionSession private constructor(
     }
 
     fun advance(next: AdmissionStage) {
-        val expected = AdmissionStage.entries.getOrNull(current.stage.ordinal + 1)
+        require(current.stage != AdmissionStage.IDENTITY_BLOCKED) { "Blocked identity cannot continue admission" }
+        val linear = AdmissionStage.entries.filter { it != AdmissionStage.IDENTITY_BLOCKED }
+        val expected = linear.getOrNull(linear.indexOf(current.stage) + 1)
         require(next == expected) { "Admission stages cannot be skipped or rewound" }
         current = current.copy(stage = next)
+    }
+
+    fun blockDifferentMember() {
+        require(current.stage !in postAuthorizationStages) {
+            "After authorization, cancel becomes revocation"
+        }
+        current = current.copy(stage = AdmissionStage.IDENTITY_BLOCKED)
     }
 
     companion object {
@@ -41,5 +50,12 @@ internal class AdmissionSession private constructor(
         }
 
         fun resume(snapshot: AdmissionSnapshot): AdmissionSession = AdmissionSession(snapshot)
+
+        private val postAuthorizationStages =
+            setOf(
+                AdmissionStage.AUTHORIZATION_COMMITTED,
+                AdmissionStage.BASELINE_VERIFIED,
+                AdmissionStage.READY_ACK_COMMITTED,
+            )
     }
 }
