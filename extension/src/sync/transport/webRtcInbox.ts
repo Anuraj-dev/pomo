@@ -101,17 +101,19 @@ export function packagedWebRtcInbox(): WebRtcInboxStore {
         return await new Promise((resolve, reject) => {
           const tx = db.transaction(INBOX_STORE, "readwrite");
           const store = tx.objectStore(INBOX_STORE);
+          let rows: StagedWebRtcMessage[] = [];
+          tx.oncomplete = () => resolve(rows);
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error ?? new Error("webrtc inbox transaction aborted"));
           const request = store.getAll();
           request.onerror = () => reject(request.error);
           request.onsuccess = () => {
-            const rows = (request.result as Array<{ routeId: string; bytes: number[]; receivedAt: number }>).map((row) => ({
+            rows = (request.result as Array<{ routeId: string; bytes: number[]; receivedAt: number }>).map((row) => ({
               routeId: row.routeId,
               bytes: new Uint8Array(row.bytes),
               receivedAt: row.receivedAt,
             }));
             store.clear();
-            tx.oncomplete = () => resolve(rows);
-            tx.onerror = () => reject(tx.error);
           };
         });
       } finally {

@@ -256,6 +256,9 @@ export async function installChromeLivePeer(input: {
   readonly identity?: LivePeerIdentity;
   readonly signalingTransport?: NostrSyncTransport;
 }): Promise<LivePeerIdentity> {
+  for (const runtime of runtimes) runtime.reset();
+  runtimes.clear();
+  current = null;
   const identity = input.identity ?? await loadOrCreateLivePeerIdentity(input.storage);
   const stored = await input.storage.get([LIVE_PEER_ICE_KEY, LIVE_PEERS_KEY, RENDEZVOUS_KEY]);
   const ice = iceFrom(stored);
@@ -319,6 +322,7 @@ export async function installChromeLivePeer(input: {
 
 export async function ensurePackagedChromeLivePeer(): Promise<LivePeerIdentity | null> {
   if (typeof chrome === "undefined" || chrome.storage?.local === undefined) return current?.identity ?? null;
+  if (current !== null) return current.identity;
   const storage = chromeLivePeerStorage();
   const identity = await loadOrCreateLivePeerIdentity(storage);
   const keys = new Map<string, CryptoKey>([[identity.deviceId, identity.publicCryptoKey]]);

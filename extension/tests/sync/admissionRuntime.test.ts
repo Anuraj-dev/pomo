@@ -66,4 +66,26 @@ describe("admission runtime", () => {
     expect(next.state.admission.stage).toBe("READY_ACK_COMMITTED");
     expect(peers.some((peer) => peer.deviceId === "33".repeat(32) && peer.endpoint === "http://192.168.0.2:9/replica")).toBeTrue();
   });
+
+  test("same-Member offer drops a non-LAN endpoint", async () => {
+    const storage = new MemoryStorage();
+    const first = await resumeAdmission({ storage, lanDeviceId: "aa".repeat(32) });
+    const local = decodeReplicaOffer(first.offer);
+    await resumeAdmission({
+      storage,
+      lanDeviceId: "aa".repeat(32),
+      remoteOffer: JSON.stringify({
+        schema: 1,
+        kind: "pomo-replica-offer",
+        memberId: local.memberId,
+        admissionId: "11".repeat(32),
+        identityDeviceId: "22".repeat(32),
+        lanDeviceId: "33".repeat(32),
+        transcriptHash: "44".repeat(32),
+        endpoint: "https://example.com/replica",
+      }),
+    });
+    const peers = (await storage.get([LIVE_PEERS_KEY]))[LIVE_PEERS_KEY] as Array<{ deviceId: string; endpoint?: string | null }>;
+    expect(peers.some((peer) => peer.deviceId === "33".repeat(32) && peer.endpoint == null)).toBeTrue();
+  });
 });

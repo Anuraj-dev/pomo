@@ -1,8 +1,10 @@
 package com.pomo.sync.transport
 
 import java.io.BufferedInputStream
+import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -65,7 +67,7 @@ internal class ReplicaLanListener(
         val input = BufferedInputStream(socket.getInputStream())
         input.mark(4)
         val prefix = ByteArray(4)
-        val read = input.read(prefix)
+        val read = readFullyOrEof(input, prefix)
         input.reset()
         if (read == 4 && prefix.decodeToString() == "POST") {
             serveHttp(socket, input)
@@ -79,7 +81,16 @@ internal class ReplicaLanListener(
         socket: Socket,
         input: BufferedInputStream,
     ) {
-        val length = httpContentLength(input)
+        val header = readHttpHeader(input)
+        if (header.method != "POST" || header.path != HTTP_PATH) {
+            writeHttpStatus(socket, 404, "Not Found")
+            return
+        }
+        if (!header.contentType.lowercase().startsWith("application/cbor")) {
+            writeHttpStatus(socket, 415, "Unsupported Media Type")
+            return
+        }
+        val length = header.contentLength
         require(length in 1..ReplicaLanCodec.MAX_FRAME_BYTES) { "replica HTTP body is out of bounds" }
         val body = ByteArray(length)
         DataInputStream(input).readFully(body)
@@ -124,13 +135,17 @@ internal class ReplicaLanListener(
                 connection.setRequestProperty("Content-Length", encoded.size.toString())
                 connection.outputStream.use { it.write(encoded) }
                 require(connection.responseCode == 200) { "replica HTTP status ${connection.responseCode}" }
-                return ReplicaLanCodec.decodeResponse(connection.inputStream.readBytes())
+                val declared = connection.contentLength
+                require(declared < 0 || declared in 1..ReplicaLanCodec.MAX_FRAME_BYTES) {
+                    "replica HTTP response is out of bounds"
+                }
+                return ReplicaLanCodec.decodeResponse(readBounded(connection.inputStream, ReplicaLanCodec.MAX_FRAME_BYTES))
             } finally {
                 connection.disconnect()
             }
         }
 
-        private fun readFrame(input: java.io.InputStream): ByteArray {
+        private fun readFrame(input: InputStream): ByteArray {
             val framed = DataInputStream(input)
             val length = framed.readInt()
             require(length in 1..ReplicaLanCodec.MAX_FRAME_BYTES) { "replica LAN frame is out of bounds" }
@@ -139,7 +154,46 @@ internal class ReplicaLanListener(
             return bytes
         }
 
-        private fun httpContentLength(input: BufferedInputStream): Int {
+        private fun readFullyOrEof(
+            input: InputStream,
+            buffer: ByteArray,
+        ): Int {
+            var offset = 0
+            while (offset < buffer.size) {
+                val next = input.read(buffer, offset, buffer.size - offset)
+                if (next < 0) return offset
+                offset += next
+            }
+            return offset
+        }
+
+        private fun readBounded(
+            input: InputStream,
+            maxBytes: Int,
+        ): ByteArray {
+            val out = ByteArrayOutputStream()
+            val buffer = ByteArray(8_192)
+            var total = 0
+            while (true) {
+                val next = input.read(buffer)
+                if (next < 0) break
+                total += next
+                require(total <= maxBytes) { "replica HTTP response is out of bounds" }
+                out.write(buffer, 0, next)
+            }
+            val bytes = out.toByteArray()
+            require(bytes.isNotEmpty()) { "replica HTTP response is empty" }
+            return bytes
+        }
+
+        private data class HttpHeader(
+            val method: String,
+            val path: String,
+            val contentLength: Int,
+            val contentType: String,
+        )
+
+        private fun readHttpHeader(input: BufferedInputStream): HttpHeader {
             val header = StringBuilder()
             while (!header.endsWith("\r\n\r\n")) {
                 val next = input.read()
@@ -147,9 +201,32 @@ internal class ReplicaLanListener(
                 header.append(next.toChar())
                 require(header.length <= 8_192) { "replica HTTP header is too large" }
             }
-            val match = Regex("Content-Length:\\s*(\\d+)", RegexOption.IGNORE_CASE).find(header)
-            require(match != null) { "replica HTTP Content-Length is required" }
-            return match.groupValues[1].toInt()
+            val text = header.toString()
+            val requestLine = text.lineSequence().firstOrNull()?.trim().orEmpty()
+            val parts = requestLine.split(' ')
+            require(parts.size >= 2) { "replica HTTP request line is malformed" }
+            val target = parts[1]
+            val path = target.substringBefore('?').substringBefore('#')
+            val lengthMatch = Regex("Content-Length:\\s*(\\d+)", RegexOption.IGNORE_CASE).find(text)
+            require(lengthMatch != null) { "replica HTTP Content-Length is required" }
+            val typeMatch = Regex("Content-Type:\\s*([^\\r\\n]+)", RegexOption.IGNORE_CASE).find(text)
+            return HttpHeader(
+                method = parts[0].uppercase(),
+                path = path,
+                contentLength = lengthMatch.groupValues[1].toInt(),
+                contentType = typeMatch?.groupValues?.get(1)?.trim().orEmpty(),
+            )
+        }
+
+        private fun writeHttpStatus(
+            socket: Socket,
+            code: Int,
+            reason: String,
+        ) {
+            val head = "HTTP/1.1 $code $reason\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+            val output = socket.getOutputStream()
+            output.write(head.toByteArray(StandardCharsets.US_ASCII))
+            output.flush()
         }
 
         private fun writeFrame(

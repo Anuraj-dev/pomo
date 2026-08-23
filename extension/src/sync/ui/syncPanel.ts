@@ -1,7 +1,7 @@
 import { DORMANT_SYNC_UI_STATE, parseSyncUiState, scheduleOrdinaryDrain, SYNC_DRAIN_REQUEST_KEY, SYNC_UI_STATE_KEY, type SyncUiState } from "./syncUiState";
 import { requireSafeDiagnostic, streamDiagnosticExport, type DiagnosticEvent } from "../diagnostics/diagnosticExport";
 import { resumeAdmission } from "../identity/admissionRuntime";
-import { chromeLivePeerStorage, ensurePackagedChromeLivePeer, loadOrCreateLivePeerIdentity } from "../transport/chromeLivePeer";
+import { chromeLivePeerStorage, ensurePackagedChromeLivePeer, loadOrCreateLivePeerIdentity, resetChromeLivePeer } from "../transport/chromeLivePeer";
 
 export type SyncPanelDensity = "compact" | "panel" | "full";
 
@@ -11,6 +11,7 @@ export function bootSyncPanel(root: HTMLElement, density: SyncPanelDensity): () 
   root.textContent = "Loading sync state…";
   let current = DORMANT_SYNC_UI_STATE;
   let diagnosticAbort: AbortController | null = null;
+  let admissionInFlight = false;
   const apply = (raw: unknown): void => {
     try { current = raw === undefined ? DORMANT_SYNC_UI_STATE : parseSyncUiState(raw); render(root, current, density); }
     catch { renderError(root, density); }
@@ -28,10 +29,24 @@ export function bootSyncPanel(root: HTMLElement, density: SyncPanelDensity): () 
         [SYNC_UI_STATE_KEY]: current,
       });
     }
-    if (action === "admission-resume") void admitFromPanel(root, current, null).then((next) => { current = next; render(root, current, density); });
-    if (action === "admission-admit") {
-      const remote = root.querySelector<HTMLTextAreaElement>("#syncAdmissionRemote")?.value ?? "";
-      void admitFromPanel(root, current, remote).then((next) => { current = next; render(root, current, density); });
+    if (action === "admission-resume" || action === "admission-admit") {
+      if (admissionInFlight) return;
+      const remote = action === "admission-admit"
+        ? (root.querySelector<HTMLTextAreaElement>("#syncAdmissionRemote")?.value ?? "")
+        : null;
+      admissionInFlight = true;
+      setAdmissionControlsEnabled(root, false);
+      void (async () => {
+        try {
+          current = await admitFromPanel(root, current, remote);
+          render(root, current, density);
+        } catch {
+          // Leave the last rendered state; controls re-enable in finally.
+        } finally {
+          admissionInFlight = false;
+          setAdmissionControlsEnabled(root, true);
+        }
+      })();
     }
     if (action === "recovery-confirm") void confirmForwardRestore(current).then((next) => { current = next; render(root, current, density); });
     if (action === "diagnostics-export" && diagnosticAbort === null) {
@@ -41,6 +56,13 @@ export function bootSyncPanel(root: HTMLElement, density: SyncPanelDensity): () 
     if (action === "diagnostics-cancel") diagnosticAbort?.abort();
   });
   return () => chrome.storage.onChanged.removeListener(changed);
+}
+
+function setAdmissionControlsEnabled(root: HTMLElement, enabled: boolean): void {
+  for (const action of ["admission-resume", "admission-admit"] as const) {
+    const button = root.querySelector<HTMLButtonElement>(`[data-sync-action="${action}"]`);
+    if (button !== null) button.disabled = !enabled;
+  }
 }
 
 function render(root: HTMLElement, state: SyncUiState, density: SyncPanelDensity): void {
@@ -79,6 +101,8 @@ async function admitFromPanel(root: HTMLElement, _current: SyncUiState, remote: 
   const identity = await loadOrCreateLivePeerIdentity(storage);
   const result = await resumeAdmission({ storage, lanDeviceId: identity.deviceId, remoteOffer: remote });
   await chrome.storage.local.set({ [SYNC_UI_STATE_KEY]: result.state, "pomo:sync:admission-offer": result.offer });
+  // Reinstall so newly stored HTTP peers are loaded after ensurePackaged's idempotency guard.
+  resetChromeLivePeer();
   await ensurePackagedChromeLivePeer();
   const offerEl = root.querySelector("#syncAdmissionOffer");
   if (offerEl !== null) offerEl.textContent = result.offer;

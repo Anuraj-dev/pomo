@@ -13,6 +13,8 @@ import com.pomo.sync.ui.SyncUiState
 import com.pomo.sync.ui.SyncWorkflow
 import org.json.JSONObject
 import java.io.File
+import java.net.InetAddress
+import java.net.URI
 import java.security.SecureRandom
 
 /**
@@ -123,18 +125,30 @@ internal object ReplicaAdmission {
             runCatching { session.blockDifferentMember() }
             return
         }
-        val url = remote.endpoint
-        if (url != null) {
-            val parsed = java.net.URI(url)
-            ReplicaLanRuntime.rememberPeer(
-                ReplicaLanPeer(
-                    remote.lanDeviceId,
-                    parsed.host ?: error("replica offer host is required"),
-                    if (parsed.port > 0) parsed.port else 80,
-                    url,
-                ),
+        lanHttpPeerOrNull(remote.lanDeviceId, remote.endpoint)?.let(ReplicaLanRuntime::rememberPeer)
+    }
+
+    /** Accepts only http URLs whose host resolves to loopback, link-local, or site-local. */
+    private fun lanHttpPeerOrNull(
+        deviceId: String,
+        url: String?,
+    ): ReplicaLanPeer? {
+        if (url.isNullOrBlank()) return null
+        return runCatching {
+            val parsed = URI(url)
+            if (parsed.scheme != "http") return null
+            val host = parsed.host ?: return null
+            val address = InetAddress.getByName(host)
+            if (!address.isLoopbackAddress && !address.isLinkLocalAddress && !address.isSiteLocalAddress) {
+                return null
+            }
+            ReplicaLanPeer(
+                deviceId,
+                host,
+                if (parsed.port > 0) parsed.port else 80,
+                url,
             )
-        }
+        }.getOrNull()
     }
 
     private fun uiState(

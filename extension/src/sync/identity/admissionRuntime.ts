@@ -102,16 +102,48 @@ async function admitRemote(storage: LivePeerStorage, session: AdmissionSession, 
     }
     return;
   }
+  const endpoint = acceptedLanHttpEndpoint(remote.endpoint);
   const stored = await storage.get([LIVE_PEERS_KEY]);
   const existing = Array.isArray(stored[LIVE_PEERS_KEY]) ? stored[LIVE_PEERS_KEY] as Array<Record<string, unknown>> : [];
   const next = [
     ...existing.filter((entry) => entry.deviceId !== remote.lanDeviceId),
-    { deviceId: remote.lanDeviceId, endpoint: remote.endpoint },
+    { deviceId: remote.lanDeviceId, endpoint },
   ];
   await storage.set({ [LIVE_PEERS_KEY]: next });
-  if (remote.endpoint !== null && typeof chrome !== "undefined" && chrome.permissions?.request !== undefined) {
-    await chrome.permissions.request({ origins: [originPattern(remote.endpoint)] });
+  if (endpoint !== null && typeof chrome !== "undefined" && chrome.permissions?.request !== undefined) {
+    await chrome.permissions.request({ origins: [originPattern(endpoint)] });
   }
+}
+
+/** http endpoints whose host is loopback, link-local, or site-local only. */
+function acceptedLanHttpEndpoint(endpoint: string | null): string | null {
+  if (endpoint === null || endpoint.length === 0) return null;
+  try {
+    const url = new URL(endpoint);
+    if (url.protocol !== "http:") return null;
+    if (!isLanOrLoopbackHost(url.hostname)) return null;
+    return endpoint;
+  } catch {
+    return null;
+  }
+}
+
+function isLanOrLoopbackHost(hostname: string): boolean {
+  const lower = hostname.toLowerCase().replace(/\.$/, "");
+  if (lower === "localhost" || lower.endsWith(".localhost") || lower === "::1" || lower === "[::1]") return true;
+  const host = lower.startsWith("[") && lower.endsWith("]") ? lower.slice(1, -1) : lower;
+  const octets = host.split(".").map(Number);
+  if (octets.length === 4 && octets.every((octet) => Number.isInteger(octet) && octet >= 0 && octet <= 255)) {
+    const [first, second] = octets;
+    return (
+      first === 10 ||
+      first === 127 ||
+      (first === 172 && second! >= 16 && second! <= 31) ||
+      (first === 192 && second === 168) ||
+      (first === 169 && second === 254)
+    );
+  }
+  return /^(f[cd]|fe[89ab])/i.test(host);
 }
 
 function originPattern(endpoint: string): string {

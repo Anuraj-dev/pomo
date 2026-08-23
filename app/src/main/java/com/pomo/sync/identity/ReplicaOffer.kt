@@ -30,14 +30,19 @@ internal data class ReplicaOffer(
             val value = JSONObject(raw.trim())
             require(value.getInt("schema") == SCHEMA) { "unexpected replica offer schema" }
             require(value.getString("kind") == KIND) { "unexpected replica offer" }
-            val endpoint = value.optString("endpoint")
+            val endpoint =
+                if (value.isNull("endpoint")) {
+                    null
+                } else {
+                    value.optString("endpoint").ifBlank { null }
+                }
             return ReplicaOffer(
                 hex(value.getString("memberId"), "memberId"),
                 hex(value.getString("admissionId"), "admissionId"),
                 hex(value.getString("identityDeviceId"), "identityDeviceId"),
                 hex(value.getString("lanDeviceId"), "lanDeviceId"),
                 hex(value.getString("transcriptHash"), "transcriptHash"),
-                endpoint.ifBlank { null },
+                endpoint,
             )
         }
 

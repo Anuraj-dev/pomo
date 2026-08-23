@@ -176,10 +176,17 @@ internal object ReplicaLanRuntime {
 
     private fun replacePeers(next: List<ReplicaLanPeer>) {
         synchronized(lock) {
-            val remembered = peers.filterValues { it.httpUrl != null }
+            val previous = peers.toMap()
             peers.clear()
-            remembered.forEach { peers[it.key] = it.value }
-            next.forEach { peers[it.deviceId] = it }
+            next.forEach { discovered ->
+                val keptHttp = previous[discovered.deviceId]?.httpUrl
+                peers[discovered.deviceId] =
+                    if (keptHttp != null) discovered.copy(httpUrl = keptHttp) else discovered
+            }
+            previous.values
+                .filter { it.httpUrl != null && !peers.containsKey(it.deviceId) }
+                .forEach { peers[it.deviceId] = it }
+            persistPeersLocked()
         }
     }
 
@@ -219,9 +226,12 @@ internal object ReplicaLanRuntime {
 
     private fun siteLocalAddress(): String? {
         val interfaces = java.net.NetworkInterface.getNetworkInterfaces() ?: return null
-        return interfaces.toList().flatMap { it.inetAddresses.toList() }
+        return interfaces.toList()
+            .asSequence()
+            .filter { runCatching { it.isUp && !it.isLoopback && !it.isPointToPoint }.getOrDefault(false) }
+            .flatMap { it.inetAddresses.toList().asSequence() }
             .filterIsInstance<java.net.Inet4Address>()
-            .firstOrNull { !it.isLoopbackAddress }
+            .firstOrNull { it.isSiteLocalAddress }
             ?.hostAddress
     }
 
