@@ -48,6 +48,7 @@ public data class SyncUiState(
     val recovery: SyncRecoveryPreview,
     val affectedTimerDomain: Boolean,
     val retryPending: Boolean,
+    val admissionOffer: String = "",
 ) {
     init {
         require(signals.map { it.label } == SIGNAL_LABELS)

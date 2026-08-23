@@ -81,4 +81,41 @@ describe("nostr rendezvous drain", () => {
     expect(delivered).toEqual(["op-1"]);
     expect(second.delivered).toEqual(new Set(["op-1"]));
   });
+
+  test("encrypted SDP signals are ignored by catch-up drain", async () => {
+    const relay = new MemoryRelay();
+    const contentKey = crypto.getRandomValues(new Uint8Array(32));
+    const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"]);
+    const identity = await identityOf(pair);
+    relay.publish({
+      id: "signal-event",
+      pubkey: identity.id,
+      created_at: Math.floor(Date.now() / 1000),
+      kind: 39_051,
+      tags: [["d", "session-1"], ["pomo", "signal"], ["device", identity.id]],
+      content: "00",
+      sig: "00".repeat(64),
+    });
+    const session = new NostrRendezvousSession(
+      identity.id,
+      identity.bytes,
+      identity.privateKey,
+      "session-1",
+      contentKey,
+      relay,
+      [identity.id],
+      () => "ACCEPTED",
+      identity.id,
+    );
+    const envelope = { operationId: "op-1", feedKey: "feed", sequence: 1, wire: new Uint8Array([9]) };
+    const delivered: string[] = [];
+    const result = await drainOrdinaryOutbox({
+      obligations: [envelope],
+      routes: [session.drainRoute()],
+      ingest() {},
+      markDelivered(id) { delivered.push(id); },
+    });
+    expect(delivered).toEqual([]);
+    expect(result.delivered.size).toBe(0);
+  });
 });

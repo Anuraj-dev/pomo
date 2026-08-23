@@ -30,7 +30,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "LAN session codec is shared. Chrome still has no NSD/TCP listener, so Android/Chrome physical exchange has not been collected."
+      "blockedReason": "Chrome now fetches the paired Android HTTP replica endpoint after admission. Physical Android/Chrome evidence has not been collected."
     },
     {
       "id": "chrome-chrome",
@@ -38,7 +38,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Ordinary drain calls replicaLanDrainRoutes(), but Chrome source does not install a live peer session into the worker. Two-profile Chrome physical evidence is also missing."
+      "blockedReason": "Chrome live WebRTC now exchanges replaceable encrypted SDP over Nostr rendezvous. Two-profile physical evidence has not been collected."
     },
     {
       "id": "lan",
@@ -86,7 +86,7 @@
       "required": true,
       "status": "BLOCKED",
       "evidence": "",
-      "blockedReason": "Process death and reboot do not currently resume a replica session."
+      "blockedReason": "Replica identity and paired HTTP peers persist across process restart. Physical lifecycle evidence has not been collected."
     },
     {
       "id": "recovery",

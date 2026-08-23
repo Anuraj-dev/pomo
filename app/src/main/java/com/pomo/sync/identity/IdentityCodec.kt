@@ -75,6 +75,26 @@ internal object IdentityCodec {
 
     fun factId(canonicalFact: ByteArray): ProtocolBytes = domainId("Pomo Authority Fact ID", canonicalFact)
 
+    fun admissionTranscriptHash(
+        memberId: ProtocolBytes,
+        admissionId: ProtocolBytes,
+        certificate: DeviceCertificate,
+    ): ProtocolBytes {
+        val canonical =
+            DeterministicCbor.encode(
+                CborValue.Array(
+                    listOf(
+                        CborValue.Text("Pomo Device Admission"),
+                        CborValue.Integer(CERTIFICATE_VERSION),
+                        CborValue.Bytes(memberId.copy()),
+                        CborValue.Bytes(admissionId.copy()),
+                        CborValue.Bytes(encodeDeviceCertificate(certificate)),
+                    ),
+                ),
+            )
+        return ProtocolBytes.of(PomoCrypto.sha256(canonical), PomoSuite.ID_BYTES)
+    }
+
     private fun domainId(
         label: String,
         canonical: ByteArray,

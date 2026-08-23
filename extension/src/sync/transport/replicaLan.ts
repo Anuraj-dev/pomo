@@ -217,6 +217,22 @@ export function installReplicaLan(next: { session: ReplicaLanSession | null; pee
   ingestWire = next.ingest ?? null;
 }
 
+export function httpReplicaPeer(deviceId: string, endpoint: string): ReplicaLanPeer {
+  return {
+    deviceId,
+    async exchange(request) {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "content-type": "application/cbor" },
+        body: bufferOf(encodeLanRequest(request)),
+        signal: AbortSignal.timeout(5_000),
+      });
+      if (!response.ok) throw new Error(`replica HTTP status ${response.status}`);
+      return decodeLanResponse(new Uint8Array(await response.arrayBuffer()));
+    },
+  };
+}
+
 export function replicaLanDrainRoutes(): DrainRoute[] {
   const current = session;
   if (current === null) return [];
