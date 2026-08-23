@@ -35,7 +35,7 @@ public class ReplicaLanHttpTest {
             assertEquals(sessionDeviceId(pair), response.deviceId)
             assertTrue(ReplicaLanSession.verifyAck(response.ack).signatureVerified)
             assertEquals(1, ingested.size)
-            assertEquals(9.toByte(), ingested[0]!![0])
+            assertEquals(9.toByte(), ingested[0][0])
         } finally {
             listener.stop()
         }
