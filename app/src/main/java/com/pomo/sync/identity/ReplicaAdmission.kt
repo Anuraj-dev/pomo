@@ -2,7 +2,6 @@ package com.pomo.sync.identity
 
 import android.content.Context
 import com.pomo.sync.crypto.HpkeP256
-import com.pomo.sync.crypto.PomoCrypto
 import com.pomo.sync.protocol.PomoSuite
 import com.pomo.sync.protocol.ProtocolBytes
 import com.pomo.sync.transport.OrdinaryDrainScheduler
@@ -147,8 +146,22 @@ internal object ReplicaAdmission {
         val ready = snap.stage == AdmissionStage.READY_ACK_COMMITTED
         val blocked = snap.stage == AdmissionStage.IDENTITY_BLOCKED
         return SyncUiState.Dormant.copy(
-            health = if (blocked) SyncHealth.STALLED else if (ready) SyncHealth.OFFLINE else SyncHealth.INCOMPLETE,
-            summary = if (ready) "Device admitted" else if (blocked) "Admission blocked" else "Admission in progress",
+            health =
+                if (blocked) {
+                    SyncHealth.STALLED
+                } else if (ready) {
+                    SyncHealth.OFFLINE
+                } else {
+                    SyncHealth.INCOMPLETE
+                },
+            summary =
+                if (ready) {
+                    "Device admitted"
+                } else if (blocked) {
+                    "Admission blocked"
+                } else {
+                    "Admission in progress"
+                },
             detail =
                 if (ready) {
                     "Saved locally. Exchange the offer with the other replica, then Retry now from Chrome to drain."
