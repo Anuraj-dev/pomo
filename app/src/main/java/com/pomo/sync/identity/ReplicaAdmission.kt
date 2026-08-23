@@ -49,7 +49,7 @@ internal object ReplicaAdmission {
         val created = if (existing == null) createOffer(app, remote) else null
         val session = created?.first ?: AdmissionSession.resume(existing!!)
         val offer = created?.second ?: loadOffer(app) ?: error("admission offer is missing")
-        if (remote != null) admitRemote(app, session, remote)
+        if (remote != null) admitRemote(session, remote)
         if (session.snapshot().stage == AdmissionStage.OFFER_CREATED) {
             val snap = session.snapshot()
             session.verifyFingerprints(snap.memberId, snap.deviceId, snap.transcriptHash)
@@ -115,7 +115,6 @@ internal object ReplicaAdmission {
     }
 
     private fun admitRemote(
-        context: Context,
         session: AdmissionSession,
         remote: ReplicaOffer,
     ) {
