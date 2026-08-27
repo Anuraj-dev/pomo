@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "id": "raja.pomo",
+  "name": "Pomo",
+  "version": "1.0.0",
+  "author": "Raja",
+  "license": "MIT",
+  "description": "Hybrid Pomo desk client for the Omarchy bar. Offline Pomodoro with LAN import/adopt; phone owns the live clock once synced.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
+  "keepLoaded": true,
+  "entryPoints": {
+    "service": "Service.qml",
+    "barWidget": "widget/BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Pomo",
+    "description": "Pomodoro remaining, phase, and phone connection on the bar. Click for controls and pairing.",
+    "category": "Time",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "barDisplay": "Timer + phase",
+      "host": "",
+      "port": 9876,
+      "token": "",
+      "pairingJson": ""
+    },
+    "schema": [
+      {
+        "key": "barDisplay",
+        "type": "enum",
+        "label": "Bar display",
+        "options": ["Timer + phase", "Timer only", "Icon only"],
+        "defaultValue": "Timer + phase",
+        "description": "Choose what the bar shows. Hover always shows the remaining time."
+      },
+      {
+        "key": "host",
+        "type": "string",
+        "label": "Phone host",
+        "defaultValue": "",
+        "description": "Optional. Skip mDNS and use this host. Leave empty to browse _pomo._tcp."
+      },
+      {
+        "key": "port",
+        "type": "integer",
+        "label": "Phone port",
+        "min": 1,
+        "max": 65535,
+        "step": 1,
+        "defaultValue": 9876
+      },
+      {
+        "key": "token",
+        "type": "string",
+        "label": "Pairing token",
+        "defaultValue": "",
+        "description": "From Pomo Settings. Also stored mode 0600 under $XDG_DATA_HOME/pomo/omarchy/config.json."
+      },
+      {
+        "key": "pairingJson",
+        "type": "string",
+        "label": "Paste pairing JSON",
+        "defaultValue": "",
+        "description": "The {url, token} payload from Android Settings. Applied once, then stored by the engine."
+      }
+    ]
+  }
+}

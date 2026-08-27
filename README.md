@@ -33,6 +33,7 @@ direct controls.
 - Optional local HTTP/WebSocket API for desktop display and control.
 - Pairing-token protection for remote commands.
 - Thin TypeScript desktop client for terminal, Waybar, QR, and service flows.
+- Optional Omarchy shell plugin with local fallback timing and phone sync.
 
 ## Requirements
 
@@ -135,6 +136,15 @@ node desktop-client/dist/cli.js service status
 See [docs/desktop-client.md](docs/desktop-client.md) for service paths, Waybar
 output, QR commands, and failure behavior.
 
+## Omarchy plugin
+
+The `omarchy-plugin/` directory contains the `raja.pomo` Omarchy shell plugin.
+It provides a phone-synced bar timer, local offline timing, pairing controls,
+and a side-anchored panel. The bar display can be set per widget entry to
+`Timer + phase`, `Timer only`, or `Icon only`. See
+[omarchy-plugin/README.md](omarchy-plugin/README.md) for installation,
+configuration, and pairing details.
+
 ## Architecture
 
 ```text
@@ -174,6 +184,8 @@ state over the local network; it does not merge state from a desktop process.
   payloads.
 - [docs/desktop-client.md](docs/desktop-client.md): CLI, service, cache, and
   Waybar behavior.
+- [omarchy-plugin/README.md](omarchy-plugin/README.md): Omarchy installation,
+  bar display settings, hover behavior, and pairing.
 
 ## Validation
 

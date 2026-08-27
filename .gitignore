@@ -106,6 +106,9 @@ android-sdk/
 *.swp
 *~
 .brv/
+.grok/
+!omarchy-plugin/bin/
+!omarchy-plugin/bin/pomo-link
 
 # Temporary screenshots and assets
 screen_*.png
