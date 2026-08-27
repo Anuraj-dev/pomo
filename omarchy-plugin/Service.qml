@@ -213,6 +213,7 @@ Item {
   }
 
   onLinkPathChanged: if (linkPath !== "") launchTimer.restart()
+  Component.onCompleted: if (linkPath !== "") launchTimer.restart()
 
   Component.onDestruction: {
     _intentionalStop = true

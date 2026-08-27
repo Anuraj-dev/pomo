@@ -16,6 +16,16 @@ from .constants import (
 from .persist import atomic_write, data_dir, load_json
 
 
+def _safe_int(value, fallback, minimum=None):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if minimum is not None and parsed < minimum:
+        return fallback
+    return parsed
+
+
 class ConfigStore:
     def __init__(self, directory=None):
         self.directory = directory or data_dir()
@@ -53,8 +63,7 @@ class ConfigStore:
             data.get("long_after", self.long_after),
             data.get("goal", self.goal),
         )
-        seq = int(data.get("next_seq") or 1)
-        self.next_seq = 1 if seq <= 0 else seq
+        self.next_seq = _safe_int(data.get("next_seq"), 1, minimum=1)
         self.host = str(data.get("host") or "")
         try:
             port = int(data.get("port") or DEFAULT_PORT)
@@ -79,16 +88,11 @@ class ConfigStore:
         atomic_write(self.config_path, doc, mode=0o600)
 
     def set_durations(self, work, short, long_, long_after, goal):
-        if work and int(work) > 0:
-            self.work_minutes = int(work)
-        if short and int(short) > 0:
-            self.short_minutes = int(short)
-        if long_ and int(long_) > 0:
-            self.long_minutes = int(long_)
-        if long_after and int(long_after) > 0:
-            self.long_after = int(long_after)
-        if goal is not None and int(goal) >= 0:
-            self.goal = int(goal)
+        self.work_minutes = _safe_int(work, self.work_minutes, minimum=1)
+        self.short_minutes = _safe_int(short, self.short_minutes, minimum=1)
+        self.long_minutes = _safe_int(long_, self.long_minutes, minimum=1)
+        self.long_after = _safe_int(long_after, self.long_after, minimum=1)
+        self.goal = _safe_int(goal, self.goal, minimum=0)
 
     def set_pairing(self, host=None, port=None, token=None):
         if host is not None:
@@ -129,15 +133,22 @@ class ConfigStore:
             return None
         if remaining < 0.0 or duration <= 0.0:
             return None
+        try:
+            start_time = float(data.get("start_time") or 0.0)
+            completed = int(data.get("completed") or 0)
+            goal = int(data.get("goal") if data.get("goal") is not None else self.goal)
+            saved_epoch = int(data.get("saved_epoch") or 0)
+        except (TypeError, ValueError):
+            return None
         snap = {
             "status": status,
             "phase": phase,
             "remaining": remaining,
             "duration": duration,
-            "start_time": float(data.get("start_time") or 0.0),
-            "completed": int(data.get("completed") or 0),
-            "goal": int(data.get("goal") if data.get("goal") is not None else self.goal),
-            "saved_epoch": int(data.get("saved_epoch") or 0),
+            "start_time": start_time,
+            "completed": completed,
+            "goal": goal,
+            "saved_epoch": saved_epoch,
         }
         if snap["completed"] < 0:
             snap["completed"] = 0

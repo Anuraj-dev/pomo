@@ -18,6 +18,8 @@ BarWidget {
   }
   readonly property bool iconOnly: barDisplay === "icon-only"
   readonly property string timerText: pomo ? pomo.mmss(pomo.remaining) : "00:00"
+  property string lastPairingSignature: ""
+  property var lastPairingTarget: null
   readonly property string displayText: barDisplay === "timer-only"
     ? timerText
     : (pomo ? pomo.barText() : "00:00 Focus.")
@@ -45,11 +47,18 @@ BarWidget {
 
   function pushPairingFromSettings() {
     if (!pomo) return
+    if (pomo !== lastPairingTarget) {
+      lastPairingTarget = pomo
+      lastPairingSignature = ""
+    }
     var fields = {}
     var host = setting("host", "")
     var port = setting("port", 9876)
     var token = setting("token", "")
     var paste = setting("pairingJson", "")
+    var signature = [String(host || ""), String(port === undefined || port === null ? "" : port),
+      String(token || ""), String(paste || "")].join("\u001f")
+    if (signature === lastPairingSignature) return
     if (paste !== "") {
       fields.pairingJson = paste
       if (token !== "") fields.token = token
@@ -59,6 +68,7 @@ BarWidget {
       if (token !== "") fields.token = token
     }
     if (Object.keys(fields).length === 0) return
+    lastPairingSignature = signature
     pomo.applyPairing(fields)
   }
 

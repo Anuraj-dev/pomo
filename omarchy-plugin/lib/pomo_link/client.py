@@ -33,6 +33,16 @@ def marker_for(mode):
     return "."
 
 
+def _safe_int(value, fallback, minimum=None):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    if minimum is not None and parsed < minimum:
+        return fallback
+    return parsed
+
+
 def parse_pairing_payload(value):
     """Accept pasted {url, token} JSON from Android Settings.
 
@@ -60,12 +70,16 @@ def parse_pairing_payload(value):
     url_host = None
     url = value.get("url")
     if isinstance(url, str) and url.strip():
-        parsed = urlparse(url.strip())
-        host = parsed.hostname or ""
+        try:
+            parsed = urlparse(url.strip())
+            host = parsed.hostname or ""
+            port = parsed.port or DEFAULT_PORT
+        except ValueError:
+            host = ""
         if host:
             url_host = host
             out["host"] = host
-            out["port"] = int(parsed.port or DEFAULT_PORT)
+            out["port"] = port
     host_override = ""
     if "host" in value:
         host_override = str(value.get("host") or "").strip()
@@ -233,7 +247,10 @@ class PomoClient:
     def apply_phone_object(self, data, force=True):
         if not isinstance(data, dict):
             return False
-        start_time = float(data.get("start_time") or 0.0)
+        try:
+            start_time = float(data.get("start_time") or 0.0)
+        except (TypeError, ValueError):
+            start_time = 0.0
         server_time = 0
         if data.get("server_time") is not None:
             try:
@@ -244,9 +261,7 @@ class PomoClient:
                 server_time = 0
         epoch_now = int(time.time())
         if "daily_goal" in data and data.get("daily_goal") is not None:
-            goal = int(data.get("daily_goal") or 0)
-            if goal < 0:
-                goal = 0
+            goal = _safe_int(data.get("daily_goal"), 8, minimum=0)
         else:
             goal = 8
         ok = self.model.apply_state(
@@ -731,15 +746,31 @@ class PomoClient:
         except json.JSONDecodeError:
             return False
         durations = doc.get("durations") if isinstance(doc.get("durations"), dict) else {}
-        work = durations.get("work", self.store.work_minutes)
-        short_m = durations.get("short_break", self.store.short_minutes)
-        long_m = durations.get("long_break", self.store.long_minutes)
-        long_after = doc.get("long_break_after", self.store.long_after)
-        goal = self.store.goal
-        if "daily_goal" in doc and doc.get("daily_goal") is not None:
-            goal = int(doc.get("daily_goal") or 0)
-            if goal < 0:
-                goal = 0
+        work = _safe_int(
+            durations.get("work", self.store.work_minutes),
+            self.store.work_minutes,
+            minimum=1,
+        )
+        short_m = _safe_int(
+            durations.get("short_break", self.store.short_minutes),
+            self.store.short_minutes,
+            minimum=1,
+        )
+        long_m = _safe_int(
+            durations.get("long_break", self.store.long_minutes),
+            self.store.long_minutes,
+            minimum=1,
+        )
+        long_after = _safe_int(
+            doc.get("long_break_after", self.store.long_after),
+            self.store.long_after,
+            minimum=1,
+        )
+        goal = _safe_int(
+            doc.get("daily_goal", self.store.goal),
+            self.store.goal,
+            minimum=0,
+        )
         self.store.set_durations(work, short_m, long_m, long_after, goal)
         self.store.save()
         self.model.set_config(work, short_m, long_m, long_after, goal)
