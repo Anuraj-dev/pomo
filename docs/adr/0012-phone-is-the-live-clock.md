@@ -18,5 +18,6 @@ import.
 The Chrome extension speaks this LAN contract: paste `{url, token}`, follow
 `/ws` while the phone is reachable, run the local engine when it is not, flush
 completed blocks with `POST /api/sessions/import`, adopt a live timer under
-least-remaining, and cache `GET /api/config` once SYNC is stable. Chrome cannot
-browse `_pomo._tcp`; the pasted URL is the host.
+least-remaining, merge `GET /api/history` into the local store, and cache
+`GET /api/config` once SYNC is stable. Chrome cannot browse `_pomo._tcp`; the
+pasted URL is the host.

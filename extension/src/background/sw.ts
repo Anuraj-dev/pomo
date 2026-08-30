@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine
 import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
 import { PomoLink, type LinkEngineAdapter, type LinkPersist } from "../link/client";
-import type { PhoneConfig, PhoneTimerState } from "../link/phoneState";
+import { historyDelta, type PhoneConfig, type PhoneHistorySession, type PhoneTimerState } from "../link/phoneState";
 import { PhoneRest, browserSocket } from "../link/rest";
 import { decodePortableBackup, encodePortableBackup } from "../shared/backup";
 import { badgeColorOf, badgeTextOf } from "../shared/badge";
@@ -330,6 +330,31 @@ async function persistLink(data: LinkPersist): Promise<void> {
   await chrome.storage.local.set({ [LINK_KEY]: data });
 }
 
+async function applyPhoneHistory(sessions: PhoneHistorySession[]): Promise<void> {
+  if (dao === null || sessions.length === 0) return;
+  try {
+    const inserted = await dao.insertBlock(
+      sessions.map((session) => ({
+        row: {
+          start: session.start,
+          date: session.date,
+          type: session.type,
+          duration: session.duration,
+          completed: session.completed,
+          tag: session.tag,
+        } satisfies SessionRow,
+        delta: historyDelta(session),
+      })),
+    );
+    if (inserted.length === 0) return;
+    await loadEarnedCount();
+    engine.refreshCompletedCount();
+    await sync();
+  } catch (error) {
+    console.error("phone history merge failed", error);
+  }
+}
+
 async function init(): Promise<void> {
   db = await openDbCached();
   dao = new HistoryDao(db);
@@ -362,6 +387,7 @@ async function init(): Promise<void> {
       applyConfig: (config) => {
         void applyPhoneConfig(config);
       },
+      applyHistory: (sessions) => applyPhoneHistory(sessions),
       currentConfig: currentPhoneConfig,
       onPhaseComplete: (phase) => notifyPhaseComplete(phase),
       onChange: () => {
@@ -426,6 +452,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       if (!followingPhone() && reconcileEngine()) await syncAfterWrites();
       return { ok: true, state: engine.snapshot(), link: link?.status() };
     case "pomo:stats": {
+      if (link !== null) await link.refreshHistory();
       await awaitHistoryWrites();
       const days = await dao!.dayStats();
       const now = nowSeconds();
@@ -446,6 +473,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:history": {
+      if (link !== null) await link.refreshHistory();
       await awaitHistoryWrites();
       const [sessions, dayStats] = await Promise.all([dao!.allSessions(), dao!.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);

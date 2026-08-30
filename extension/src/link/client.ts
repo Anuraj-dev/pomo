@@ -15,10 +15,12 @@ import { pairingFromParsed, parsePairingPayload, phoneWsUrl, type Pairing } from
 import {
   configBody,
   parsePhoneConfig,
+  parsePhoneHistory,
   parsePhoneState,
   projectRemaining,
   shouldIgnoreSnapshot,
   type PhoneConfig,
+  type PhoneHistorySession,
   type PhoneTimerState,
 } from "./phoneState";
 import { jsonOf, type RestPort, type SocketFactory, type SocketHandle } from "./rest";
@@ -72,6 +74,7 @@ export interface LinkStatus {
 export interface LinkHooks {
   persist(data: LinkPersist): void;
   applyConfig(config: PhoneConfig): void;
+  applyHistory(sessions: PhoneHistorySession[]): void | Promise<void>;
   currentConfig(): PhoneConfig;
   onPhaseComplete?(phase: QueuedPhase): void;
   onChange?(): void;
@@ -125,6 +128,7 @@ export class PomoLink {
   private retryDelayMs = 0;
   private lastConfigFetchAt = 0;
   private configFetchFailed = false;
+  private historyPull: Promise<boolean> | null = null;
   private lastServerTime = 0;
   private hasFollowedState = false;
   private syncGen = 0;
@@ -511,6 +515,7 @@ export class PomoLink {
           this.softResyncCount = 0;
           this.setMode("SYNCED");
           this.log("soft resync complete -> SYNCED");
+          void this.pullHistory();
           return;
         }
         await this.enterSyncFromPhoneState(data);
@@ -524,6 +529,7 @@ export class PomoLink {
         if (phase === "work" || phase === "short" || phase === "long") {
           this.hooks.onPhaseComplete?.(phase);
         }
+        void this.pullHistory();
       }
     }
   }
@@ -652,6 +658,7 @@ export class PomoLink {
     this.setMode("SYNCED");
     this.message = "";
     this.log("enter SYNC pipeline done -> SYNCED");
+    await this.pullHistory();
     if (this.wsDroppedDuringEnter) {
       this.wsDroppedDuringEnter = false;
       await this.softResync("ws drop during enter");
@@ -765,6 +772,7 @@ export class PomoLink {
       this.configFetchFailed = true;
       this.log("config refresh failed; will retry");
     }
+    await this.pullHistory();
   }
 
   private async fetchAndCacheConfig(): Promise<boolean> {
@@ -782,6 +790,41 @@ export class PomoLink {
       `config cached ${config.workMinutes}/${config.shortMinutes}/${config.longMinutes} after=${config.longBreakAfter} goal=${config.dailyGoal}`,
     );
     return true;
+  }
+
+  private pullHistory(): Promise<boolean> {
+    if (this.historyPull !== null) return this.historyPull;
+    const operation = this.pullHistoryOnce().finally(() => {
+      this.historyPull = null;
+    });
+    this.historyPull = operation;
+    return operation;
+  }
+
+  private async pullHistoryOnce(): Promise<boolean> {
+    if (this.pairing === null) return false;
+    const result = await this.rest.getHistory();
+    if (result.status === 401) {
+      this.enterUnpaired("GET /api/history");
+      return false;
+    }
+    if (result.status !== 200) {
+      this.log(`history pull failed; http ${result.status}`);
+      return false;
+    }
+    const sessions = parsePhoneHistory(jsonOf(result));
+    if (sessions === null) {
+      this.log("history pull failed; malformed payload");
+      return false;
+    }
+    await this.hooks.applyHistory(sessions);
+    this.log(`history pulled sessions=${sessions.length}`);
+    return true;
+  }
+
+  async refreshHistory(): Promise<void> {
+    if (this.mode !== "SYNCED") return;
+    await this.pullHistory();
   }
 
   private async postCommand(path: string, body: unknown): Promise<boolean> {

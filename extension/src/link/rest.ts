@@ -10,6 +10,7 @@ export interface RestPort {
   configure(pairing: Pairing): void;
   getStatus(): Promise<RestResult>;
   getConfig(): Promise<RestResult>;
+  getHistory(): Promise<RestResult>;
   post(path: string, body?: unknown): Promise<RestResult>;
 }
 
@@ -43,6 +44,10 @@ export class PhoneRest implements RestPort {
 
   getConfig(): Promise<RestResult> {
     return this.request("GET", "/api/config");
+  }
+
+  getHistory(): Promise<RestResult> {
+    return this.request("GET", "/api/history", undefined, HTTP_FLUSH_TIMEOUT_MS);
   }
 
   post(path: string, body?: unknown): Promise<RestResult> {

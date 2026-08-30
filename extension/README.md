@@ -42,6 +42,9 @@ locally.
   as-if-finished on the next wake.
 - Pairing, REST, and `/ws` live in `src/link/`. The service worker owns the
   client; surfaces only paste the payload and show Phone / Local / Linking.
+- On reconnect (and when a phase completes on the phone) Chrome pulls
+  `GET /api/history` and inserts missing sessions by `start`. Phone dates win;
+  existing Chrome rows are left alone.
 - `pomo-backup` v1 still moves history between phone and Chrome as a file.
   Chrome writes an empty Crew object and ignores Crew on import (ADR-0011 as
   narrowed by ADR-0012).

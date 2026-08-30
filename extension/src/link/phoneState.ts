@@ -1,3 +1,4 @@
+import { isValidDateString } from "../engine/dateLogic";
 import type { Phase, Status } from "../engine/timer";
 
 export interface PhoneTimerState {
@@ -99,6 +100,62 @@ export function parsePhoneConfig(data: unknown, fallback: PhoneConfig): PhoneCon
     longBreakAfter: positive(record.long_break_after, fallback.longBreakAfter),
     dailyGoal: goal >= 0 ? goal : fallback.dailyGoal,
   };
+}
+
+export interface PhoneHistorySession {
+  date: string;
+  type: Phase;
+  start: number;
+  duration: number;
+  completed: boolean;
+  tag: string | null;
+}
+
+export function historyDelta(session: PhoneHistorySession): {
+  earnedBlocks: number;
+  focusMinutes: number;
+  breakMinutes: number;
+} {
+  if (session.type === "work") {
+    return {
+      earnedBlocks: session.completed ? 1 : 0,
+      focusMinutes: session.duration / 60,
+      breakMinutes: 0,
+    };
+  }
+  return { earnedBlocks: 0, focusMinutes: 0, breakMinutes: session.duration / 60 };
+}
+
+/** Phone GET /api/history is a date-keyed map. Sessions are already split by phone-local day. */
+export function parsePhoneHistory(data: unknown): PhoneHistorySession[] | null {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) return null;
+  const out: PhoneHistorySession[] = [];
+  for (const [date, entry] of Object.entries(data as Record<string, unknown>)) {
+    if (!isValidDateString(date)) continue;
+    if (typeof entry !== "object" || entry === null) return null;
+    const sessions = (entry as Record<string, unknown>).sessions;
+    if (sessions === undefined) continue;
+    if (!Array.isArray(sessions)) return null;
+    for (const row of sessions) {
+      if (typeof row !== "object" || row === null) continue;
+      const record = row as Record<string, unknown>;
+      const type = String(record.type ?? "");
+      if (!PHASES.has(type)) continue;
+      const start = Math.floor(finiteNumber(record.start, 0));
+      const duration = Math.floor(finiteNumber(record.duration, 0));
+      if (start <= 0 || duration <= 0) continue;
+      const tag = typeof record.tag === "string" && record.tag.length > 0 ? record.tag : null;
+      out.push({
+        date,
+        type: type as Phase,
+        start,
+        duration,
+        completed: record.completed === true,
+        tag,
+      });
+    }
+  }
+  return out;
 }
 
 export function configBody(config: PhoneConfig): Record<string, unknown> {

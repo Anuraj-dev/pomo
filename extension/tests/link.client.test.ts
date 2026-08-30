@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { PomoLink, type LinkEngineAdapter, type LinkEngineView, type LinkPersist } from "../src/link/client";
-import type { PhoneConfig, PhoneTimerState } from "../src/link/phoneState";
+import type { PhoneConfig, PhoneHistorySession, PhoneTimerState } from "../src/link/phoneState";
 import type { RestPort, RestResult, SocketFactory, SocketHandle } from "../src/link/rest";
 
 class FakeEngine implements LinkEngineAdapter {
@@ -51,6 +51,7 @@ class FakeEngine implements LinkEngineAdapter {
 class FakeRest implements RestPort {
   routes = new Map<string, RestResult>();
   posts: Array<{ path: string; body: unknown }> = [];
+  gets: string[] = [];
 
   configure(): void {}
 
@@ -60,6 +61,11 @@ class FakeRest implements RestPort {
 
   getConfig(): Promise<RestResult> {
     return Promise.resolve(this.routes.get("GET /api/config") ?? { status: 0, body: "" });
+  }
+
+  getHistory(): Promise<RestResult> {
+    this.gets.push("/api/history");
+    return Promise.resolve(this.routes.get("GET /api/history") ?? { status: 0, body: "" });
   }
 
   post(path: string, body?: unknown): Promise<RestResult> {
@@ -93,6 +99,7 @@ function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
   const engine = new FakeEngine();
   const persisted: LinkPersist[] = [];
   const configs: PhoneConfig[] = [];
+  const histories: PhoneHistorySession[][] = [];
   let socket: SocketHandle | null = null;
   let handlers: { onOpen: () => void; onMessage: (text: string) => void; onClose: () => void } | null = null;
   const connectSocket: SocketFactory = (_url, nextHandlers) => {
@@ -123,6 +130,9 @@ function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
     hooks: {
       persist: (data) => persisted.push(data),
       applyConfig: (config) => configs.push(config),
+      applyHistory: (sessions) => {
+        histories.push(sessions);
+      },
       currentConfig: () => ({
         workMinutes: 25,
         shortMinutes: 5,
@@ -132,7 +142,7 @@ function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
       }),
     },
   });
-  return { link, rest, engine, persisted, configs, open: () => handlers, socket: () => socket };
+  return { link, rest, engine, persisted, configs, histories, open: () => handlers, socket: () => socket };
 }
 
 describe("PomoLink client", () => {
@@ -258,5 +268,55 @@ describe("PomoLink client", () => {
       }),
     );
     expect(harness.engine.view.remaining).toBe(1000);
+  });
+
+  test("enter SYNC pulls GET /api/history", async () => {
+    const harness = makeLink();
+    harness.rest.routes.set("GET /api/status", json(200, phoneState()));
+    harness.rest.routes.set(
+      "GET /api/history",
+      json(200, {
+        "2026-08-30": {
+          completed: 1,
+          work_minutes: 25,
+          break_minutes: 0,
+          sessions: [{ type: "work", start: 1_799_998_500, duration: 1500, completed: true }],
+        },
+      }),
+    );
+    await harness.link.start();
+    await harness.link.deliverFrame(JSON.stringify({ type: "state", data: phoneState() }));
+    expect(harness.link.mode).toBe("SYNCED");
+    expect(harness.rest.gets).toContain("/api/history");
+    expect(harness.histories.at(-1)).toEqual([
+      {
+        date: "2026-08-30",
+        type: "work",
+        start: 1_799_998_500,
+        duration: 1500,
+        completed: true,
+        tag: null,
+      },
+    ]);
+  });
+
+  test("phase_complete while SYNCED pulls history again", async () => {
+    const harness = makeLink();
+    harness.rest.routes.set("GET /api/status", json(200, phoneState()));
+    harness.rest.routes.set("GET /api/history", json(200, {}));
+    await harness.link.start();
+    await harness.link.deliverFrame(JSON.stringify({ type: "state", data: phoneState() }));
+    const before = harness.rest.gets.filter((path) => path === "/api/history").length;
+    await harness.link.deliverFrame(JSON.stringify({ type: "event", event: "phase_complete", phase: "work" }));
+    expect(harness.rest.gets.filter((path) => path === "/api/history").length).toBe(before + 1);
+  });
+
+  test("history 401 unpairs", async () => {
+    const harness = makeLink();
+    harness.rest.routes.set("GET /api/status", json(200, phoneState()));
+    harness.rest.routes.set("GET /api/history", json(401, { success: false, error: "unauthorized" }));
+    await harness.link.start();
+    await harness.link.deliverFrame(JSON.stringify({ type: "state", data: phoneState() }));
+    expect(harness.link.mode).toBe("UNPAIRED");
   });
 });
