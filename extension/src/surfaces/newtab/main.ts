@@ -13,7 +13,7 @@ import type { TimerSnapshot } from "../../engine/timer";
 import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
 import type { LinkStatus } from "../../link/client";
-import { hostPermissionOrigins, pairingFromParsed, parsePairingPayload } from "../../link/pairing";
+import { hostPermissionOrigins, pairingFromParsed, parsePairingPayload, phoneOrigin } from "../../link/pairing";
 import { applyTheme, bindLinkMode, request, sendCommand, subscribeLink, subscribeState } from "../../shared/surface";
 import { readSurfaceStats } from "../../shared/statsReader";
 import {
@@ -258,7 +258,14 @@ function renderPairingStatus(status: LinkStatus): void {
   }
   const endpoint = `${status.host}:${status.port}`;
   if (status.mode === "SYNCED") pairingStatusEl.textContent = `Synced with ${endpoint}`;
-  else if (status.mode === "OFFLINE") pairingStatusEl.textContent = `Phone unreachable. Running locally. ${endpoint}`;
+  else if (status.mode === "OFFLINE") {
+    if (status.message.includes("timed out")) {
+      pairingStatusEl.textContent = `Local network blocked. Allow Local network access in the address bar, then Save pairing. ${endpoint}`;
+    } else {
+      const why = status.message.length > 0 ? ` ${status.message}.` : "";
+      pairingStatusEl.textContent = `Phone unreachable.${why} Running locally. ${endpoint}`;
+    }
+  }
   else if (status.mode === "UNPAIRED") pairingStatusEl.textContent = `Token rejected. ${endpoint}`;
   else pairingStatusEl.textContent = `Linking ${endpoint}`;
 }
@@ -281,6 +288,16 @@ async function handleSavePairing(): Promise<void> {
     return;
   }
   pairingStatusEl.textContent = "Saving…";
+  try {
+    await fetch(`${phoneOrigin(pairing)}/api/status`, {
+      method: "GET",
+      headers: { "X-Pomo-Token": pairing.token },
+    });
+  } catch {
+    pairingStatusEl.textContent =
+      "Allow Local network access in the address bar (Not secure / tune icon), then Save pairing again.";
+    return;
+  }
   const response = await request({ type: "pomo:link:pair", payload: pairingPayloadEl.value });
   if (!response.ok || response.link === undefined) {
     pairingStatusEl.textContent = response.error ?? "Could not pair";
