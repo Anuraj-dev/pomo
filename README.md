@@ -1,17 +1,10 @@
 # Pomo
 
 Pomo is a local-first Pomodoro timer for Android, with a Chrome extension and a
-thin desktop client. Today the live timer and history still live on each
-installation: Android `OfflineTimer` plus Room, Chrome `TimerEngine` plus
-IndexedDB. Desktop and NodeMCU stay thin clients of the phone LAN API.
-
-A dormant peer-sync generation is packaged on Android and Chrome. Equal Full
-Replicas under one Member Identity are specified and tested as a preference
-journal plus domain allowlist, with `productionActivation=false`. Test artifacts
-run ordinary drain and a Replica LAN session into `OperationKernel`. Public
-migration cutover is not on. CI uploads signed test APKs and a Chrome test zip.
-Physical and provider rows live in `docs/sync-validation-runbook.md` and stay
-`BLOCKED` until a person runs them. See `docs/sync-system.md`.
+thin desktop client. The phone owns the live clock, Room history, and Crew.
+Chrome has its own timer engine and local history. Desktop, NodeMCU, and the
+Omarchy plugin talk to the phone LAN API. Desk and Omarchy already run locally
+when the phone is gone, then import history and adopt a live timer on reconnect.
 
 The UI is a focus instrument: large live time, dense stats, local history, and
 direct controls.

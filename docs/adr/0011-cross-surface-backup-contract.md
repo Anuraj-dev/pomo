@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted
+Accepted, narrowed by ADR-0012. Chrome still speaks `pomo-backup` v1 for history.
+It writes an empty Crew object and ignores Crew on import. Phone backup remains
+the Crew-bearing document.
 
 ## Decision
 

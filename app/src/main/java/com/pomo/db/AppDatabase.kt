@@ -7,14 +7,6 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.pomo.sync.persistence.SyncCheckpointOperationEntity
-import com.pomo.sync.persistence.SyncCheckpointProjectionEntity
-import com.pomo.sync.persistence.SyncDao
-import com.pomo.sync.persistence.SyncDispositionEventEntity
-import com.pomo.sync.persistence.SyncFeedHeadEntity
-import com.pomo.sync.persistence.SyncOperationEntity
-import com.pomo.sync.persistence.SyncOutboxEntity
-import com.pomo.sync.persistence.SyncPreferenceProjectionEntity
 
 @Database(
     entities = [
@@ -24,23 +16,14 @@ import com.pomo.sync.persistence.SyncPreferenceProjectionEntity
         CrewDailyAggregateEntity::class,
         CrewHiddenMemberEntity::class,
         CrewRelayStateEntity::class,
-        SyncOperationEntity::class,
-        SyncFeedHeadEntity::class,
-        SyncPreferenceProjectionEntity::class,
-        SyncOutboxEntity::class,
-        SyncDispositionEventEntity::class,
-        SyncCheckpointOperationEntity::class,
-        SyncCheckpointProjectionEntity::class,
     ],
-    version = 9,
+    version = 10,
     exportSchema = true,
 )
 public abstract class AppDatabase : RoomDatabase() {
     public abstract fun historyDao(): HistoryDao
 
     public abstract fun crewDao(): CrewDao
-
-    internal abstract fun syncDao(): SyncDao
 
     public companion object {
         @Volatile
@@ -64,6 +47,7 @@ public abstract class AppDatabase : RoomDatabase() {
                 .addMigrations(MIGRATION_6_7)
                 .addMigrations(MIGRATION_7_8)
                 .addMigrations(MIGRATION_8_9)
+                .addMigrations(MIGRATION_9_10)
                 .build()
         }
 
@@ -219,6 +203,23 @@ public abstract class AppDatabase : RoomDatabase() {
                     )
                 }
             }
+
+        public val MIGRATION_9_10: Migration =
+            object : Migration(9, 10) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    dropDormantSyncTables(db)
+                }
+            }
+
+        private fun dropDormantSyncTables(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `sync_outbox`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_disposition_events`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_checkpoint_operations`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_checkpoint_projection`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_preference_projection`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_feed_heads`")
+            db.execSQL("DROP TABLE IF EXISTS `sync_operations`")
+        }
 
         private fun createCrewTables(db: SupportSQLiteDatabase) {
             db.execSQL(

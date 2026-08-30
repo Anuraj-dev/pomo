@@ -23,9 +23,8 @@ import {
   renderProgress,
   renderTime,
 } from "../../shared/instrument";
-import { bootSyncPanel } from "../../sync/ui/syncPanel";
 
-type TabKey = "instrument" | "history" | "stats" | "settings" | "sync";
+type TabKey = "instrument" | "history" | "stats" | "settings";
 
 const tabsEl = document.getElementById("tabs")!;
 const pages: Record<TabKey, HTMLElement> = {
@@ -33,7 +32,6 @@ const pages: Record<TabKey, HTMLElement> = {
   history: document.getElementById("page-history")!,
   stats: document.getElementById("page-stats")!,
   settings: document.getElementById("page-settings")!,
-  sync: document.getElementById("page-sync")!,
 };
 
 const buildVersionEl = document.getElementById("buildVersion")!;
@@ -75,7 +73,6 @@ let latest: TimerSnapshot | null = null;
 let previousStatus: TimerSnapshot["status"] | null = null;
 let userNavigated = false;
 let tabLoadSeq = 0;
-bootSyncPanel(document.getElementById("syncPanel")!, "full");
 
 buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
 

@@ -1,16 +1,13 @@
 import "./helpers/db";
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { MAX_CREATED_AT_SKEW_SECONDS } from "../src/crew/nostrEvent";
-import { CrewDao, HistoryDao } from "../src/db/dao";
-import type { CrewDailyRow, CrewRelayStateRow, CrewSnapshotRow } from "../src/db/dao";
+import { HistoryDao } from "../src/db/dao";
 import type { SessionRow } from "../src/db/types";
 import { DB_NAME, openDb } from "../src/db/schema";
 import type { Phase } from "../src/engine/timer";
 
 let db: IDBDatabase;
 let history: HistoryDao;
-let crew: CrewDao;
 
 function session(
   start: number,
@@ -23,39 +20,10 @@ function session(
   return { start, date, type, duration, completed, tag };
 }
 
-function snapshot(crewId: string, identityPublicKey: string, publishedAtEpochSeconds: number): CrewSnapshotRow {
-  return {
-    crewId,
-    identityPublicKey,
-    displayName: "member",
-    avatarBase64: null,
-    allTimeFocusMinutes: 0,
-    publishedAtEpochSeconds,
-    localDate: "2026-08-01",
-    utcOffsetMinutes: 330,
-    currentStreak: 0,
-    lastFocusedAtEpochSeconds: 0,
-    protocolVersion: 1,
-    statsJson: null,
-  };
-}
-
-function daily(
-  crewId: string,
-  identityPublicKey: string,
-  localDate: string,
-  focusMinutes: number,
-  completedWorkBlocks: number,
-): CrewDailyRow {
-  return { crewId, identityPublicKey, localDate, focusMinutes, completedWorkBlocks };
-}
-
 beforeEach(async () => {
   db = await openDb();
   history = new HistoryDao(db);
-  crew = new CrewDao(db);
 });
-
 afterEach(async () => {
   db.close();
   await new Promise<void>((resolve, reject) => {
@@ -333,166 +301,5 @@ describe("HistoryDao", () => {
     await history.mergeBackup([], []);
     const after = await history.dayStatsForDate("2026-08-01");
     expect(after!.lastUpdated).toBe(before!.lastUpdated);
-  });
-});
-
-describe("CrewDao", () => {
-  test("upsertLatest stores a strictly newer snapshot and its aggregates", async () => {
-    const first = snapshot("crew-a", "key-1", 100);
-    expect(await crew.upsertLatest(first, [daily("crew-a", "key-1", "2026-08-01", 25, 1)])).toBe(true);
-    const second = snapshot("crew-a", "key-1", 200);
-    expect(await crew.upsertLatest(second, [daily("crew-a", "key-1", "2026-08-02", 50, 2)])).toBe(true);
-    const rows = await crew.snapshotsForCrew("crew-a");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toEqual(second);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([daily("crew-a", "key-1", "2026-08-02", 50, 2)]);
-  });
-
-  test("upsertLatest rejects an equal publishedAt and changes nothing", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [daily("crew-a", "key-1", "2026-08-01", 25, 1)]);
-    expect(
-      await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [daily("crew-a", "key-1", "2026-08-02", 99, 9)]),
-    ).toBe(false);
-    const rows = await crew.snapshotsForCrew("crew-a");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.publishedAtEpochSeconds).toBe(100);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([daily("crew-a", "key-1", "2026-08-01", 25, 1)]);
-  });
-
-  test("upsertLatest rejects an older publishedAt", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 200), []);
-    expect(
-      await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [daily("crew-a", "key-1", "2026-08-01", 25, 1)]),
-    ).toBe(false);
-    const rows = await crew.snapshotsForCrew("crew-a");
-    expect(rows).toHaveLength(1);
-    expect(rows[0]!.publishedAtEpochSeconds).toBe(200);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
-  });
-
-  test("upsertLatest replaces daily aggregates wholesale", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [
-      daily("crew-a", "key-1", "2026-08-01", 25, 1),
-      daily("crew-a", "key-1", "2026-08-02", 30, 2),
-    ]);
-    expect(
-      await crew.upsertLatest(snapshot("crew-a", "key-1", 200), [daily("crew-a", "key-1", "2026-08-03", 50, 3)]),
-    ).toBe(true);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([daily("crew-a", "key-1", "2026-08-03", 50, 3)]);
-    expect(await crew.upsertLatest(snapshot("crew-a", "key-1", 300), [])).toBe(true);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
-  });
-
-  test("upsertLatest rejects a snapshot published beyond the allowed future skew", async () => {
-    const now = 1_000_000;
-    const tooNew = snapshot("crew-a", "key-1", now + MAX_CREATED_AT_SKEW_SECONDS + 1);
-    expect(await crew.upsertLatest(tooNew, [daily("crew-a", "key-1", "2026-08-01", 25, 1)], now)).toBe(false);
-    expect(await crew.snapshotsForCrew("crew-a")).toEqual([]);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
-  });
-
-  test("upsertLatest accepts a snapshot exactly at the future skew boundary", async () => {
-    const now = 1_000_000;
-    const boundary = snapshot("crew-a", "key-1", now + MAX_CREATED_AT_SKEW_SECONDS);
-    expect(await crew.upsertLatest(boundary, [], now)).toBe(true);
-    expect((await crew.snapshotsForCrew("crew-a"))[0]!.publishedAtEpochSeconds).toBe(now + MAX_CREATED_AT_SKEW_SECONDS);
-  });
-
-  test("snapshotsForCrew returns every member of the crew", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 100), []);
-    await crew.upsertLatest(snapshot("crew-a", "key-2", 100), []);
-    await crew.upsertLatest(snapshot("crew-b", "key-3", 100), []);
-    const rows = await crew.snapshotsForCrew("crew-a");
-    expect(rows).toHaveLength(2);
-    expect(rows.map((r) => r.identityPublicKey).sort()).toEqual(["key-1", "key-2"]);
-  });
-
-  test("dailyFor is scoped to one member", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [daily("crew-a", "key-1", "2026-08-01", 25, 1)]);
-    await crew.upsertLatest(snapshot("crew-a", "key-2", 100), [daily("crew-a", "key-2", "2026-08-01", 40, 2)]);
-    expect(await crew.dailyFor("crew-a", "key-2")).toEqual([daily("crew-a", "key-2", "2026-08-01", 40, 2)]);
-  });
-
-  test("setHidden and unhide toggle a member's hidden state", async () => {
-    await crew.setHidden("crew-a", "key-1", 1000);
-    await crew.setHidden("crew-a", "key-2", 2000);
-    expect((await crew.hiddenKeys("crew-a")).sort()).toEqual(["key-1", "key-2"]);
-    await crew.unhide("crew-a", "key-1");
-    expect(await crew.hiddenKeys("crew-a")).toEqual(["key-2"]);
-    await crew.setHidden("crew-a", "key-1", 3000);
-    expect((await crew.hiddenKeys("crew-a")).sort()).toEqual(["key-1", "key-2"]);
-  });
-
-  test("updateRelayState keeps last success and error when null", async () => {
-    await crew.updateRelayState("crew-a", "wss://relay1", 100, 1000, null);
-    await crew.updateRelayState("crew-a", "wss://relay1", 200, null, "timeout");
-    let rows = await crew.relayStates("crew-a");
-    expect(rows[0]).toEqual({
-      crewId: "crew-a",
-      relayUrl: "wss://relay1",
-      lastAttemptEpochSeconds: 200,
-      lastSuccessEpochSeconds: 1000,
-      lastError: "timeout",
-    });
-    await crew.updateRelayState("crew-a", "wss://relay1", 300, null, null);
-    rows = await crew.relayStates("crew-a");
-    expect(rows[0]).toEqual({
-      crewId: "crew-a",
-      relayUrl: "wss://relay1",
-      lastAttemptEpochSeconds: 300,
-      lastSuccessEpochSeconds: 1000,
-      lastError: "timeout",
-    });
-  });
-
-  test("updateRelayState overwrites with new non-null values and a success clears the error", async () => {
-    await crew.updateRelayState("crew-a", "wss://relay1", 100, 1000, "old");
-    await crew.updateRelayState("crew-a", "wss://relay1", 200, 2000, null);
-    const rows = await crew.relayStates("crew-a");
-    expect(rows[0]).toEqual({
-      crewId: "crew-a",
-      relayUrl: "wss://relay1",
-      lastAttemptEpochSeconds: 200,
-      lastSuccessEpochSeconds: 2000,
-      lastError: null,
-    });
-  });
-
-  test("relayStates returns every relay for the crew", async () => {
-    await crew.updateRelayState("crew-a", "wss://z-relay", 1, 1, null);
-    await crew.updateRelayState("crew-a", "wss://a-relay", 1, 1, null);
-    await crew.updateRelayState("crew-b", "wss://a-relay", 1, 1, null);
-    expect((await crew.relayStates("crew-a")).map((r) => r.relayUrl)).toEqual(["wss://a-relay", "wss://z-relay"]);
-  });
-
-  test("deleteCrew clears all four crew stores", async () => {
-    await crew.upsertLatest(snapshot("crew-a", "key-1", 100), [daily("crew-a", "key-1", "2026-08-01", 25, 1)]);
-    await crew.setHidden("crew-a", "key-1", 1000);
-    await crew.updateRelayState("crew-a", "wss://a-relay", 100, 1000, null);
-    await crew.updateRelayState("crew-a", "wss://b-relay", 100, null, "err");
-
-    await crew.upsertLatest(snapshot("crew-b", "key-2", 100), [daily("crew-b", "key-2", "2026-08-01", 25, 1)]);
-    await crew.setHidden("crew-b", "key-2", 1000);
-    await crew.updateRelayState("crew-b", "wss://a-relay", 100, 1000, null);
-
-    await crew.deleteCrew("crew-a");
-
-    expect(await crew.snapshotsForCrew("crew-a")).toEqual([]);
-    expect(await crew.dailyFor("crew-a", "key-1")).toEqual([]);
-    expect(await crew.hiddenKeys("crew-a")).toEqual([]);
-    expect(await crew.relayStates("crew-a")).toEqual([]);
-
-    expect(await crew.snapshotsForCrew("crew-b")).toHaveLength(1);
-    expect(await crew.dailyFor("crew-b", "key-2")).toHaveLength(1);
-    expect(await crew.hiddenKeys("crew-b")).toEqual(["key-2"]);
-    expect(await crew.relayStates("crew-b")).toEqual([
-      {
-        crewId: "crew-b",
-        relayUrl: "wss://a-relay",
-        lastAttemptEpochSeconds: 100,
-        lastSuccessEpochSeconds: 1000,
-        lastError: null,
-      },
-    ]);
   });
 });

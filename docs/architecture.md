@@ -1,10 +1,9 @@
 # Architecture
 
-Pomo is mobile-primary. The live production path is still the phone service and
-the independent Chrome timer engine. A dormant Operation-journal Replica is
-packaged beside that path and does not author live Work blocks until activation.
-Activation is the isolated fixture flip in `docs/sync-merge-order.md`, gated by
-`sync-protocol/activation/physical-matrix.json`.
+Pomo is mobile-primary. The phone service owns the live clock, Room history, and
+Crew. Chrome has its own timer engine and local history. Desk and Omarchy already
+follow the phone over the LAN API and run locally while the phone is gone. Chrome
+will use that same hybrid contract; it is not a peer Replica.
 
 ## Source Of Truth
 
@@ -18,12 +17,11 @@ Android timer. These inputs all route through service methods:
 - The NodeMCU desk device, through the same authenticated HTTP commands
   (including offline history import and live timer adopt)
 
-Room is the canonical live history store. The dormant sync journal is a separate
-authenticated Operation log. Desktop clients may display or cache data, but they
-should not merge, overwrite, or author timer/history state. The desk may append
-completed offline sessions and hand over a live timer under the least-remaining
-adopt rule. It does not dual-own the clock while synced. NodeMCU is out of Full
-Replica scope.
+Room is the canonical live history store. Desktop clients may display or cache
+data, but they should not merge, overwrite, or author timer/history state. The
+desk and Omarchy plugin may append completed offline sessions and hand over a
+live timer under the least-remaining adopt rule. They do not dual-own the clock
+while synced.
 
 ## Runtime Flow
 
@@ -94,18 +92,6 @@ different sessions only when desk remaining is strictly less than phone
 remaining; otherwise HTTP 409 `timer_busy`).
 
 ```text
-sync/transport/
-```
-
-`OrdinaryDrainHost` walks the Room outbox through `DirectSyncCoordinator`.
-`OrdinaryDrainWorker` is the WorkManager entry. Retry now enqueues an immediate
-pass. Periodic work waits for connectivity. `ReplicaLanRuntime` is the LAN
-session: NSD advertise/browse, TCP exchange, kernel ingest, signed durable
-acks. Configured WebDAV Mailboxes, Nostr rendezvous catch-up, and optional
-WebRTC inbox/TURN ICE config are attached as drain routes. Provider bytes may
-be content-epoch wrapped.
-
-```text
 ui/
 ```
 
@@ -139,10 +125,6 @@ stats are derived locally from those session writes. Sources of history writes:
   `start` / `client_id`; missing starts are assigned on the phone)
 
 The active production path does not import or reconcile legacy laptop history.
-The separately packaged dormant peer-sync system inventories Android and Chrome
-legacy data side by side and requires explicit migration; see
-`docs/sync-system.md`. It never imports desktop-client or NodeMCU state as a Full
-Replica.
 
 History dates use the phone's local calendar day. When a session crosses
 midnight, the repository splits it into per-date segments, rounds each segment's

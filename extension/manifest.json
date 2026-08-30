@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Pomo",
   "version": "0.1.13",
-  "description": "A focus instrument: pomodoro timer, history, stats, and a privacy-preserving Crew leaderboard. Local-first; no accounts.",
+  "description": "A focus instrument: pomodoro timer, history, and stats. Pair with the phone next; Crew lives on the phone.",
   "minimum_chrome_version": "120",
   "icons": {
     "16": "icons/icon16.png",
@@ -28,8 +28,7 @@
     "default_path": "sidepanel.html"
   },
   "content_security_policy": {
-    "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    "extension_pages": "script-src 'self'; object-src 'self'"
   },
-  "permissions": ["alarms", "notifications", "offscreen", "storage", "unlimitedStorage", "sidePanel", "tabs"],
-  "optional_host_permissions": ["http://*/*", "https://*/*"]
+  "permissions": ["alarms", "notifications", "storage", "sidePanel", "tabs"]
 }

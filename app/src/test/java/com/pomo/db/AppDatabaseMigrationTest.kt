@@ -15,7 +15,7 @@ import org.robolectric.annotation.Config
 @Config(sdk = [33])
 public class AppDatabaseMigrationTest {
     @Test
-    public fun migrationSevenToEightPreservesTimerAndCrewRowsWhileAddingDormantSyncTables() {
+    public fun migrationSevenThroughTenPreservesTimerAndCrewRowsAndDropsDormantSyncTables() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val helper =
             FrameworkSQLiteOpenHelperFactory().create(
@@ -47,14 +47,13 @@ public class AppDatabaseMigrationTest {
             database.execSQL("INSERT INTO crew_snapshots VALUES ('crew', 'identity', 'Asha')")
 
             AppDatabase.MIGRATION_7_8.migrate(database)
+            AppDatabase.MIGRATION_8_9.migrate(database)
+            AppDatabase.MIGRATION_9_10.migrate(database)
 
             assertEquals(2, scalarInt(database, "SELECT completed FROM day_stats WHERE date = '2026-08-14'"))
             assertEquals("Asha", scalarText(database, "SELECT displayName FROM crew_snapshots"))
-            assertTrue(tableExists(database, "sync_operations"))
-            assertTrue(tableExists(database, "sync_feed_heads"))
-            assertTrue(tableExists(database, "sync_preference_projection"))
-            assertTrue(tableExists(database, "sync_outbox"))
-            assertTrue(tableExists(database, "sync_disposition_events"))
+            assertTrue(!tableExists(database, "sync_operations"))
+            assertTrue(!tableExists(database, "sync_outbox"))
         }
         helper.close()
     }
