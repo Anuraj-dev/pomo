@@ -24,7 +24,7 @@ import {
   type PhoneHistorySession,
   type PhoneTimerState,
 } from "./phoneState";
-import { jsonOf, type RestPort, type SocketFactory, type SocketHandle } from "./rest";
+import { jsonOf, type RestPort, type RestResult, type SocketFactory, type SocketHandle } from "./rest";
 import { SessionQueue, type QueuedPhase, type QueuedSession } from "./queue";
 
 export interface LinkClock {
@@ -429,6 +429,26 @@ export class PomoLink {
     return true;
   }
 
+  private applyStatusResult(result: RestResult, origin: string): boolean {
+    if (result.status === 200) return true;
+    if (result.status === 401) {
+      this.enterUnpaired(`GET /api/status ${origin}`);
+      return false;
+    }
+    if (result.status === 429) {
+      this.log(`GET /api/status 429 (${origin}), retry`);
+      this.retryStartedAt = this.clock.monotonicMs();
+      this.retryDelayMs = RECONNECT_INTERVAL_MS;
+      return false;
+    }
+    if (result.status === 0) {
+      this.enterOffline("GET /api/status timed out");
+      return false;
+    }
+    this.enterOffline(`GET /api/status HTTP ${result.status}`);
+    return false;
+  }
+
   private async tickDiscovery(): Promise<void> {
     const now = this.clock.monotonicMs();
     if (this.retryDelayMs > 0 && now - this.retryStartedAt < this.retryDelayMs) return;
@@ -439,25 +459,14 @@ export class PomoLink {
     this.log(`using configured host ${this.pairing.host}:${this.pairing.port}`);
     this.rest.configure(this.pairing);
     const result = await this.rest.getStatus();
-    if (result.status === 401) {
-      this.enterUnpaired("GET /api/status");
-      return;
-    }
-    if (result.status !== 200) {
-      this.enterOffline("host unreachable");
-      return;
-    }
+    if (!this.applyStatusResult(result, "discovery")) return;
     this.beginWebsocket("discovery");
   }
 
   private async fetchStatus(): Promise<boolean> {
     if (this.pairing === null) return false;
     const result = await this.rest.getStatus();
-    if (result.status === 401) {
-      this.enterUnpaired("GET /api/status");
-      return false;
-    }
-    if (result.status !== 200) return false;
+    if (!this.applyStatusResult(result, "probe")) return false;
     if (this.mode === "SYNCED") {
       const data = parsePhoneState(jsonOf(result));
       if (data !== null) this.applyPhoneObject(data, false);

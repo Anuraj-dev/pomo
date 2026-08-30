@@ -328,4 +328,18 @@ describe("PomoLink client", (): void => {
     await harness.link.deliverFrame(JSON.stringify({ type: "state", data: phoneState() }));
     expect(harness.link.mode).toBe("UNPAIRED");
   });
+
+  test("GET /api/status abort goes OFFLINE as timeout", async (): Promise<void> => {
+    const { link } = makeLink();
+    await link.start();
+    expect(link.mode).toBe("OFFLINE");
+    expect(link.status().message).toBe("GET /api/status timed out");
+  });
+
+  test("GET /api/status 429 stays DISCOVERING", async (): Promise<void> => {
+    const { link, rest } = makeLink();
+    rest.routes.set("GET /api/status", json(429, { success: false, error: "too many unauthorized requests" }));
+    await link.start();
+    expect(link.mode).toBe("DISCOVERING");
+  });
 });
