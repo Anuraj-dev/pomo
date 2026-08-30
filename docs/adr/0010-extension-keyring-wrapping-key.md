@@ -1,5 +1,7 @@
 # The extension's identity keyring is wrapped by a key in chrome.storage.local
 
+Status: superseded by ADR-0012. Chrome no longer has a Crew identity.
+
 On the phone, the crew [[Identity key]] private material is wrapped by an
 Android Keystore-backed key: hardware/OS-protected, survives restarts, and if
 lost, the [[Recovery file]] is the only way back. Chrome has no equivalent for

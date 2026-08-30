@@ -1,20 +1,6 @@
 export const DB_NAME = "pomo";
 
-export const SCHEMA_VERSION = 6;
-
-export const SYNC_OPERATION_STORE = "syncOperations";
-export const SYNC_FEED_HEAD_STORE = "syncFeedHeads";
-export const SYNC_PREFERENCE_STORE = "syncPreferences";
-export const SYNC_OUTBOX_STORE = "syncOutbox";
-export const SYNC_DISPOSITION_EVENT_STORE = "syncDispositionEvents";
-export const SYNC_MEMBER_IDENTITY_STORE = "syncMemberIdentity";
-export const SYNC_DEVICE_AUTHORITY_STORE = "syncDeviceAuthorities";
-export const SYNC_LOCAL_DEVICE_KEY_STORE = "syncLocalDeviceKeys";
-export const SYNC_ADMISSION_STORE = "syncAdmissions";
-export const SYNC_AUTHORIZATION_EVENT_STORE = "syncAuthorizationEvents";
-export const SYNC_CONTENT_EPOCH_STORE = "syncContentEpochs";
-export const SYNC_CHECKPOINT_OPERATION_STORE = "syncCheckpointOperations";
-export const SYNC_CHECKPOINT_PROJECTION_STORE = "syncCheckpointProjection";
+export const SCHEMA_VERSION = 7;
 
 type IndexDef = readonly [name: string, keyPath: string | string[]];
 
@@ -43,64 +29,32 @@ export function openDb(): Promise<IDBDatabase> {
       const db = request.result;
       const transaction = request.transaction!;
       if (event.oldVersion < 2) {
-        // v1 → v2: settings moved to chrome.storage.local; drop the legacy store.
         if (db.objectStoreNames.contains("settings")) db.deleteObjectStore("settings");
       }
       ensureStore(db, transaction, "sessions", { keyPath: "start" }, [["date", "date"]]);
       ensureStore(db, transaction, "dayStats", { keyPath: "date" }, []);
-      ensureStore(db, transaction, "crewSnapshots", { keyPath: ["crewId", "identityPublicKey"] }, [["crewId", "crewId"]]);
-      ensureStore(
-        db,
-        transaction,
+      const staleStores = [
+        "crewSnapshots",
         "crewDailyAggregates",
-        { keyPath: ["crewId", "identityPublicKey", "localDate"] },
-        [
-          ["crewId_key", ["crewId", "identityPublicKey"]],
-          ["crewId", "crewId"],
-        ],
-      );
-      ensureStore(db, transaction, "crewHiddenMembers", { keyPath: ["crewId", "identityPublicKey"] }, [["crewId", "crewId"]]);
-      ensureStore(db, transaction, "crewRelayState", { keyPath: ["crewId", "relayUrl"] }, []);
-      // v3 → v4 is additive. Existing timer/history/Crew data is untouched;
-      // dormant sync state starts empty and is populated only by issue #103's DAO.
-      ensureStore(
-        db,
-        transaction,
-        SYNC_OPERATION_STORE,
-        { keyPath: "operationId" },
-        [
-          ["feedPosition", ["feedKey", "sequence"]],
-          ["disposition", "disposition"],
-        ],
-      );
-      ensureStore(db, transaction, SYNC_FEED_HEAD_STORE, { keyPath: "feedKey" }, []);
-      ensureStore(db, transaction, SYNC_PREFERENCE_STORE, { keyPath: "key" }, []);
-      ensureStore(db, transaction, SYNC_OUTBOX_STORE, { keyPath: "operationId" }, [["state", "state"]]);
-      ensureStore(
-        db,
-        transaction,
-        SYNC_DISPOSITION_EVENT_STORE,
-        { keyPath: "id", autoIncrement: true },
-        [["disposition", "disposition"]],
-      );
-      // Device keys stay installation-scoped. Authorization and readiness remain separate durable facts.
-      ensureStore(db, transaction, SYNC_MEMBER_IDENTITY_STORE, { keyPath: "slot" }, []);
-      ensureStore(db, transaction, SYNC_DEVICE_AUTHORITY_STORE, { keyPath: "deviceId" }, [["memberId", "memberId"]]);
-      ensureStore(db, transaction, SYNC_LOCAL_DEVICE_KEY_STORE, { keyPath: "deviceId" }, []);
-      ensureStore(db, transaction, SYNC_ADMISSION_STORE, { keyPath: "admissionId" }, [["memberId", "memberId"]]);
-      ensureStore(
-        db,
-        transaction,
-        SYNC_AUTHORIZATION_EVENT_STORE,
-        { keyPath: "eventId" },
-        [
-          ["memberEpoch", ["memberId", "authorizationEpoch"]],
-          ["targetDeviceId", "targetDeviceId"],
-        ],
-      );
-      ensureStore(db, transaction, SYNC_CONTENT_EPOCH_STORE, { keyPath: ["memberId", "contentEpoch"] }, [["memberId", "memberId"]]);
-      ensureStore(db, transaction, SYNC_CHECKPOINT_OPERATION_STORE, { keyPath: ["feedKey", "sequence"] }, [["operationId", "operationId"]]);
-      ensureStore(db, transaction, SYNC_CHECKPOINT_PROJECTION_STORE, { keyPath: "key" }, []);
+        "crewHiddenMembers",
+        "crewRelayState",
+        "syncOperations",
+        "syncFeedHeads",
+        "syncPreferences",
+        "syncOutbox",
+        "syncDispositionEvents",
+        "syncMemberIdentity",
+        "syncDeviceAuthorities",
+        "syncLocalDeviceKeys",
+        "syncAdmissions",
+        "syncAuthorizationEvents",
+        "syncContentEpochs",
+        "syncCheckpointOperations",
+        "syncCheckpointProjection",
+      ];
+      for (const name of staleStores) {
+        if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name);
+      }
     };
     request.onsuccess = () => {
       resolve(request.result);
