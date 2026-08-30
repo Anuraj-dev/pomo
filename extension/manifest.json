@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Pomo",
-  "version": "0.1.14",
+  "version": "0.1.17",
   "description": "A focus instrument: pomodoro timer, history, and stats. Pair with the phone over LAN; Crew lives on the phone.",
   "minimum_chrome_version": "120",
   "icons": {
