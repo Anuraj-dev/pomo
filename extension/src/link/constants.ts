@@ -9,8 +9,8 @@ export const UNPAIRED_RETRY_MS = 300_000;
 export const CONFIG_REFRESH_MS = 300_000;
 export const CONFIG_RETRY_MS = 60_000;
 export const SOFT_RESYNC_MAX = 8;
-export const HTTP_TIMEOUT_MS = 2_000;
-export const HTTP_FLUSH_TIMEOUT_MS = 5_000;
+export const HTTP_TIMEOUT_MS = 8_000;
+export const HTTP_FLUSH_TIMEOUT_MS = 8_000;
 
 export const IMPORT_MAX_FUTURE_S = 5 * 60;
 export const IMPORT_MAX_AGE_S = 14 * 24 * 60 * 60;

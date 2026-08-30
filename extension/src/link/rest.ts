@@ -71,10 +71,10 @@ export class PhoneRest implements RestPort {
         headers,
         body: method === "POST" ? (payload ?? "") : undefined,
         signal: controller.signal,
-        redirect: "manual",
       });
       return { status: response.status, body: await response.text() };
-    } catch {
+    } catch (error) {
+      console.warn("pomo link fetch failed", method, path, error);
       return { status: 0, body: "" };
     } finally {
       clearTimeout(timer);
