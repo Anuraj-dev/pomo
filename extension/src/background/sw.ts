@@ -6,10 +6,15 @@ import { dateStringOf, prevDate, utcOffsetMinutesAt } from "../engine/dateLogic"
 import { DEFAULT_SETTINGS, sanitizeSettings, type PomoSettings } from "../engine/settings";
 import { currentStreak, totals } from "../engine/stats";
 import { TimerEngine, type CompletedBlock, type Phase, type TimerSnapshot } from "../engine/timer";
+import { PomoLink, type LinkEngineAdapter, type LinkPersist } from "../link/client";
+import { historyDelta, type PhoneConfig, type PhoneHistorySession, type PhoneTimerState } from "../link/phoneState";
+import { PhoneRest, browserSocket } from "../link/rest";
 import { decodePortableBackup, encodePortableBackup } from "../shared/backup";
 import { badgeColorOf, badgeTextOf } from "../shared/badge";
 import {
   ENGINE_KEY,
+  LINK_KEY,
+  LINK_STATUS_KEY,
   SETTINGS_KEY,
   STATE_KEY,
   isPomoRequest,
@@ -25,10 +30,13 @@ let db: IDBDatabase | null = null;
 let dao: HistoryDao | null = null;
 let settings: PomoSettings = { ...DEFAULT_SETTINGS };
 let engine: TimerEngine;
+let link: PomoLink | null = null;
 let earnedByDate = new Map<string, number>();
 let pendingWrite = Promise.resolve();
 let syncPromise: Promise<void> = Promise.resolve();
+let linkPump = Promise.resolve();
 let initPromise: Promise<void> | null = null;
+let linkRetryTimer: ReturnType<typeof setTimeout> | null = null;
 
 function initOnce(): Promise<void> {
   if (initPromise === null) {
@@ -90,7 +98,10 @@ function commit(block: CompletedBlock): void {
         }
       }
     });
-  if (block.completed) notifyPhaseComplete(block.type);
+  if (block.completed) {
+    notifyPhaseComplete(block.type);
+    link?.enqueueCompleted(block.type, block.duration, block.start, block.tag);
+  }
 }
 
 async function syncAfterWrites(): Promise<void> {
@@ -142,13 +153,50 @@ function applyBadge(state: TimerSnapshot): void {
   chrome.action.setBadgeBackgroundColor({ color: badgeColorOf(state.phase) });
 }
 
+function followingPhone(): boolean {
+  return link !== null && !link.localOwner;
+}
+
+function publishLinkStatus(): Promise<void> {
+  if (link === null) return Promise.resolve();
+  return chrome.storage.session.set({ [LINK_STATUS_KEY]: link.status() });
+}
+
+function scheduleLinkRetry(ms: number): void {
+  if (linkRetryTimer !== null) clearTimeout(linkRetryTimer);
+  // setTimeout is best-effort in MV3: the service worker may terminate while
+  // idle and discard the timer. The `pomo-tick` alarm is the fallback; this
+  // retry only accelerates recovery when the worker stays alive.
+  linkRetryTimer = setTimeout(() => {
+    linkRetryTimer = null;
+    void pumpLink();
+  }, ms);
+}
+
+function pumpLink(): Promise<void> {
+  const operation = linkPump.then(async () => {
+    if (link === null) return;
+    await link.tick();
+    await publishLinkStatus();
+    const mode = link.mode;
+    if (mode === "OFFLINE" || mode === "DISCOVERING" || mode === "CONNECTING") {
+      scheduleLinkRetry(5_000);
+    }
+  });
+  linkPump = operation.catch((error: unknown) => {
+    console.error("link pump failed", error);
+  });
+  return operation;
+}
+
 function sync(): Promise<void> {
   const operation = syncPromise.then(async () => {
-    engine.tick();
+    if (!followingPhone()) engine.tick();
     const state = engine.snapshot();
     await chrome.storage.local.set({ [ENGINE_KEY]: state });
     await chrome.storage.session.set({ [STATE_KEY]: state });
     applyBadge(state);
+    await publishLinkStatus();
   });
   syncPromise = operation.catch(() => undefined);
   return operation;
@@ -220,25 +268,140 @@ async function ensureDb(): Promise<void> {
   dao = new HistoryDao(db);
 }
 
+function engineAdapter(): LinkEngineAdapter {
+  return {
+    localOwner: true,
+    snapshot: () => {
+      const state = engine.peek();
+      return {
+        status: state.status,
+        phase: state.phase,
+        remaining: state.remaining,
+        duration: state.duration,
+        startTime: state.startTime,
+        completed: state.completed,
+        goal: state.goal,
+        tag: state.tag,
+        date: state.date,
+      };
+    },
+    isLive: () => engine.isLive(),
+    follow: (state: PhoneTimerState, remaining: number, date: string) => {
+      engine.follow({
+        status: state.status,
+        phase: state.phase,
+        startTime: state.start_time,
+        duration: state.duration,
+        remaining,
+        completed: state.completed,
+        date,
+        tag: state.tag,
+      });
+    },
+    setLocalOwner(owns: boolean) {
+      this.localOwner = owns;
+    },
+    stampStartTime: () => engine.stampStartTimeIfLive(),
+  };
+}
+
+function currentPhoneConfig(): PhoneConfig {
+  return {
+    workMinutes: settings.workMinutes,
+    shortMinutes: settings.shortMinutes,
+    longMinutes: settings.longMinutes,
+    longBreakAfter: settings.longBreakAfter,
+    dailyGoal: settings.dailyGoal,
+  };
+}
+
+async function applyPhoneConfig(config: PhoneConfig): Promise<void> {
+  settings = sanitizeSettings({
+    ...settings,
+    workMinutes: config.workMinutes,
+    shortMinutes: config.shortMinutes,
+    longMinutes: config.longMinutes,
+    longBreakAfter: config.longBreakAfter,
+    dailyGoal: config.dailyGoal,
+  });
+  engine.reconfigure();
+  await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+  await sync();
+}
+
+async function persistLink(data: LinkPersist): Promise<void> {
+  await chrome.storage.local.set({ [LINK_KEY]: data });
+}
+
+async function applyPhoneHistory(sessions: PhoneHistorySession[]): Promise<void> {
+  if (dao === null || sessions.length === 0) return;
+  try {
+    const inserted = await dao.insertBlock(
+      sessions.map((session) => ({
+        row: {
+          start: session.start,
+          date: session.date,
+          type: session.type,
+          duration: session.duration,
+          completed: session.completed,
+          tag: session.tag,
+        } satisfies SessionRow,
+        delta: historyDelta(session),
+      })),
+    );
+    if (inserted.length === 0) return;
+    await loadEarnedCount();
+    engine.refreshCompletedCount();
+    await sync();
+  } catch (error) {
+    console.error("phone history merge failed", error);
+  }
+}
+
 async function init(): Promise<void> {
   db = await openDbCached();
   dao = new HistoryDao(db);
   await loadSettings();
-  const stored = await chrome.storage.local.get(ENGINE_KEY);
+  const stored = await chrome.storage.local.get([ENGINE_KEY, LINK_KEY]);
   const saved = stored[ENGINE_KEY] as TimerSnapshot | undefined;
+  const linkStored = stored[LINK_KEY] as LinkPersist | undefined;
   const restoredStartDate =
     saved?.startTime !== undefined && saved.startTime > 0 ? dateStringOf(saved.startTime, utcOffsetMinutesAt(saved.startTime)) : undefined;
   await loadEarnedCount(restoredStartDate);
   engine = new TimerEngine(enginePorts());
+  const wasFollowing = linkStored !== undefined && linkStored.token.length > 0 && linkStored.localOwner === false;
   if (saved !== undefined) {
     try {
-      engine.restore(saved);
+      engine.restore(saved, { reconcile: !wasFollowing });
     } catch (error) {
       console.error("engine restore failed; starting fresh", error);
     }
   }
+  const adapter = engineAdapter();
+  link = new PomoLink({
+    rest: new PhoneRest(),
+    connectSocket: browserSocket,
+    engine: adapter,
+    persist: linkStored ?? null,
+    hooks: {
+      persist: (data) => {
+        void persistLink(data);
+      },
+      applyConfig: (config) => {
+        void applyPhoneConfig(config);
+      },
+      applyHistory: (sessions) => applyPhoneHistory(sessions),
+      currentConfig: currentPhoneConfig,
+      onPhaseComplete: (phase) => notifyPhaseComplete(phase),
+      onChange: () => {
+        void sync();
+      },
+    },
+  });
   await ensureAlarm();
+  await link.start();
   await sync();
+  void pumpLink();
 }
 
 function reconcileEngine(): boolean {
@@ -257,18 +420,24 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
   await ensureDb();
   switch (request.type) {
     case "pomo:command":
+      if (link?.phoneCommandsActive()) {
+        const sent = await link.sendGesture(request.command, request.seconds);
+        await sync();
+        void pumpLink();
+        return { ok: sent, state: engine.peek(), error: sent ? undefined : link.message || "phone command failed" };
+      }
       switch (request.command) {
         case "toggle": {
-          const before = engine.snapshot();
+          const before = engine.peek();
           engine.tick();
-          if (before.status === "running" && engine.snapshot().status !== "running") break;
+          if (before.status === "running" && engine.peek().status !== "running") break;
           engine.toggle();
           break;
         }
         case "skip": {
-          const before = engine.snapshot();
+          const before = engine.peek();
           engine.tick();
-          if (before.status === "running" && engine.snapshot().status !== "running") break;
+          if (before.status === "running" && engine.peek().status !== "running") break;
           engine.skip();
           break;
         }
@@ -283,9 +452,10 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       await syncAfterWrites();
       return { ok: true, state: engine.snapshot() };
     case "pomo:query":
-      if (reconcileEngine()) await syncAfterWrites();
-      return { ok: true, state: engine.snapshot() };
+      if (!followingPhone() && reconcileEngine()) await syncAfterWrites();
+      return { ok: true, state: engine.snapshot(), link: link?.status() };
     case "pomo:stats": {
+      void link?.refreshHistory();
       await awaitHistoryWrites();
       const days = await dao!.dayStats();
       const now = nowSeconds();
@@ -306,6 +476,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:history": {
+      void link?.refreshHistory();
       await awaitHistoryWrites();
       const [sessions, dayStats] = await Promise.all([dao!.allSessions(), dao!.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);
@@ -316,13 +487,33 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:settings:get":
-      return { ok: true, settings };
+      return { ok: true, settings, link: link?.status() };
     case "pomo:settings:set":
       settings = sanitizeSettings({ ...settings, ...request.settings });
       engine.reconfigure();
       await chrome.storage.local.set({ [SETTINGS_KEY]: settings });
+      if (link?.phoneCommandsActive()) {
+        await link.pushConfig(currentPhoneConfig());
+      }
       await sync();
-      return { ok: true, settings };
+      return { ok: true, settings, link: link?.status() };
+    case "pomo:link:get":
+      return { ok: true, link: link?.status() };
+    case "pomo:link:pair":
+      if (link === null) return { ok: false, error: "link not ready" };
+      if (!link.applyPairing(request.payload)) {
+        return { ok: false, error: "pairing payload needs url and token", link: link.status() };
+      }
+      await persistLink(link.persistState());
+      await pumpLink();
+      await sync();
+      return { ok: true, link: link.status() };
+    case "pomo:link:unpair":
+      if (link === null) return { ok: false, error: "link not ready" };
+      link.unpair();
+      await persistLink(link.persistState());
+      await sync();
+      return { ok: true, link: link.status() };
     case "pomo:backup:export":
       try {
         return { ok: true, backup: await exportPortableBackup() };
@@ -357,8 +548,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
   void initOnce()
     .then(async () => {
       await ensureDb();
-      engine.tick();
-      return syncAfterWrites();
+      if (!followingPhone()) engine.tick();
+      await syncAfterWrites();
+      return pumpLink();
     })
     .catch(logTopLevelError("alarm"));
 });

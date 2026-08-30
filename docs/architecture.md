@@ -209,5 +209,10 @@ resolve the phone by name. Async registration failures retry indefinitely every
 multiple responders and selects the first HTTP 200; a configured host/port
 fallback wins outright and skips mDNS.
 
+The Chrome extension is the same hybrid on MV3: pairing paste, REST + `/ws`,
+offline `TimerEngine`, import, adopt, `GET /api/history`, and `GET /api/config`.
+Service-worker sleep drops the socket; `chrome.alarms` (~30s) plus in-process
+retries reconnect. Host access is an optional permission requested when pairing.
+
 See [protocol.md](protocol.md) for endpoint details and
 [firmware/README.md](../firmware/README.md) for desk timings and wiring.

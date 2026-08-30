@@ -1,6 +1,7 @@
 import { bootInstrument } from "../../shared/instrument";
-import { requiredElement } from "../../shared/surface";
+import { bindLinkMode, requiredElement } from "../../shared/surface";
 
+bindLinkMode(requiredElement("linkMode"));
 bootInstrument(document.body, {
   phaseEl: requiredElement("phase"),
   statusEl: requiredElement("status"),

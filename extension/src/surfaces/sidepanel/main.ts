@@ -1,5 +1,7 @@
 import { bootInstrument, refreshStats } from "../../shared/instrument";
-import { requiredElement } from "../../shared/surface";
+import { bindLinkMode, requiredElement } from "../../shared/surface";
+
+bindLinkMode(requiredElement("linkMode"));
 
 const todayCountEl = requiredElement("todayCount");
 const totalMinutesEl = requiredElement("totalMinutes");
