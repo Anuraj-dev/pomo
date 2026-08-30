@@ -5,19 +5,21 @@ function makePorts(): EnginePorts & { blocks: CompletedBlock[] } {
   const blocks: CompletedBlock[] = [];
   return {
     blocks,
-    now: () => 1_800_000_000,
-    offsetMinutes: () => 0,
-    commit: (block) => blocks.push(block),
-    earnedBlocksForDate: () => 0,
-    phaseSeconds: () => 1500,
-    goal: () => 8,
-    tag: () => "Work",
-    longBreakAfter: () => 4,
+    now: (): number => 1_800_000_000,
+    offsetMinutes: (): number => 0,
+    commit: (block: CompletedBlock): void => {
+      blocks.push(block);
+    },
+    earnedBlocksForDate: (): number => 0,
+    phaseSeconds: (): number => 1500,
+    goal: (): number => 8,
+    tag: (): string => "Work",
+    longBreakAfter: (): number => 4,
   };
 }
 
-describe("TimerEngine.follow", () => {
-  test("mirrors phone state without committing", () => {
+describe("TimerEngine.follow", (): void => {
+  test("mirrors phone state without committing", (): void => {
     const ports = makePorts();
     const engine = new TimerEngine(ports);
     engine.follow({
@@ -37,7 +39,7 @@ describe("TimerEngine.follow", () => {
     expect(engine.peek().tag).toBe("Study");
   });
 
-  test("restore without reconcile does not complete an elapsed follower", () => {
+  test("restore without reconcile does not complete an elapsed follower", (): void => {
     const ports = makePorts();
     const engine = new TimerEngine(ports);
     engine.restore(

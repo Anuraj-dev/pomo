@@ -56,7 +56,7 @@ export function parsePairingPayload(value: unknown): ParsedPairing {
   if (Object.hasOwn(record, "port") && record.port !== "" && record.port !== null && record.port !== undefined) {
     const port = typeof record.port === "number" ? record.port : Number(record.port);
     if (Number.isInteger(port) && port >= 1 && port <= 65535) {
-      if (urlHost === undefined || hostOverride.length > 0) out.port = port;
+      out.port = port;
     }
   }
   return out;

@@ -504,7 +504,12 @@ pairing URL. On reconnect the hybrid:
    `completed` from Room (desk completed is not authoritative).
 4. On adopt `409` (phone remaining ≤ desk remaining on a different session) or
    when the desk does not try adopt, snaps to phone state.
-5. Caches `server_time` and defers `GET /api/config` until SYNC is stable;
+5. After entering SYNC, merges phone history via `GET /api/history` (Chrome:
+   after the SYNC pipeline completes, on `phase_complete` events, and on the
+   periodic config/history refresh; desk/Omarchy may use the same endpoint).
+   The response is merged into the local store by date with the existing
+   day-stat contract.
+6. Caches `server_time` and defers `GET /api/config` until SYNC is stable;
    healthy refresh is ~5 minutes and failed refreshes retry after ~1 minute.
    `daily_goal` may be `0`.
 

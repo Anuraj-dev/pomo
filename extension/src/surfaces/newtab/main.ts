@@ -263,40 +263,44 @@ function renderPairingStatus(status: LinkStatus): void {
   else pairingStatusEl.textContent = `Linking ${endpoint}`;
 }
 
-savePairingEl.addEventListener("click", () => {
-  void (async () => {
-    const parsed = parsePairingPayload(pairingPayloadEl.value);
-    const pairing = pairingFromParsed(parsed);
-    if (pairing === null) {
-      pairingStatusEl.textContent = "Needs {url, token} from the phone";
-      return;
-    }
-    try {
-      const granted = await chrome.permissions.request({ origins: hostPermissionOrigins(pairing) });
-      if (!granted) {
-        pairingStatusEl.textContent = "Chrome needs permission to reach the phone";
-        return;
-      }
-    } catch {
+async function handleSavePairing(): Promise<void> {
+  const parsed = parsePairingPayload(pairingPayloadEl.value);
+  const pairing = pairingFromParsed(parsed);
+  if (pairing === null) {
+    pairingStatusEl.textContent = "Needs {url, token} from the phone";
+    return;
+  }
+  try {
+    const granted = await chrome.permissions.request({ origins: hostPermissionOrigins(pairing) });
+    if (!granted) {
       pairingStatusEl.textContent = "Chrome needs permission to reach the phone";
       return;
     }
-    pairingStatusEl.textContent = "Saving…";
-    const response = await request({ type: "pomo:link:pair", payload: pairingPayloadEl.value });
-    if (!response.ok || response.link === undefined) {
-      pairingStatusEl.textContent = response.error ?? "Could not pair";
-      return;
-    }
-    pairingPayloadEl.value = "";
-    renderPairingStatus(response.link);
-  })();
+  } catch {
+    pairingStatusEl.textContent = "Chrome needs permission to reach the phone";
+    return;
+  }
+  pairingStatusEl.textContent = "Saving…";
+  const response = await request({ type: "pomo:link:pair", payload: pairingPayloadEl.value });
+  if (!response.ok || response.link === undefined) {
+    pairingStatusEl.textContent = response.error ?? "Could not pair";
+    return;
+  }
+  pairingPayloadEl.value = "";
+  renderPairingStatus(response.link);
+}
+
+async function handleUnpair(): Promise<void> {
+  const response = await request({ type: "pomo:link:unpair" });
+  if (response.link !== undefined) renderPairingStatus(response.link);
+}
+
+savePairingEl.addEventListener("click", (): void => {
+  void handleSavePairing();
 });
 
-unpairPhoneEl.addEventListener("click", () => {
-  void (async () => {
-    const response = await request({ type: "pomo:link:unpair" });
-    if (response.link !== undefined) renderPairingStatus(response.link);
-  })();
+unpairPhoneEl.addEventListener("click", (): void => {
+  void handleUnpair();
 });
 
 function populateSettings(settings: PomoSettings): void {

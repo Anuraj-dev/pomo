@@ -4,6 +4,7 @@ import {
   CONFIG_RETRY_MS,
   EXTEND_SECONDS,
   OFFLINE_PROBE_MS,
+  QUEUE_CAPACITY,
   RECONNECT_INTERVAL_MS,
   SOFT_RESYNC_MAX,
   SOURCE,
@@ -59,6 +60,7 @@ export interface LinkPersist {
   nextSeq: number;
   queue: QueuedSession[];
   localOwner: boolean;
+  linkRevision?: number;
 }
 
 export interface LinkStatus {
@@ -69,6 +71,7 @@ export interface LinkStatus {
   message: string;
   queued: number;
   localOwner: boolean;
+  revision: number;
 }
 
 export interface LinkHooks {
@@ -132,6 +135,7 @@ export class PomoLink {
   private lastServerTime = 0;
   private hasFollowedState = false;
   private syncGen = 0;
+  private statusRevision = 0;
   private logs: string[] = [];
 
   constructor(deps: LinkDeps) {
@@ -143,6 +147,7 @@ export class PomoLink {
     const stored = deps.persist;
     this.queue = new SessionQueue(undefined, stored?.queue ?? []);
     this.nextSeq = stored?.nextSeq ?? 1;
+    this.statusRevision = stored?.linkRevision ?? 0;
     if (stored !== undefined && stored !== null && stored.host.length > 0 && stored.token.length > 0) {
       this.pairing = { host: stored.host, port: stored.port, token: stored.token };
       this.rest.configure(this.pairing);
@@ -152,6 +157,7 @@ export class PomoLink {
   }
 
   status(): LinkStatus {
+    this.statusRevision += 1;
     return {
       mode: this.mode,
       paired: this.pairing !== null,
@@ -160,6 +166,7 @@ export class PomoLink {
       message: this.message,
       queued: this.queue.count(),
       localOwner: this.localOwner,
+      revision: this.statusRevision,
     };
   }
 
@@ -171,6 +178,7 @@ export class PomoLink {
       nextSeq: this.nextSeq,
       queue: this.queue.toRows(),
       localOwner: this.localOwner,
+      linkRevision: this.statusRevision,
     };
   }
 
@@ -213,10 +221,13 @@ export class PomoLink {
     if (!this.localOwner) return;
     const seq = this.nextSeq;
     this.nextSeq += 1;
-    if (this.nextSeq === 0) this.nextSeq = 1;
-    const clientId = `chrome-${(seq & 0xffff).toString(16).padStart(4, "0")}`;
+    if (!Number.isSafeInteger(this.nextSeq) || this.nextSeq <= 0) this.nextSeq = 1;
+    const clientId = `chrome-${seq.toString(16).padStart(4, "0")}`;
     const start = startEpoch > 0 ? startEpoch : Math.max(0, this.clock.epochSeconds() - Math.floor(durationSec));
-    this.queue.enqueue(clientId, type, durationSec, start, tag);
+    const wasFull = this.queue.count() >= QUEUE_CAPACITY;
+    const queued = this.queue.enqueue(clientId, type, durationSec, start, tag);
+    if (!queued) this.log(`enqueue rejected id=${clientId} type=${type} duration=${durationSec}`);
+    else if (wasFull) this.log("queue full; oldest session dropped");
     this.save();
   }
 
@@ -824,6 +835,12 @@ export class PomoLink {
 
   async refreshHistory(): Promise<void> {
     if (this.mode !== "SYNCED") return;
+    if (this.historyPull !== null) {
+      await this.historyPull;
+      if (this.mode !== "SYNCED") return;
+      await this.pullHistory();
+      return;
+    }
     await this.pullHistory();
   }
 

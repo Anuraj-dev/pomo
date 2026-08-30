@@ -22,12 +22,12 @@ export function subscribeState(onState: (state: TimerSnapshot) => void): void {
     lastAppliedRevision = state.revision;
     onState(state);
   };
-  chrome.storage.onChanged.addListener((changes, area) => {
+  chrome.storage.onChanged.addListener((changes, area): void => {
     if (area !== "session") return;
     const next = changes[STATE_KEY]?.newValue as TimerSnapshot | undefined;
     if (next !== undefined) apply(next);
   });
-  chrome.runtime.sendMessage({ type: "pomo:query" }, (response) => {
+  chrome.runtime.sendMessage({ type: "pomo:query" }, (response): void => {
     const state = (response as { ok?: boolean; state?: TimerSnapshot } | undefined)?.state;
     if (state !== undefined) apply(state);
   });
@@ -46,7 +46,7 @@ export function linkLabel(status: LinkStatus | undefined): string {
 }
 
 export function bindLinkMode(el: HTMLElement): void {
-  subscribeLink((status) => {
+  subscribeLink((status: LinkStatus): void => {
     const label = linkLabel(status);
     el.textContent = label;
     el.hidden = label.length === 0;
@@ -54,20 +54,27 @@ export function bindLinkMode(el: HTMLElement): void {
 }
 
 export function subscribeLink(onLink: (status: LinkStatus) => void): void {
-  chrome.storage.onChanged.addListener((changes, area) => {
+  let lastAppliedRevision = -Infinity;
+  const apply = (status: LinkStatus): void => {
+    const rev = (status as { revision?: number }).revision ?? -Infinity;
+    if (rev <= lastAppliedRevision) return;
+    lastAppliedRevision = rev;
+    onLink(status);
+  };
+  chrome.storage.onChanged.addListener((changes, area): void => {
     if (area !== "session") return;
     const next = changes[LINK_STATUS_KEY]?.newValue as LinkStatus | undefined;
-    if (next !== undefined) onLink(next);
+    if (next !== undefined) apply(next);
   });
-  chrome.runtime.sendMessage({ type: "pomo:link:get" }, (response) => {
+  chrome.runtime.sendMessage({ type: "pomo:link:get" }, (response): void => {
     const status = (response as PomoResponse | undefined)?.link;
-    if (status !== undefined) onLink(status);
+    if (status !== undefined) apply(status);
   });
 }
 
 export function request(message: PomoRequest): Promise<PomoResponse> {
-  return new Promise((resolve) => {
-    chrome.runtime.sendMessage(message, (response) => {
+  return new Promise((resolve): void => {
+    chrome.runtime.sendMessage(message, (response): void => {
       const runtimeError = chrome.runtime.lastError;
       if (runtimeError !== undefined || response === undefined) {
         resolve({ ok: false, error: runtimeError?.message ?? "service worker unavailable" });
@@ -93,19 +100,19 @@ export function applyTheme(initial?: PomoSettings["theme"]): void {
   else setTheme("system");
   void chrome.storage.local
     .get(SETTINGS_KEY)
-    .then((stored) => {
+    .then((stored): void => {
       const settings = stored[SETTINGS_KEY] as Partial<PomoSettings> | undefined;
       const theme = settings?.theme;
       if (isValidTheme(theme)) setTheme(theme);
     })
-    .catch(() => {
+    .catch((): void => {
       // Theme application is best-effort; keep the boot/default theme.
     });
 }
 
 /** Live theme updates when settings change in another surface. */
 export function subscribeTheme(onChange: (theme: PomoSettings["theme"]) => void): void {
-  chrome.storage.onChanged.addListener((changes, area) => {
+  chrome.storage.onChanged.addListener((changes, area): void => {
     if (area !== "local") return;
     const settings = changes[SETTINGS_KEY]?.newValue as Partial<PomoSettings> | undefined;
     const theme = settings?.theme;

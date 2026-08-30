@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 import { QUEUE_CAPACITY } from "../src/link/constants";
 import { SessionQueue } from "../src/link/queue";
 
-describe("SessionQueue", () => {
-  test("drop oldest when full", () => {
+describe("SessionQueue", (): void => {
+  test("drop oldest when full", (): void => {
     const queue = new SessionQueue();
     for (let i = 0; i < QUEUE_CAPACITY; i++) {
       expect(queue.enqueue(`id-${String(i).padStart(2, "0")}`, "work", 1500, 1_700_000_000 + i)).toBe(true);
@@ -16,7 +16,7 @@ describe("SessionQueue", () => {
     expect(queue.at(QUEUE_CAPACITY - 1)?.client_id).toBe("id-new");
   });
 
-  test("reload keeps cap and order", () => {
+  test("reload keeps cap and order", (): void => {
     const queue = new SessionQueue();
     for (let i = 0; i < QUEUE_CAPACITY + 3; i++) {
       queue.enqueue(`id-${String(i).padStart(2, "0")}`, "work", 60, 1_700_000_000 + i);
@@ -27,7 +27,7 @@ describe("SessionQueue", () => {
     expect(reloaded.at(QUEUE_CAPACITY - 1)?.client_id).toBe(`id-${String(QUEUE_CAPACITY + 2).padStart(2, "0")}`);
   });
 
-  test("drop by client id accepted and rejected", () => {
+  test("removes acknowledged client IDs", (): void => {
     const queue = new SessionQueue();
     queue.enqueue("keep", "work", 1500, 1_700_000_000);
     queue.enqueue("gone-a", "short", 300, 1_700_000_100);
@@ -37,7 +37,7 @@ describe("SessionQueue", () => {
     expect(queue.at(0)?.client_id).toBe("keep");
   });
 
-  test("strip implausible starts", () => {
+  test("strip implausible starts", (): void => {
     const queue = new SessionQueue();
     const now = 1_800_000_000;
     queue.enqueue("old", "work", 1500, now - 15 * 24 * 60 * 60);

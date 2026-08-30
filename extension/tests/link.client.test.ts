@@ -94,7 +94,16 @@ function json(status: number, value: unknown): RestResult {
   return { status, body: JSON.stringify(value) };
 }
 
-function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
+function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }): {
+  link: PomoLink;
+  rest: FakeRest;
+  engine: FakeEngine;
+  persisted: LinkPersist[];
+  configs: PhoneConfig[];
+  histories: PhoneHistorySession[][];
+  open: () => { onOpen: () => void; onMessage: (text: string) => void; onClose: () => void } | null;
+  socket: () => SocketHandle | null;
+} {
   const rest = opts?.rest ?? new FakeRest();
   const engine = new FakeEngine();
   const persisted: LinkPersist[] = [];
@@ -105,10 +114,10 @@ function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
   const connectSocket: SocketFactory = (_url, nextHandlers) => {
     handlers = nextHandlers;
     socket = {
-      send: () => undefined,
-      close: () => undefined,
+      send: (): void => undefined,
+      close: (): void => undefined,
     };
-    queueMicrotask(() => nextHandlers.onOpen());
+    queueMicrotask((): void => nextHandlers.onOpen());
     return socket;
   };
   const link = new PomoLink({
@@ -145,8 +154,8 @@ function makeLink(opts?: { persist?: LinkPersist | null; rest?: FakeRest }) {
   return { link, rest, engine, persisted, configs, histories, open: () => handlers, socket: () => socket };
 }
 
-describe("PomoLink client", () => {
-  test("enter SYNC from idle phone with empty queue", async () => {
+describe("PomoLink client", (): void => {
+  test("enter SYNC from idle phone with empty queue", async (): Promise<void> => {
     const { link, rest, engine, open } = makeLink();
     rest.routes.set("GET /api/status", json(200, phoneState()));
     await link.start();
@@ -158,7 +167,7 @@ describe("PomoLink client", () => {
     expect(open()).not.toBeNull();
   });
 
-  test("flush then adopt when Chrome is live and phone is stopped", async () => {
+  test("flush then adopt when Chrome is live and phone is stopped", async (): Promise<void> => {
     const rest = new FakeRest();
     rest.routes.set("GET /api/status", json(200, phoneState({ status: "stopped" })));
     rest.routes.set(
@@ -189,7 +198,7 @@ describe("PomoLink client", () => {
     expect(engine.view.remaining).toBe(900);
   });
 
-  test("adopt 409 snaps to phone", async () => {
+  test("adopt 409 snaps to phone", async (): Promise<void> => {
     const rest = new FakeRest();
     rest.routes.set("GET /api/status", json(200, phoneState({ status: "running", remaining: 400, start_time: 10 })));
     rest.routes.set(
@@ -217,7 +226,7 @@ describe("PomoLink client", () => {
     expect(engine.view.remaining).toBe(400);
   });
 
-  test("401 on probe enters UNPAIRED", async () => {
+  test("401 on probe enters UNPAIRED", async (): Promise<void> => {
     const rest = new FakeRest();
     rest.routes.set("GET /api/status", json(401, { success: false, error: "unauthorized" }));
     const { link } = makeLink({ rest });
@@ -225,7 +234,7 @@ describe("PomoLink client", () => {
     expect(link.mode).toBe("UNPAIRED");
   });
 
-  test("commands go to REST while synced", async () => {
+  test("commands go to REST while synced", async (): Promise<void> => {
     const { link, rest } = makeLink();
     rest.routes.set("GET /api/status", json(200, phoneState()));
     rest.routes.set("POST /api/toggle", json(200, { success: true, state: phoneState({ status: "running" }) }));
@@ -235,7 +244,7 @@ describe("PomoLink client", () => {
     expect(rest.posts.at(-1)?.path).toBe("/api/toggle");
   });
 
-  test("stale same-session remaining inflation is ignored", async () => {
+  test("stale same-session remaining inflation is ignored", async (): Promise<void> => {
     const harness = makeLink();
     harness.rest.routes.set(
       "GET /api/status",
@@ -270,7 +279,7 @@ describe("PomoLink client", () => {
     expect(harness.engine.view.remaining).toBe(1000);
   });
 
-  test("enter SYNC pulls GET /api/history", async () => {
+  test("enter SYNC pulls GET /api/history", async (): Promise<void> => {
     const harness = makeLink();
     harness.rest.routes.set("GET /api/status", json(200, phoneState()));
     harness.rest.routes.set(
@@ -300,7 +309,7 @@ describe("PomoLink client", () => {
     ]);
   });
 
-  test("phase_complete while SYNCED pulls history again", async () => {
+  test("phase_complete while SYNCED pulls history again", async (): Promise<void> => {
     const harness = makeLink();
     harness.rest.routes.set("GET /api/status", json(200, phoneState()));
     harness.rest.routes.set("GET /api/history", json(200, {}));
@@ -311,7 +320,7 @@ describe("PomoLink client", () => {
     expect(harness.rest.gets.filter((path) => path === "/api/history").length).toBe(before + 1);
   });
 
-  test("history 401 unpairs", async () => {
+  test("history 401 unpairs", async (): Promise<void> => {
     const harness = makeLink();
     harness.rest.routes.set("GET /api/status", json(200, phoneState()));
     harness.rest.routes.set("GET /api/history", json(401, { success: false, error: "unauthorized" }));

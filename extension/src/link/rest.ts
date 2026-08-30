@@ -97,10 +97,16 @@ export type SocketFactory = (url: string, handlers: SocketHandlers) => SocketHan
 
 export const browserSocket: SocketFactory = (url, handlers) => {
   const ws = new WebSocket(url);
+  let closed = false;
+  const notifyClose = (): void => {
+    if (closed) return;
+    closed = true;
+    handlers.onClose();
+  };
   ws.addEventListener("open", () => handlers.onOpen());
   ws.addEventListener("message", (event) => handlers.onMessage(String(event.data)));
-  ws.addEventListener("close", () => handlers.onClose());
-  ws.addEventListener("error", () => handlers.onClose());
+  ws.addEventListener("close", notifyClose);
+  ws.addEventListener("error", notifyClose);
   return {
     send: (text) => {
       if (ws.readyState === WebSocket.OPEN) ws.send(text);

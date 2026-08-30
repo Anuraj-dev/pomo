@@ -164,6 +164,9 @@ function publishLinkStatus(): Promise<void> {
 
 function scheduleLinkRetry(ms: number): void {
   if (linkRetryTimer !== null) clearTimeout(linkRetryTimer);
+  // setTimeout is best-effort in MV3: the service worker may terminate while
+  // idle and discard the timer. The `pomo-tick` alarm is the fallback; this
+  // retry only accelerates recovery when the worker stays alive.
   linkRetryTimer = setTimeout(() => {
     linkRetryTimer = null;
     void pumpLink();
@@ -452,7 +455,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       if (!followingPhone() && reconcileEngine()) await syncAfterWrites();
       return { ok: true, state: engine.snapshot(), link: link?.status() };
     case "pomo:stats": {
-      if (link !== null) await link.refreshHistory();
+      void link?.refreshHistory();
       await awaitHistoryWrites();
       const days = await dao!.dayStats();
       const now = nowSeconds();
@@ -473,7 +476,7 @@ async function handleRequest(request: PomoRequest): Promise<PomoResponse> {
       };
     }
     case "pomo:history": {
-      if (link !== null) await link.refreshHistory();
+      void link?.refreshHistory();
       await awaitHistoryWrites();
       const [sessions, dayStats] = await Promise.all([dao!.allSessions(), dao!.dayStats()]);
       sessions.sort((a, b) => b.start - a.start);
