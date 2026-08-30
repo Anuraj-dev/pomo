@@ -56,7 +56,6 @@ import androidx.compose.ui.unit.sp
 import com.pomo.R
 import com.pomo.timer.TimerState
 import com.pomo.ui.components.StatTile
-import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoTokens
 import com.pomo.ui.theme.TimerHeroStyle
 import com.pomo.ui.theme.TimerMsStyle
