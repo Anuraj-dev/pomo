@@ -190,7 +190,7 @@ _Avoid_: screen, panel, view (when the concept is the state-ownership rule).
 A client that follows the phone clock while the phone API is reachable, runs its
 own local engine while the phone is gone, then flushes completed Work blocks and
 may hand a live timer to the phone on reconnect. PomoLink and the Omarchy plugin
-already are this. Chrome is becoming this.
+already are this. Chrome is this.
 _Avoid_: Replica, peer, Full device, account.
 
 **Adopt**:

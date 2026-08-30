@@ -1,7 +1,8 @@
 import { isValidTheme } from "../engine/settings";
 import type { PomoSettings } from "../engine/settings";
 import type { TimerSnapshot } from "../engine/timer";
-import { SETTINGS_KEY, STATE_KEY, type PomoCommand, type PomoRequest, type PomoResponse } from "./messages";
+import type { LinkStatus } from "../link/client";
+import { LINK_STATUS_KEY, SETTINGS_KEY, STATE_KEY, type PomoCommand, type PomoRequest, type PomoResponse } from "./messages";
 
 /** Non-null DOM lookup with a descriptive failure for markup/script drift. */
 export function requiredElement<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -34,6 +35,34 @@ export function subscribeState(onState: (state: TimerSnapshot) => void): void {
 
 export function sendCommand(command: PomoCommand, seconds?: number): void {
   chrome.runtime.sendMessage({ type: "pomo:command", command, seconds });
+}
+
+export function linkLabel(status: LinkStatus | undefined): string {
+  if (status === undefined || !status.paired) return "";
+  if (status.mode === "SYNCED") return "Phone";
+  if (status.mode === "OFFLINE") return "Local";
+  if (status.mode === "UNPAIRED") return "Unpaired";
+  return "Linking";
+}
+
+export function bindLinkMode(el: HTMLElement): void {
+  subscribeLink((status) => {
+    const label = linkLabel(status);
+    el.textContent = label;
+    el.hidden = label.length === 0;
+  });
+}
+
+export function subscribeLink(onLink: (status: LinkStatus) => void): void {
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "session") return;
+    const next = changes[LINK_STATUS_KEY]?.newValue as LinkStatus | undefined;
+    if (next !== undefined) onLink(next);
+  });
+  chrome.runtime.sendMessage({ type: "pomo:link:get" }, (response) => {
+    const status = (response as PomoResponse | undefined)?.link;
+    if (status !== undefined) onLink(status);
+  });
 }
 
 export function request(message: PomoRequest): Promise<PomoResponse> {

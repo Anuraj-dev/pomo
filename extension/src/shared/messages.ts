@@ -1,3 +1,4 @@
+import type { LinkStatus } from "../link/client";
 import type { DayStatRow, SessionRow } from "../db/types";
 import type { PomoSettings } from "../engine/settings";
 import type { TimerSnapshot } from "../engine/timer";
@@ -6,6 +7,8 @@ import type { SurfaceStats } from "./statsReader";
 export const STATE_KEY = "pomo:state";
 export const ENGINE_KEY = "pomo:engine";
 export const SETTINGS_KEY = "pomo:settings";
+export const LINK_KEY = "pomo:link";
+export const LINK_STATUS_KEY = "pomo:link:status";
 
 export type PomoCommand = "toggle" | "skip" | "reset" | "extend";
 
@@ -50,6 +53,19 @@ export interface PomoBackupImportMessage {
   payload: string;
 }
 
+export interface PomoLinkGetMessage {
+  type: "pomo:link:get";
+}
+
+export interface PomoLinkPairMessage {
+  type: "pomo:link:pair";
+  payload: string;
+}
+
+export interface PomoLinkUnpairMessage {
+  type: "pomo:link:unpair";
+}
+
 export type PomoRequest =
   | PomoCommandMessage
   | PomoQueryMessage
@@ -58,7 +74,10 @@ export type PomoRequest =
   | PomoSettingsGetMessage
   | PomoSettingsSetMessage
   | PomoBackupExportMessage
-  | PomoBackupImportMessage;
+  | PomoBackupImportMessage
+  | PomoLinkGetMessage
+  | PomoLinkPairMessage
+  | PomoLinkUnpairMessage;
 
 export interface PomoResponse {
   ok: boolean;
@@ -69,6 +88,7 @@ export interface PomoResponse {
   backupImport?: { sessionsAdded: number; daysAffected: number; conflicts: number };
   stats?: SurfaceStats;
   history?: HistoryPayload;
+  link?: LinkStatus;
 }
 
 const REQUEST_TYPE_REGISTRY = {
@@ -80,6 +100,9 @@ const REQUEST_TYPE_REGISTRY = {
   "pomo:settings:set": 0,
   "pomo:backup:export": 0,
   "pomo:backup:import": 0,
+  "pomo:link:get": 0,
+  "pomo:link:pair": 0,
+  "pomo:link:unpair": 0,
 } satisfies { [K in PomoRequest["type"]]: 0 };
 
 const POMO_REQUEST_TYPES = new Set<string>(Object.keys(REQUEST_TYPE_REGISTRY));
@@ -118,6 +141,7 @@ export function isPomoRequest(value: unknown): value is PomoRequest {
       return true;
     }
     case "pomo:backup:import":
+    case "pomo:link:pair":
       return nonEmptyStringField("payload");
     default:
       return true;

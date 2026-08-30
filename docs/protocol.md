@@ -481,13 +481,13 @@ Remote clients should:
 state. They may cache the last successful state only for stale/offline display;
 cache writes are best-effort and local-only.
 
-**NodeMCU desk (hybrid) may append history and adopt a live timer.** This is the
-exception to “clients never author state.” While the phone is reachable (SYNC),
-the phone is the sole live clock and the desk mirrors WebSocket (+ REST) state
-and sends REST commands. While the phone is unreachable (OFFLINE), the desk may
-run a local Pomodoro (buzzer, buttons, countdown), persist a live timer snapshot
-across reboot, and queue completed sessions (LittleFS temp+rename; real phase
-`start_time` when known). On reconnect it:
+**NodeMCU desk, Omarchy, and Chrome (hybrid) may append history and adopt a live
+timer.** This is the exception to “clients never author state.” While the phone
+is reachable (SYNC), the phone is the sole live clock and the hybrid mirrors
+WebSocket (+ REST) state and sends REST commands. While the phone is unreachable
+(OFFLINE), the hybrid may run a local Pomodoro, persist a live timer snapshot,
+and queue completed sessions. Chrome has no mDNS; it pins the host from the
+pairing URL. On reconnect the hybrid:
 
 1. Completes enter-SYNC from the first authenticated WebSocket `state` frame
    while CONNECTING. Authenticated `GET /api/status` probes only check

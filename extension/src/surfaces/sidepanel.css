@@ -27,6 +27,14 @@ body {
   color: var(--text-muted);
 }
 
+.link-mode {
+  margin-left: auto;
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
 .readout {
   background: none;
   border: none;

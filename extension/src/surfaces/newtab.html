@@ -23,6 +23,7 @@
         <header class="band">
           <span class="phase" id="phase">Focus</span>
           <span class="status" id="status">Ready</span>
+          <span class="link-mode" id="linkMode" hidden></span>
         </header>
 
         <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
@@ -125,6 +126,18 @@
             <span class="section-meta" id="settingsStatus" role="status"></span>
           </header>
           <form class="settings-form" id="settingsForm">
+            <section class="settings-group" id="pairingGroup">
+              <div class="settings-group-head">
+                <h2>Phone</h2>
+                <p>Paste the pairing payload from Pomo Settings on your phone. Chrome follows the phone on the LAN, then runs locally when the phone is gone.</p>
+              </div>
+              <p class="pairing-status" id="pairingStatus" role="status">Not paired</p>
+              <label class="setting-field pairing-payload"><span>Pairing payload</span><textarea id="pairingPayload" rows="4" spellcheck="false" placeholder='{"url":"http://192.168.1.20:9876","token":"..."}'></textarea></label>
+              <div class="settings-actions pairing-actions">
+                <button type="button" class="ghost" id="unpairPhone" hidden>Remove pairing</button>
+                <button type="button" class="primary" id="savePairing">Save pairing</button>
+              </div>
+            </section>
             <section class="settings-group">
               <div class="settings-group-head">
                 <h2>Timer</h2>
