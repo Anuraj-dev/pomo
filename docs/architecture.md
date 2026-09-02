@@ -1,9 +1,9 @@
 # Architecture
 
 Pomo is mobile-primary. The phone service owns the live clock, Room history, and
-Crew. Chrome has its own timer engine and local history. Desk and Omarchy already
-follow the phone over the LAN API and run locally while the phone is gone. Chrome
-will use that same hybrid contract; it is not a peer Replica.
+Crew. Chrome has its own timer engine and local history. Desk, Omarchy, and Waybar
+already follow the phone over the LAN API and run locally while the phone is
+gone. Chrome uses that same hybrid contract; it is not a peer Replica.
 
 ## Source Of Truth
 
@@ -19,9 +19,9 @@ Android timer. These inputs all route through service methods:
 
 Room is the canonical live history store. Desktop clients may display or cache
 data, but they should not merge, overwrite, or author timer/history state. The
-desk and Omarchy plugin may append completed offline sessions and hand over a
-live timer under the least-remaining adopt rule. They do not dual-own the clock
-while synced.
+desk, Omarchy plugin, and Waybar daemon may append completed offline sessions
+and hand over a live timer under the least-remaining adopt rule. They do not
+dual-own the clock while synced.
 
 ## Runtime Flow
 

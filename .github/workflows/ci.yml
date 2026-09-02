@@ -123,3 +123,17 @@ jobs:
       - name: Build
         working-directory: extension
         run: bun run build
+
+  omarchy-plugin-check:
+    name: Omarchy plugin tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Tests
+        run: python3 -m unittest discover -s omarchy-plugin/tests -v

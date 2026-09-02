@@ -10,6 +10,10 @@ import time
 
 from .client import PomoClient, parse_pairing_payload
 from .constants import TIMER_SNAP_INTERVAL_S
+from .desktop_pairing import load_desktop_client_pairing
+from .ipc import UnixCommandServer
+from .notify import notify_phase_complete
+from .persist import atomic_write
 from .queue import SessionQueue
 from .store import ConfigStore, wall_adjust_remaining
 from .timer import TimerModel
@@ -21,7 +25,16 @@ def _emit(obj):
 
 
 class Engine:
-    def __init__(self, directory=None):
+    def __init__(
+        self,
+        directory=None,
+        status_path=None,
+        socket_path=None,
+        stdout_status=True,
+        notify_events=False,
+        import_desktop_pairing=False,
+        use_stdin=True,
+    ):
         self.store = ConfigStore(directory)
         self.model = TimerModel()
         self.model.set_config(
@@ -47,6 +60,14 @@ class Engine:
         self.last_status_at = 0.0
         self.running = True
         self.pending_events = []
+        self.status_path = status_path
+        self.socket_path = socket_path
+        self.stdout_status = stdout_status
+        self.notify_events = notify_events
+        self.use_stdin = use_stdin
+        self.server = None
+        if import_desktop_pairing:
+            self._import_desktop_pairing()
 
     def _restore_timer(self):
         snap = self.store.load_timer_snapshot()
@@ -71,6 +92,14 @@ class Engine:
                 self.model.long_after,
                 snap["goal"],
             )
+
+    def _import_desktop_pairing(self):
+        if self.store.token:
+            return False
+        parsed = load_desktop_client_pairing()
+        if not parsed:
+            return False
+        return self.client.apply_pairing(parsed)
 
     def _on_phase_complete(self, phase):
         self.pending_events.append({"type": "event", "event": "phase_complete", "phase": phase})
@@ -160,7 +189,13 @@ class Engine:
             return
         self.last_status = payload
         self.last_status_at = now
-        _emit(payload)
+        if self.stdout_status:
+            _emit(payload)
+        if self.status_path:
+            try:
+                atomic_write(self.status_path, payload, mode=0o600)
+            except OSError:
+                pass
 
     def handle_line(self, line):
         text = line.strip()
@@ -193,10 +228,10 @@ class Engine:
 
         if cmd in ("quit", "exit"):
             self.running = False
-            return
+            return self.status_payload()
         if cmd == "ping":
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in ("toggle", "skip", "reset", "extend"):
             self.client.send_gesture(cmd)
             if self.model.local_owner:
@@ -205,18 +240,18 @@ class Engine:
                 else:
                     self.clear_live_timer()
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd == "pair":
             data = payload
             if payload.get("arg") and not payload.get("url") and not payload.get("token"):
                 data = parse_pairing_payload(payload.get("arg"))
             self.client.apply_pairing(data)
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in ("set_token", "token"):
             self.client.apply_pairing({"token": payload.get("token") or payload.get("arg") or ""})
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in ("set_host", "host"):
             self.client.apply_pairing(
                 {
@@ -225,7 +260,9 @@ class Engine:
                 }
             )
             self.emit_status(force=True)
-            return
+            return self.last_status
+        self.emit_status(force=True)
+        return self.last_status
 
     def tick_persist(self):
         if self.client.mode == "SYNCED":
@@ -238,26 +275,43 @@ class Engine:
             if self.last_timer_snap_at:
                 self.clear_live_timer()
 
+    def _publish_event(self, event):
+        if self.stdout_status:
+            _emit(event)
+        if self.notify_events and event.get("event") == "phase_complete":
+            notify_phase_complete(event.get("phase") or "work")
+
+    def _open_server(self):
+        if not self.socket_path or self.server is not None:
+            return
+        self.server = UnixCommandServer(self.socket_path)
+
     def loop(self):
+        self._open_server()
         self.emit_status(force=True)
         while self.running:
             timeout = 0.2
             readers = []
-            if not sys.stdin.closed:
+            if self.use_stdin and not sys.stdin.closed:
                 readers.append(sys.stdin)
             if self.client.ws.connected and self.client.ws.sock is not None:
                 readers.append(self.client.ws.sock)
+            if self.server is not None:
+                readers.extend(self.server.sockets())
             try:
                 ready, _, _ = select.select(readers, [], [], timeout)
             except (InterruptedError, ValueError):
                 ready = []
 
-            if sys.stdin in ready:
+            if self.use_stdin and sys.stdin in ready:
                 line = sys.stdin.readline()
                 if line == "":
                     self.running = False
                     break
                 self.handle_line(line)
+
+            if self.server is not None:
+                self.server.pump(ready, self.handle_line)
 
             finished = self.model.tick()
             if finished:
@@ -265,9 +319,11 @@ class Engine:
             if self.client.last_event:
                 event = self.client.last_event
                 self.client.last_event = None
-                _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
+                self._publish_event(
+                    {"type": "event", "event": event["event"], "phase": event.get("phase") or "work"}
+                )
             while self.pending_events:
-                _emit(self.pending_events.pop(0))
+                self._publish_event(self.pending_events.pop(0))
 
             self.client.tick()
             for line in self.client.drain_logs():
@@ -277,10 +333,33 @@ class Engine:
             self.tick_persist()
             self.emit_status(force=False)
 
+    def close(self):
+        if self.model.local_owner and self.model.is_live():
+            self.persist_live_timer()
+        self.client.ws.close()
+        if self.server is not None:
+            self.server.close()
+            self.server = None
 
-def main(argv=None):
-    del argv
-    engine = Engine()
+
+def run_engine(
+    directory=None,
+    status_path=None,
+    socket_path=None,
+    stdout_status=True,
+    notify_events=False,
+    import_desktop_pairing=False,
+    use_stdin=True,
+):
+    engine = Engine(
+        directory=directory,
+        status_path=status_path,
+        socket_path=socket_path,
+        stdout_status=stdout_status,
+        notify_events=notify_events,
+        import_desktop_pairing=import_desktop_pairing,
+        use_stdin=use_stdin,
+    )
 
     def _stop(_signum, _frame):
         engine.running = False
@@ -290,10 +369,14 @@ def main(argv=None):
     try:
         engine.loop()
     finally:
-        if engine.model.local_owner and engine.model.is_live():
-            engine.persist_live_timer()
-        engine.client.ws.close()
+        engine.close()
     return 0
+
+
+def main(argv=None):
+    from .cli import main as cli_main
+
+    return cli_main(argv)
 
 
 if __name__ == "__main__":
