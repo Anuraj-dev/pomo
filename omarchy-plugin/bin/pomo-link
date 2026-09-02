@@ -4,7 +4,8 @@
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# realpath: ~/.local/bin/pomo-link is a symlink; abspath would look in ~/.local/lib.
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 LIB = os.path.join(ROOT, "lib")
 if LIB not in sys.path:
     sys.path.insert(0, LIB)

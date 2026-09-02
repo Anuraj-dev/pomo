@@ -132,14 +132,18 @@ def run_waybar():
     signal.signal(signal.SIGTERM, _stop)
     signal.signal(signal.SIGINT, _stop)
     last = None
-    while True:
-        data = load_json(path)
-        line = format_waybar(data if isinstance(data, dict) else None)
-        if line != last:
-            sys.stdout.write(line + "\n")
-            sys.stdout.flush()
-            last = line
-        time.sleep(0.5)
+    try:
+        while True:
+            data = load_json(path)
+            line = format_waybar(data if isinstance(data, dict) else None)
+            if line != last:
+                sys.stdout.write(line + "\n")
+                sys.stdout.flush()
+                last = line
+            time.sleep(0.5)
+    except BrokenPipeError:
+        return 0
+    return 0
 
 
 def _install_symlink(exec_path):
