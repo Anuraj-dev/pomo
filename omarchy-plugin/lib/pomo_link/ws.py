@@ -45,9 +45,15 @@ def encode_frame(payload, opcode=1):
 
 
 def _decode_frames(buf):
-    """Return (messages, rest, ping_payloads, should_close)."""
-    messages = []
+    """Return (frames, rest, pings, close).
+
+    frames is a list of (opcode, fin, payload) for data frames only.
+    Control frames: pings returned separately, pongs tracked as activity,
+    close aborts processing of anything after it.
+    """
+    frames = []
     pings = []
+    pong = False
     close = False
     i = 0
     while True:
@@ -56,6 +62,7 @@ def _decode_frames(buf):
         b0 = buf[i]
         b1 = buf[i + 1]
         opcode = b0 & 0x0F
+        fin = (b0 & 0x80) != 0
         masked = (b1 & 0x80) != 0
         length = b1 & 0x7F
         header_len = 2
@@ -90,21 +97,32 @@ def _decode_frames(buf):
             pings.append(payload)
             continue
         if opcode == 0xA:
+            pong = True
             continue
         if opcode in (0x1, 0x2, 0x0):
-            messages.append((opcode, payload))
+            frames.append((opcode, fin, payload))
             continue
-        # Unknown control/data: ignore.
-    return messages, buf[i:], pings, close
+        # Unknown data opcode: ignore.
+    return frames, buf[i:], pings, pong, close
 
 
 class Rfc6455Client:
+    SEND_TIMEOUT_S = 5.0
+
     def __init__(self):
         self.sock = None
         self.buffer = bytearray()
         self.connected = False
         self.host = ""
         self.port = 0
+        # RFC6455 fragment reassembly: a continuation (opcode 0) without a
+        # started fragment is dropped, never parsed as standalone text.
+        self._frag_opcode = None
+        self._frag_payload = bytearray()
+        # Monotonic timestamp of the last ping/pong/data seen from the peer.
+        # 0 until the first activity; the client uses it as socket-contact
+        # evidence (a paused phone sends no data frames, only pong answers).
+        self.last_peer_activity_mono = 0.0
 
     def fileno(self):
         return self.sock.fileno() if self.sock is not None else -1
@@ -114,8 +132,11 @@ class Rfc6455Client:
         sock = self.sock
         self.sock = None
         self.buffer = bytearray()
+        self._frag_opcode = None
+        self._frag_payload = bytearray()
         if sock is not None:
             try:
+                sock.settimeout(1.0)
                 sock.sendall(encode_frame(b"", opcode=0x8))
             except OSError:
                 pass
@@ -174,32 +195,56 @@ class Rfc6455Client:
         self.connected = True
         return True
 
-    def send_text(self, text):
+    def _send_all(self, frame):
+        """Send with a hard timeout. setblocking(True) has no timeout and a
+        stalled peer would freeze the engine forever; a timeout mid-frame
+        means a partial frame escaped, so the stream is dead — tear down."""
         if not self.connected or self.sock is None:
             raise WebSocketError("not connected")
-        self.sock.setblocking(True)
         try:
-            self.sock.sendall(encode_frame(text, opcode=1))
+            self.sock.settimeout(self.SEND_TIMEOUT_S)
+            self.sock.sendall(frame)
+        except socket.timeout as exc:
+            self._teardown_socket()
+            raise WebSocketError("send timeout") from exc
+        except OSError as exc:
+            self._teardown_socket()
+            raise WebSocketError("send failed") from exc
         finally:
+            if self.sock is not None:
+                try:
+                    self.sock.settimeout(0.0)
+                except OSError:
+                    pass
+
+    def _teardown_socket(self):
+        self.connected = False
+        sock = self.sock
+        self.sock = None
+        self.buffer = bytearray()
+        self._frag_opcode = None
+        self._frag_payload = bytearray()
+        if sock is not None:
             try:
-                self.sock.setblocking(False)
+                sock.close()
             except OSError:
                 pass
+
+    def send_text(self, text):
+        self._send_all(encode_frame(text, opcode=1))
+
+    def send_ping(self):
+        self._send_all(encode_frame(b"", opcode=0x9))
 
     def send_pong(self, payload=b""):
         if not self.connected or self.sock is None:
             return
         try:
-            self.sock.setblocking(True)
-            self.sock.sendall(encode_frame(payload, opcode=0xA))
-        except OSError:
-            self.connected = False
-        finally:
-            try:
-                if self.sock is not None:
-                    self.sock.setblocking(False)
-            except OSError:
-                pass
+            self._send_all(encode_frame(payload, opcode=0xA))
+        except (WebSocketError, OSError):
+            # Pong is best-effort; a dead send path is handled by the
+            # next recv/ping cycle.
+            pass
 
     def recv_ready(self, timeout=0.0):
         if not self.connected or self.sock is None:
@@ -210,10 +255,33 @@ class Rfc6455Client:
         except (OSError, ValueError):
             return False
 
+    def _assemble(self, frames):
+        """Assemble (opcode, fin, payload) data frames into text messages."""
+        texts = []
+        for opcode, fin, payload in frames:
+            if opcode in (0x1, 0x2):
+                if fin:
+                    texts.append(payload.decode("utf-8", "replace"))
+                else:
+                    self._frag_opcode = opcode
+                    self._frag_payload = bytearray(payload)
+            elif opcode == 0x0:
+                if self._frag_opcode is None:
+                    # Stray continuation: protocol violation, drop silently.
+                    continue
+                self._frag_payload.extend(payload)
+                if fin:
+                    if self._frag_opcode == 0x1:
+                        texts.append(bytes(self._frag_payload).decode("utf-8", "replace"))
+                    self._frag_opcode = None
+                    self._frag_payload = bytearray()
+        return texts
+
     def read_texts(self):
         """Read available frames. Returns list of text strings. Empty list if none.
 
-        Raises WebSocketError on close/error.
+        Raises WebSocketError on close/error. Pongs, pings and data frames
+        all refresh last_peer_activity_mono.
         """
         if not self.connected or self.sock is None:
             raise WebSocketError("not connected")
@@ -231,22 +299,17 @@ class Rfc6455Client:
             self.buffer.extend(chunk)
             if len(chunk) < 65536:
                 break
-        texts = []
         try:
-            frames, rest, pings, close = _decode_frames(self.buffer)
+            frames, rest, pings, pong, close = _decode_frames(self.buffer)
         except WebSocketError:
             self.connected = False
             raise
         self.buffer = bytearray(rest)
+        if pings or pong or frames:
+            self.last_peer_activity_mono = time.monotonic()
         for payload in pings:
             self.send_pong(payload)
         if close:
             self.connected = False
             raise WebSocketError("peer closed")
-        for opcode, payload in frames:
-            if opcode == 0x1:
-                texts.append(payload.decode("utf-8", "replace"))
-            elif opcode == 0x0:
-                # Treat continuation as text if we have no fragment state.
-                texts.append(payload.decode("utf-8", "replace"))
-        return texts
+        return self._assemble(frames)

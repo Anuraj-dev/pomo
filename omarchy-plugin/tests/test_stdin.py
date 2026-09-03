@@ -169,6 +169,19 @@ class GestureQueueTest(unittest.TestCase):
         self.assertEqual(engine.model.status, "running")
         self.assertNotEqual(engine.client.message, "waiting to connect")
 
+    def test_local_path_gesture_clears_busy_and_second_gesture_applies(self):
+        engine = self.engine
+        engine.handle_line('{"cmd":"toggle"}')
+        engine.client.enter_offline("test")
+        engine.drain_pending_gesture()
+        self.assertFalse(engine.client.busy)
+        self.assertEqual(engine.model.status, "running")
+        engine.handle_line('{"cmd":"toggle"}')
+        engine.drain_pending_gesture()
+        self.assertFalse(engine.client.busy)
+        self.assertEqual(engine.model.status, "paused")
+        self.assertIsNone(engine.pending_gesture)
+
     def test_replaced_gesture_wins(self):
         engine = self.engine
         engine.handle_line('{"cmd":"toggle"}')

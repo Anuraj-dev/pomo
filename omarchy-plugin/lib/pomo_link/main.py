@@ -117,14 +117,15 @@ class Engine:
         if self.client.message == "waiting to connect":
             self.client.message = ""
         # Announce busy BEFORE the (still blocking, until Phase 3) POST so
-        # QML can disable the buttons while the engine cannot answer.
+        # QML can disable the buttons while the engine cannot answer. Drain
+        # owns the full busy lifecycle: send_gesture's internal finally only
+        # covers the phone branch, not the local one.
         self.client.busy = True
         self.emit_status(force=True)
         try:
             self.client.send_gesture(gesture)
-        except Exception:
+        finally:
             self.client.busy = False
-            raise
         self.pending_gesture = None
         if self.model.local_owner:
             if self.model.is_live():
