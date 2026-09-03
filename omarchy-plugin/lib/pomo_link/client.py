@@ -33,6 +33,23 @@ def marker_for(mode):
     return "."
 
 
+def _safe_float(value, default=0.0):
+    try:
+        out = float(value)
+    except (TypeError, ValueError):
+        return default
+    if out != out:  # NaN
+        return default
+    return out
+
+
+def _safe_int(value, default=None):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
 def parse_pairing_payload(value):
     """Accept pasted {url, token} JSON from Android Settings.
 
@@ -65,7 +82,12 @@ def parse_pairing_payload(value):
         if host:
             url_host = host
             out["host"] = host
-            out["port"] = int(parsed.port or DEFAULT_PORT)
+            try:
+                out["port"] = int(parsed.port or DEFAULT_PORT)
+            except ValueError:
+                # urlparse raises on out-of-range ports; pair input must not
+                # take the engine down.
+                out["port"] = DEFAULT_PORT
     host_override = ""
     if "host" in value:
         host_override = str(value.get("host") or "").strip()
@@ -233,28 +255,27 @@ class PomoClient:
     def apply_phone_object(self, data, force=True):
         if not isinstance(data, dict):
             return False
-        start_time = float(data.get("start_time") or 0.0)
-        server_time = 0
-        if data.get("server_time") is not None:
-            try:
-                server_time = int(data.get("server_time") or 0)
-            except (TypeError, ValueError):
-                server_time = 0
-            if server_time < 0:
-                server_time = 0
+        start_time = _safe_float(data.get("start_time"))
+        remaining = _safe_float(data.get("remaining"))
+        duration = _safe_float(data.get("duration"))
+        completed = _safe_int(data.get("completed"))
+        server_time = _safe_int(data.get("server_time"))
+        if server_time is None or server_time < 0:
+            server_time = 0
         epoch_now = int(time.time())
-        if "daily_goal" in data and data.get("daily_goal") is not None:
-            goal = int(data.get("daily_goal") or 0)
-            if goal < 0:
+        # Missing or malformed goal keeps the store-cached goal (via the None
+        # path in TimerModel.apply_state), never a hardcoded default.
+        goal = None
+        if data.get("daily_goal") is not None:
+            goal = _safe_int(data.get("daily_goal"))
+            if goal is not None and goal < 0:
                 goal = 0
-        else:
-            goal = 8
         ok = self.model.apply_state(
             data.get("status") or "stopped",
             data.get("phase") or "work",
-            data.get("remaining") or 0.0,
-            data.get("duration") or 0.0,
-            data.get("completed") or 0,
+            remaining,
+            duration,
+            completed,
             goal,
             start_time,
             server_time,
@@ -736,10 +757,10 @@ class PomoClient:
         long_m = durations.get("long_break", self.store.long_minutes)
         long_after = doc.get("long_break_after", self.store.long_after)
         goal = self.store.goal
-        if "daily_goal" in doc and doc.get("daily_goal") is not None:
-            goal = int(doc.get("daily_goal") or 0)
-            if goal < 0:
-                goal = 0
+        if doc.get("daily_goal") is not None:
+            parsed_goal = _safe_int(doc.get("daily_goal"))
+            if parsed_goal is not None and parsed_goal >= 0:
+                goal = parsed_goal
         self.store.set_durations(work, short_m, long_m, long_after, goal)
         self.store.save()
         self.model.set_config(work, short_m, long_m, long_after, goal)

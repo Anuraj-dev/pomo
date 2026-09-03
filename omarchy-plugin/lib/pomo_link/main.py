@@ -20,6 +20,15 @@ def _emit(obj):
     sys.stdout.flush()
 
 
+def _emit_error(message):
+    """Best-effort error event. Must never raise — a broken stdout would
+    otherwise turn one loop exception into a live-lock."""
+    try:
+        _emit({"type": "error", "message": str(message or "")[:200]})
+    except Exception:
+        pass
+
+
 class Engine:
     def __init__(self, directory=None):
         self.store = ConfigStore(directory)
@@ -241,46 +250,65 @@ class Engine:
     def loop(self):
         self.emit_status(force=True)
         while self.running:
-            timeout = 0.2
-            readers = []
-            if not sys.stdin.closed:
-                readers.append(sys.stdin)
-            if self.client.ws.connected and self.client.ws.sock is not None:
-                readers.append(self.client.ws.sock)
             try:
-                ready, _, _ = select.select(readers, [], [], timeout)
-            except (InterruptedError, ValueError):
-                ready = []
+                self._loop_once()
+            except Exception as exc:
+                try:
+                    sys.stderr.write("[pomo-link] loop error: %r\n" % (exc,))
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+                _emit_error("engine error: %s" % exc)
 
-            if sys.stdin in ready:
-                line = sys.stdin.readline()
-                if line == "":
-                    self.running = False
-                    break
-                self.handle_line(line)
+    def _loop_once(self):
+        timeout = 0.2
+        readers = []
+        if not sys.stdin.closed:
+            readers.append(sys.stdin)
+        if self.client.ws.connected and self.client.ws.sock is not None:
+            readers.append(self.client.ws.sock)
+        try:
+            ready, _, _ = select.select(readers, [], [], timeout)
+        except (InterruptedError, ValueError):
+            ready = []
 
-            finished = self.model.tick()
-            if finished:
-                self.emit_status(force=True)
-            if self.client.last_event:
-                event = self.client.last_event
-                self.client.last_event = None
-                _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
-            while self.pending_events:
-                _emit(self.pending_events.pop(0))
+        if sys.stdin in ready:
+            line = sys.stdin.readline()
+            if line == "":
+                self.running = False
+                return
+            self.handle_line(line)
 
-            self.client.tick()
-            for line in self.client.drain_logs():
-                sys.stderr.write("[pomo-link] %s\n" % line)
-                sys.stderr.flush()
+        finished = self.model.tick()
+        if finished:
+            self.emit_status(force=True)
+        if self.client.last_event:
+            event = self.client.last_event
+            self.client.last_event = None
+            _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
+        while self.pending_events:
+            _emit(self.pending_events.pop(0))
 
-            self.tick_persist()
-            self.emit_status(force=False)
+        self.client.tick()
+        for line in self.client.drain_logs():
+            sys.stderr.write("[pomo-link] %s\n" % line)
+            sys.stderr.flush()
+
+        self.tick_persist()
+        self.emit_status(force=False)
 
 
 def main(argv=None):
     del argv
-    engine = Engine()
+    try:
+        engine = Engine()
+    except Exception as exc:
+        try:
+            sys.stderr.write("[pomo-link] init failed: %r\n" % (exc,))
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return 1
 
     def _stop(_signum, _frame):
         engine.running = False

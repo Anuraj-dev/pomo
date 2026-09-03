@@ -53,7 +53,10 @@ class ConfigStore:
             data.get("long_after", self.long_after),
             data.get("goal", self.goal),
         )
-        seq = int(data.get("next_seq") or 1)
+        try:
+            seq = int(data.get("next_seq") or 1)
+        except (TypeError, ValueError):
+            seq = 1
         self.next_seq = 1 if seq <= 0 else seq
         self.host = str(data.get("host") or "")
         try:
@@ -79,16 +82,30 @@ class ConfigStore:
         atomic_write(self.config_path, doc, mode=0o600)
 
     def set_durations(self, work, short, long_, long_after, goal):
-        if work and int(work) > 0:
-            self.work_minutes = int(work)
-        if short and int(short) > 0:
-            self.short_minutes = int(short)
-        if long_ and int(long_) > 0:
-            self.long_minutes = int(long_)
-        if long_after and int(long_after) > 0:
-            self.long_after = int(long_after)
-        if goal is not None and int(goal) >= 0:
-            self.goal = int(goal)
+        """Coerce config values; corrupt-but-valid-JSON values keep defaults.
+
+        Runs on every config load and phone config fetch — a raised ValueError
+        here would crash the engine at startup or mid-sync.
+        """
+
+        def _positive_int(value, current):
+            try:
+                parsed = int(value)
+            except (TypeError, ValueError):
+                return current
+            return parsed if parsed > 0 else current
+
+        self.work_minutes = _positive_int(work, self.work_minutes)
+        self.short_minutes = _positive_int(short, self.short_minutes)
+        self.long_minutes = _positive_int(long_, self.long_minutes)
+        self.long_after = _positive_int(long_after, self.long_after)
+        if goal is not None:
+            try:
+                parsed_goal = int(goal)
+            except (TypeError, ValueError):
+                parsed_goal = self.goal
+            if parsed_goal >= 0:
+                self.goal = parsed_goal
 
     def set_pairing(self, host=None, port=None, token=None):
         if host is not None:

@@ -34,6 +34,7 @@ Item {
   property bool _intentionalStop: false
   property bool _restartRequested: false
   property int _restartAttempt: 0
+  property double _bootAt: 0
   property var _pendingLines: []
 
   function phaseName(p, st) {
@@ -90,6 +91,7 @@ Item {
     ready = false
     mode = "BOOT"
     marker = "."
+    _bootAt = Date.now()
     daemonProcess.command = daemonCommand()
     daemonProcess.running = true
   }
@@ -176,7 +178,9 @@ Item {
     }
     if (parsed.type !== "status") return
     ready = true
-    _restartAttempt = 0
+    // A crash-looping engine emitted status before dying; only a process
+    // that stayed up this long has earned a backoff reset.
+    if (_bootAt > 0 && Date.now() - _bootAt > 30000) _restartAttempt = 0
     startupTimeout.stop()
     mode = String(parsed.mode || mode)
     marker = parsed.marker === undefined || parsed.marker === null ? marker : String(parsed.marker)

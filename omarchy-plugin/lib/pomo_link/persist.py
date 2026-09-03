@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import tempfile
 
 
 def data_dir():
@@ -26,8 +25,14 @@ def atomic_write(path, obj, mode=0o600):
     except OSError:
         pass
     payload = json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=directory)
+    # Deterministic sibling tmp name: load_json() and clear_timer_snapshot()
+    # recover/clean exactly this name after a crash between write and replace.
+    # The engine is single-threaded for file writes, so the fixed name cannot
+    # collide with itself.
+    tmp = path + ".tmp"
+    fd = None
     try:
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
         os.write(fd, payload)
         os.fsync(fd)
         os.close(fd)
@@ -36,7 +41,7 @@ def atomic_write(path, obj, mode=0o600):
         os.replace(tmp, path)
         os.chmod(path, mode)
     except Exception:
-        if fd >= 0:
+        if fd is not None and fd >= 0:
             try:
                 os.close(fd)
             except OSError:
