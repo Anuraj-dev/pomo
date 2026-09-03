@@ -278,6 +278,51 @@ class SendTimeoutTest(unittest.TestCase):
         rc.send_pong(b"x")
         self.assertFalse(rc.connected)
 
+    def test_teardown_resets_peer_activity(self):
+        class DeadSock:
+            def settimeout(self, value):
+                pass
+
+            def sendall(self, data):
+                raise OSError("broken pipe")
+
+            def close(self):
+                pass
+
+        rc = Rfc6455Client()
+        rc.sock = DeadSock()
+        rc.connected = True
+        rc.last_peer_activity_mono = 123.0
+        with self.assertRaises(WebSocketError):
+            rc.send_text("hello")
+        self.assertEqual(rc.last_peer_activity_mono, 0.0)
+        rc.close()
+        self.assertEqual(rc.last_peer_activity_mono, 0.0)
+
+    def test_failed_pong_during_read_raises_immediately(self):
+        rc = Rfc6455Client()
+        server_sock, client_sock = socket.socketpair()
+        rc.sock = server_sock
+        rc.connected = True
+
+        # Server pings us; the pong send path is dead (as after a teardown),
+        # so read_texts must raise now instead of returning texts and letting
+        # the 20s stale watchdog reconnect.
+        client_sock.sendall(unmasked_frame(0x9, True, b"ping"))
+
+        def dead_pong(payload=b""):
+            rc.connected = False
+            rc.sock = None
+
+        rc.send_pong = dead_pong
+        try:
+            with self.assertRaises(WebSocketError):
+                rc.read_texts()
+        finally:
+            server_sock.close()
+            client_sock.close()
+        self.assertFalse(rc.connected)
+
 
 if __name__ == "__main__":
     unittest.main()

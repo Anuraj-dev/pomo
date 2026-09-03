@@ -134,6 +134,7 @@ class Rfc6455Client:
         self.buffer = bytearray()
         self._frag_opcode = None
         self._frag_payload = bytearray()
+        self.last_peer_activity_mono = 0.0
         if sock is not None:
             try:
                 sock.settimeout(1.0)
@@ -162,7 +163,11 @@ class Rfc6455Client:
             "Sec-WebSocket-Version: 13\r\n"
             "\r\n"
         ) % (path, host_header, int(port), key)
-        sock.sendall(request.encode("ascii"))
+        try:
+            sock.sendall(request.encode("ascii"))
+        except OSError:
+            sock.close()
+            raise
         data = b""
         deadline = time.monotonic() + timeout
         while b"\r\n\r\n" not in data:
@@ -224,6 +229,7 @@ class Rfc6455Client:
         self.buffer = bytearray()
         self._frag_opcode = None
         self._frag_payload = bytearray()
+        self.last_peer_activity_mono = 0.0
         if sock is not None:
             try:
                 sock.close()
@@ -291,10 +297,10 @@ class Rfc6455Client:
             except BlockingIOError:
                 break
             except OSError as exc:
-                self.connected = False
+                self._teardown_socket()
                 raise WebSocketError("recv failed") from exc
             if not chunk:
-                self.connected = False
+                self._teardown_socket()
                 raise WebSocketError("socket closed")
             self.buffer.extend(chunk)
             if len(chunk) < 65536:
@@ -302,14 +308,19 @@ class Rfc6455Client:
         try:
             frames, rest, pings, pong, close = _decode_frames(self.buffer)
         except WebSocketError:
-            self.connected = False
+            self._teardown_socket()
             raise
         self.buffer = bytearray(rest)
         if pings or pong or frames:
             self.last_peer_activity_mono = time.monotonic()
         for payload in pings:
             self.send_pong(payload)
+        if not self.connected:
+            # A failed pong tore the socket down mid-read; raise so the
+            # pump's error path reconnects now instead of at the 20s stale
+            # watchdog.
+            raise WebSocketError("pong send failed")
         if close:
-            self.connected = False
+            self._teardown_socket()
             raise WebSocketError("peer closed")
         return self._assemble(frames)
