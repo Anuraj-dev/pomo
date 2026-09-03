@@ -29,6 +29,10 @@ Item {
   property int queueCount: 0
   property string message: ""
   property string lastError: ""
+  property bool busy: false
+  // Optimistic toggle: set on send, reconciled by the next real status or
+  // reverted by an error event. Prevents "still says Start → click again".
+  property string pendingToggle: ""
   property string phaseLabel: phaseName(phase, status)
 
   property bool _intentionalStop: false
@@ -46,6 +50,8 @@ Item {
   }
 
   function toggleLabel() {
+    if (pendingToggle !== "")
+      return pendingToggle === "running" ? "Pause" : "Resume"
     var st = String(status || "stopped")
     if (st === "running") return "Pause"
     if (st === "paused") return "Resume"
@@ -118,7 +124,10 @@ Item {
     writeLine(JSON.stringify(obj))
   }
 
-  function toggle() { sendCmd({ cmd: "toggle" }) }
+  function toggle() {
+    pendingToggle = String(status || "stopped") === "running" ? "paused" : "running"
+    sendCmd({ cmd: "toggle" })
+  }
   function skip() { sendCmd({ cmd: "skip" }) }
   function reset() { sendCmd({ cmd: "reset" }) }
   function extend() { sendCmd({ cmd: "extend" }) }
@@ -172,6 +181,11 @@ Item {
       return
     }
     if (!parsed || typeof parsed !== "object") return
+    if (parsed.type === "error") {
+      lastError = concise(parsed.message)
+      pendingToggle = ""
+      return
+    }
     if (parsed.type === "event" && parsed.event === "phase_complete") {
       notifyPhaseComplete(parsed.phase)
       return
@@ -193,6 +207,8 @@ Item {
     startTime = Number(parsed.start_time || 0)
     localOwner = parsed.local_owner === true
     everSynced = parsed.ever_synced === true
+    busy = parsed.busy === true
+    pendingToggle = ""
     host = String(parsed.host || "")
     port = Number(parsed.port || 9876)
     hasToken = parsed.has_token === true

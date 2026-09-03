@@ -244,6 +244,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.toggle()
             }
 
@@ -253,6 +255,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.skip()
             }
 
@@ -262,6 +266,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.reset()
             }
 
@@ -271,6 +277,10 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              // Local extend no-ops while not running; the button must not
+              // look live.
+              enabled: root.pomo !== null && !root.pomo.busy && root.pomo.status === "running"
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.extend()
             }
           }

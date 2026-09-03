@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import select
 import signal
 import sys
@@ -16,6 +17,8 @@ from .timer import TimerModel
 
 _last_error_message = ""
 _last_error_at = 0.0
+
+GESTURE_COMMANDS = ("toggle", "skip", "reset", "extend")
 
 
 def _emit(obj):
@@ -67,6 +70,60 @@ class Engine:
         self.last_status_at = 0.0
         self.running = True
         self.pending_events = []
+        # Last-wins gesture slot: a press replaces the queued one instead of
+        # queueing behind it, so 3x Start is one toggle, not start-pause-start.
+        self.pending_gesture = None
+        self._stdin_remainder = b""
+        try:
+            os.set_blocking(sys.stdin.fileno(), False)
+        except (OSError, ValueError):
+            pass
+
+    def _drain_stdin(self):
+        """Read every complete stdin line available now.
+
+        Raw os.read on the fd: select() on sys.stdin cannot see bytes already
+        buffered inside TextIOWrapper, so one readline per wake could stall on
+        line 2 until line 3 arrived.
+        """
+        if sys.stdin.closed:
+            return
+        fd = sys.stdin.fileno()
+        while True:
+            try:
+                chunk = os.read(fd, 4096)
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                self.running = False
+                return
+            if not chunk:
+                self.running = False
+                return
+            data = self._stdin_remainder + chunk
+            lines = data.split(b"\n")
+            self._stdin_remainder = lines.pop()
+            for raw in lines:
+                self.handle_line(raw.decode("utf-8", "replace"))
+
+    def drain_pending_gesture(self):
+        if self.pending_gesture is None or self.client.busy:
+            return
+        if not (self.client.phone_commands_active() or self.model.local_owner):
+            # Held until the mode change that allows it (BOOT / first
+            # CONNECTING / enter-SYNC). Never dropped silently.
+            return
+        gesture = self.pending_gesture
+        self.pending_gesture = None
+        if self.client.message == "waiting to connect":
+            self.client.message = ""
+        self.client.send_gesture(gesture)
+        if self.model.local_owner:
+            if self.model.is_live():
+                self.persist_live_timer()
+            else:
+                self.clear_live_timer()
+        self.emit_status(force=True)
 
     def _restore_timer(self):
         snap = self.store.load_timer_snapshot()
@@ -150,6 +207,7 @@ class Engine:
             "start_time": self.model.start_time,
             "local_owner": self.model.local_owner,
             "ever_synced": self.client.ever_synced,
+            "busy": self.client.busy,
             "host": self.client.host,
             "port": self.client.port,
             "has_token": bool(self.client.token),
@@ -217,14 +275,16 @@ class Engine:
         if cmd == "ping":
             self.emit_status(force=True)
             return
-        if cmd in ("toggle", "skip", "reset", "extend"):
-            self.client.send_gesture(cmd)
-            if self.model.local_owner:
-                if self.model.is_live():
-                    self.persist_live_timer()
-                else:
-                    self.clear_live_timer()
-            self.emit_status(force=True)
+        if cmd in GESTURE_COMMANDS:
+            self.pending_gesture = cmd
+            if self.client.message == "waiting to connect":
+                self.client.message = ""
+            if not (
+                self.client.phone_commands_active() or self.model.local_owner
+            ):
+                if not self.client.message:
+                    self.client.message = "waiting to connect"
+                self.emit_status(force=True)
             return
         if cmd == "pair":
             data = payload
@@ -274,8 +334,9 @@ class Engine:
     def _loop_once(self):
         timeout = 0.2
         readers = []
-        if not sys.stdin.closed:
-            readers.append(sys.stdin)
+        stdin_fd = None if sys.stdin.closed else sys.stdin.fileno()
+        if stdin_fd is not None:
+            readers.append(stdin_fd)
         if self.client.ws.connected and self.client.ws.sock is not None:
             readers.append(self.client.ws.sock)
         try:
@@ -283,12 +344,10 @@ class Engine:
         except (InterruptedError, ValueError):
             ready = []
 
-        if sys.stdin in ready:
-            line = sys.stdin.readline()
-            if line == "":
-                self.running = False
-                return
-            self.handle_line(line)
+        if stdin_fd is not None and stdin_fd in ready:
+            self._drain_stdin()
+        if not self.running:
+            return
 
         finished = self.model.tick()
         if finished:
@@ -301,6 +360,9 @@ class Engine:
             _emit(self.pending_events.pop(0))
 
         self.client.tick()
+        for msg in self.client.drain_errors():
+            _emit_error(msg)
+        self.drain_pending_gesture()
         for line in self.client.drain_logs():
             sys.stderr.write("[pomo-link] %s\n" % line)
             sys.stderr.flush()

@@ -145,6 +145,11 @@ class PomoClient:
         self.last_event = None
         self._ignore_disconnect = False
         self.log_lines = []
+        self.error_lines = []
+        # True while a phone gesture is outstanding; status exposes it and
+        # further gestures wait instead of stacking.
+        self.busy = False
+        self.resync_after_command = False
 
     def log(self, text):
         self.log_lines.append(text)
@@ -154,6 +159,17 @@ class PomoClient:
     def drain_logs(self):
         lines = self.log_lines
         self.log_lines = []
+        return lines
+
+    def note_error(self, text):
+        self.log(text)
+        self.error_lines.append(text)
+        if len(self.error_lines) > 10:
+            self.error_lines = self.error_lines[-10:]
+
+    def drain_errors(self):
+        lines = self.error_lines
+        self.error_lines = []
         return lines
 
     def set_mode(self, next_mode):
@@ -235,6 +251,15 @@ class PomoClient:
         host = parsed.get("host", self.host)
         port = parsed.get("port", self.port)
         token = parsed.get("token", self.token)
+        # Settings writes re-send identical pairing on every settings change;
+        # tearing down a healthy socket for that re-opens the dead-button
+        # window, so an unchanged triple is a no-op.
+        if (
+            host == self.host
+            and _safe_int(port, 0) == _safe_int(self.port, 0)
+            and token == self.token
+        ):
+            return False
         self.store.set_pairing(host=host, port=port, token=token)
         self.host = self.store.host
         self.port = self.store.port
@@ -820,6 +845,10 @@ class PomoClient:
 
     def tick(self):
         self.tick_probe_watchdog()
+        if self.resync_after_command and self.mode == "SYNCED" and not self.busy:
+            self.resync_after_command = False
+            self.soft_resync("command response missing state")
+            return
         if self.mode in ("CONNECTING", "SYNCED"):
             self.pump_websocket()
         if self.mode in ("BOOT",):
@@ -871,21 +900,31 @@ class PomoClient:
                 doc = {}
             if isinstance(doc, dict) and doc.get("success") and isinstance(doc.get("state"), dict):
                 self.apply_phone_object(doc["state"], force=True)
+            else:
+                # Applied on the phone but no state came back: reconcile via a
+                # soft resync on the next tick so the UI cannot sit stale.
+                self.resync_after_command = True
             return True
-        if code not in (401, 0):
-            self.log("%s failed, code %s" % (path, code))
+        if code == 0:
+            self.note_error("%s failed: phone unreachable" % path)
+            return False
+        self.note_error("%s failed: http %s" % (path, code))
         return False
 
     def send_gesture(self, gesture):
         if self.phone_commands_active():
-            if gesture == "toggle":
-                self.post_command("/api/toggle", "")
-            elif gesture == "skip":
-                self.post_command("/api/skip", "")
-            elif gesture == "reset":
-                self.post_command("/api/reset", "")
-            elif gesture == "extend":
-                self.post_command("/api/extend", {"seconds_delta": EXTEND_SECONDS})
+            self.busy = True
+            try:
+                if gesture == "toggle":
+                    self.post_command("/api/toggle", "")
+                elif gesture == "skip":
+                    self.post_command("/api/skip", "")
+                elif gesture == "reset":
+                    self.post_command("/api/reset", "")
+                elif gesture == "extend":
+                    self.post_command("/api/extend", {"seconds_delta": EXTEND_SECONDS})
+            finally:
+                self.busy = False
             return
         if not self.model.local_owner:
             return
