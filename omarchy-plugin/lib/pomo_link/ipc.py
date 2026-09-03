@@ -52,7 +52,10 @@ class UnixCommandServer:
         except OSError:
             pass
         try:
-            self._sock_id = (os.stat(path).st_dev, os.stat(path).st_ino)
+            after = os.stat(path)
+            # (dev, ino) alone is not enough: the filesystem can reuse an
+            # inode number after unlink, so also pin ctime_ns of our bind.
+            self._sock_id = (after.st_dev, after.st_ino, after.st_ctime_ns)
         except OSError:
             self._sock_id = None
         self.listen.listen(16)
@@ -73,7 +76,8 @@ class UnixCommandServer:
         except OSError:
             return
         if self._sock_id is not None:
-            if (st.st_dev, st.st_ino) != self._sock_id:
+            current = (st.st_dev, st.st_ino, st.st_ctime_ns)
+            if current != self._sock_id:
                 return
         elif not stat.S_ISSOCK(st.st_mode):
             return
