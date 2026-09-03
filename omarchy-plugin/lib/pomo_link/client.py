@@ -38,7 +38,9 @@ def _safe_float(value, default=0.0):
         out = float(value)
     except (TypeError, ValueError):
         return default
-    if out != out:  # NaN
+    if out != out or out in (float("inf"), float("-inf")):
+        # json.loads accepts Infinity/NaN literals; inf remaining would
+        # OverflowError in displayed_seconds() later.
         return default
     return out
 
@@ -759,8 +761,8 @@ class PomoClient:
         goal = self.store.goal
         if doc.get("daily_goal") is not None:
             parsed_goal = _safe_int(doc.get("daily_goal"))
-            if parsed_goal is not None and parsed_goal >= 0:
-                goal = parsed_goal
+            if parsed_goal is not None:
+                goal = max(0, parsed_goal)
         self.store.set_durations(work, short_m, long_m, long_after, goal)
         self.store.save()
         self.model.set_config(work, short_m, long_m, long_after, goal)

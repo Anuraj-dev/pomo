@@ -14,6 +14,9 @@ from .queue import SessionQueue
 from .store import ConfigStore, wall_adjust_remaining
 from .timer import TimerModel
 
+_last_error_message = ""
+_last_error_at = 0.0
+
 
 def _emit(obj):
     sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
@@ -22,9 +25,17 @@ def _emit(obj):
 
 def _emit_error(message):
     """Best-effort error event. Must never raise — a broken stdout would
-    otherwise turn one loop exception into a live-lock."""
+    otherwise turn one loop exception into a live-lock. The same message is
+    suppressed for 5s so a persistent failure cannot flood the UI at ~5 Hz."""
+    global _last_error_message, _last_error_at
+    text = str(message or "")[:200]
+    now = time.monotonic()
+    if text == _last_error_message and now - _last_error_at < 5.0:
+        return
+    _last_error_message = text
+    _last_error_at = now
     try:
-        _emit({"type": "error", "message": str(message or "")[:200]})
+        _emit({"type": "error", "message": text})
     except Exception:
         pass
 
