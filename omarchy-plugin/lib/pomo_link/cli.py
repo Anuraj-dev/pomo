@@ -119,12 +119,33 @@ def run_pair_json(raw):
     if reply is None:
         sys.stderr.write("pomo-link daemon returned no status\n")
         return 1
+    if isinstance(reply, dict) and (reply.get("type") == "error" or reply.get("error")):
+        sys.stderr.write("pairing rejected: %s\n" % (reply.get("error") or "invalid payload"))
+        return 1
     sys.stdout.write(json.dumps(reply, separators=(",", ":")) + "\n")
     return 0
 
 
+def _daemon_alive(path, timeout=0.3):
+    import socket
+
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(timeout)
+    try:
+        probe.connect(path)
+    except OSError:
+        return False
+    finally:
+        try:
+            probe.close()
+        except OSError:
+            pass
+    return True
+
+
 def run_waybar():
     path = status_path()
+    sock = socket_path()
 
     def _stop(_signum, _frame):
         raise SystemExit(0)
@@ -135,6 +156,8 @@ def run_waybar():
     try:
         while True:
             data = load_json(path)
+            if not _daemon_alive(sock):
+                data = None
             line = format_waybar(data if isinstance(data, dict) else None)
             if line != last:
                 sys.stdout.write(line + "\n")
@@ -161,8 +184,9 @@ def _install_symlink(exec_path):
         os.symlink(exec_path, dest)
     except OSError:
         try:
-            shutil.copy2(exec_path, dest)
-            os.chmod(dest, 0o755)
+            with open(dest, "w", encoding="utf-8") as handle:
+                handle.write('#!/bin/sh\nexec "%s" "$@"\n' % exec_path.replace('"', '\\"'))
+            os.chmod(dest, 0o755)  # noqa: S103 -- launcher wrapper must be executable
         except OSError:
             return None
     return dest

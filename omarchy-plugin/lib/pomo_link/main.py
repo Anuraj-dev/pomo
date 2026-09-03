@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import select
 import signal
 import sys
@@ -245,7 +246,9 @@ class Engine:
             data = payload
             if payload.get("arg") and not payload.get("url") and not payload.get("token"):
                 data = parse_pairing_payload(payload.get("arg"))
-            self.client.apply_pairing(data)
+            if not self.client.apply_pairing(data):
+                self.emit_status(force=True)
+                return {"type": "error", "error": "invalid pairing payload"}
             self.emit_status(force=True)
             return self.last_status
         if cmd in ("set_token", "token"):
@@ -340,6 +343,11 @@ class Engine:
         if self.server is not None:
             self.server.close()
             self.server = None
+        if self.status_path:
+            try:
+                os.unlink(self.status_path)
+            except OSError:
+                pass
 
 
 def run_engine(

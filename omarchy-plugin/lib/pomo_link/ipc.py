@@ -5,22 +5,45 @@ from __future__ import annotations
 import json
 import os
 import socket
+import stat
+
+
+def _probe_live(path):
+    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    probe.settimeout(0.3)
+    try:
+        probe.connect(path)
+    except OSError:
+        return False
+    finally:
+        try:
+            probe.close()
+        except OSError:
+            pass
+    return True
 
 
 class UnixCommandServer:
     def __init__(self, path):
+        from .paths import ensure_socket_dir
+
         self.path = path
-        directory = os.path.dirname(path)
-        if directory:
-            os.makedirs(directory, mode=0o700, exist_ok=True)
+        ensure_socket_dir(path)
+        try:
+            st = os.lstat(path)
+        except FileNotFoundError:
+            st = None
+        except OSError:
+            st = None
+        if st is not None:
+            if not stat.S_ISSOCK(st.st_mode):
+                raise OSError("refusing to replace non-socket path: %s" % path)
+            if _probe_live(path):
+                raise OSError("pomo-link daemon is already running at %s" % path)
             try:
-                os.chmod(directory, 0o700)
+                os.unlink(path)
             except OSError:
                 pass
-        try:
-            os.unlink(path)
-        except OSError:
-            pass
         self.listen = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         self.listen.setblocking(False)
         self.listen.bind(path)
@@ -28,6 +51,10 @@ class UnixCommandServer:
             os.chmod(path, 0o600)
         except OSError:
             pass
+        try:
+            self._sock_id = (os.stat(path).st_dev, os.stat(path).st_ino)
+        except OSError:
+            self._sock_id = None
         self.listen.listen(16)
         self.clients = {}
 
@@ -41,6 +68,15 @@ class UnixCommandServer:
             self.listen.close()
         except OSError:
             pass
+        try:
+            st = os.lstat(self.path)
+        except OSError:
+            return
+        if self._sock_id is not None:
+            if (st.st_dev, st.st_ino) != self._sock_id:
+                return
+        elif not stat.S_ISSOCK(st.st_mode):
+            return
         try:
             os.unlink(self.path)
         except OSError:

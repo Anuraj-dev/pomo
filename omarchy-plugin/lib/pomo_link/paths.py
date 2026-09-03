@@ -16,7 +16,32 @@ def socket_path():
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     if runtime:
         return os.path.join(runtime, "pomo", "pomo-link.sock")
+    # noqa: S108 -- stable per-uid fallback when XDG_RUNTIME_DIR is unset;
+    # ensure_socket_dir() requires user-owned 0700 before bind.
     return os.path.join("/tmp", "pomo-%s" % os.getuid(), "pomo-link.sock")
+
+
+def ensure_socket_dir(sock_path):
+    """Require a user-owned, non-symlink 0700 parent dir before IPC bind."""
+    import stat
+
+    directory = os.path.dirname(sock_path)
+    if not directory:
+        return
+    try:
+        st = os.lstat(directory)
+    except FileNotFoundError:
+        os.makedirs(directory, mode=0o700, exist_ok=True)
+        os.chmod(directory, 0o700)
+        return
+    if stat.S_ISLNK(st.st_mode):
+        raise OSError("refusing IPC dir symlink: %s" % directory)
+    if not stat.S_ISDIR(st.st_mode):
+        raise OSError("IPC parent is not a directory: %s" % directory)
+    if st.st_uid != os.getuid():
+        raise OSError("IPC dir not owned by current user: %s" % directory)
+    if stat.S_IMODE(st.st_mode) != 0o700:
+        os.chmod(directory, 0o700)
 
 
 def status_path():
