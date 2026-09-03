@@ -44,20 +44,17 @@ def encode_frame(payload, opcode=1):
     return bytes(header) + masked
 
 
-def _decode_frames(buf, fragment_state=None):
+def _decode_frames(buf):
     """Return (messages, rest, ping_payloads, should_close)."""
     messages = []
     pings = []
     close = False
-    if fragment_state is None:
-        fragment_state = {"opcode": None, "payload": bytearray()}
     i = 0
     while True:
         if len(buf) - i < 2:
             break
         b0 = buf[i]
         b1 = buf[i + 1]
-        fin = (b0 & 0x80) != 0
         opcode = b0 & 0x0F
         masked = (b1 & 0x80) != 0
         length = b1 & 0x7F
@@ -94,24 +91,8 @@ def _decode_frames(buf, fragment_state=None):
             continue
         if opcode == 0xA:
             continue
-        if opcode in (0x1, 0x2):
-            if fragment_state["opcode"] is not None:
-                raise WebSocketError("new data frame during fragmented message")
-            if fin:
-                messages.append((opcode, payload))
-            else:
-                fragment_state["opcode"] = opcode
-                fragment_state["payload"] = bytearray(payload)
-        elif opcode == 0x0:
-            if fragment_state["opcode"] is None:
-                raise WebSocketError("unexpected continuation frame")
-            fragment_state["payload"].extend(payload)
-            if len(fragment_state["payload"]) > MAX_FRAME:
-                raise WebSocketError("message too large")
-            if fin:
-                messages.append((fragment_state["opcode"], bytes(fragment_state["payload"])))
-                fragment_state["opcode"] = None
-                fragment_state["payload"] = bytearray()
+        if opcode in (0x1, 0x2, 0x0):
+            messages.append((opcode, payload))
             continue
         # Unknown control/data: ignore.
     return messages, buf[i:], pings, close
@@ -121,7 +102,6 @@ class Rfc6455Client:
     def __init__(self):
         self.sock = None
         self.buffer = bytearray()
-        self.fragment_state = {"opcode": None, "payload": bytearray()}
         self.connected = False
         self.host = ""
         self.port = 0
@@ -134,7 +114,6 @@ class Rfc6455Client:
         sock = self.sock
         self.sock = None
         self.buffer = bytearray()
-        self.fragment_state = {"opcode": None, "payload": bytearray()}
         if sock is not None:
             try:
                 sock.sendall(encode_frame(b"", opcode=0x8))
@@ -192,7 +171,6 @@ class Rfc6455Client:
         sock.setblocking(False)
         self.sock = sock
         self.buffer = bytearray(rest)
-        self.fragment_state = {"opcode": None, "payload": bytearray()}
         self.connected = True
         return True
 
@@ -255,7 +233,7 @@ class Rfc6455Client:
                 break
         texts = []
         try:
-            frames, rest, pings, close = _decode_frames(self.buffer, self.fragment_state)
+            frames, rest, pings, close = _decode_frames(self.buffer)
         except WebSocketError:
             self.connected = False
             raise
@@ -263,10 +241,12 @@ class Rfc6455Client:
         for payload in pings:
             self.send_pong(payload)
         if close:
-            self.fragment_state = {"opcode": None, "payload": bytearray()}
             self.connected = False
             raise WebSocketError("peer closed")
         for opcode, payload in frames:
             if opcode == 0x1:
+                texts.append(payload.decode("utf-8", "replace"))
+            elif opcode == 0x0:
+                # Treat continuation as text if we have no fragment state.
                 texts.append(payload.decode("utf-8", "replace"))
         return texts

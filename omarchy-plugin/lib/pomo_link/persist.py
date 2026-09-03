@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
 
 
 def data_dir():
@@ -25,16 +26,21 @@ def atomic_write(path, obj, mode=0o600):
     except OSError:
         pass
     payload = json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-    tmp = path + ".tmp"
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-", dir=directory)
     try:
-        with open(tmp, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
+        os.write(fd, payload)
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
         os.chmod(tmp, mode)
         os.replace(tmp, path)
         os.chmod(path, mode)
     except Exception:
+        if fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp)
         except OSError:

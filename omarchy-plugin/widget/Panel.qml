@@ -56,8 +56,6 @@ Panel {
     for (var existing in root.settings)
       if (existing !== "id") entry[existing] = root.settings[existing]
     for (var key in values) entry[key] = values[key]
-    delete entry.token
-    delete entry.pairingJson
     root.settings = entry
     if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
@@ -95,7 +93,7 @@ Panel {
       if (host !== "") fields.host = host
       if (portText !== "") {
         var port = parseInt(portText, 10)
-        if (port >= 1 && port <= 65535) fields.port = port
+        if (port > 0) fields.port = port
       }
       if (token !== "") fields.token = token
     }
@@ -105,12 +103,12 @@ Panel {
     if (paste !== "") {
       var fromPaste = hostPortFromPairingJson(paste)
       if (fromPaste.host) persist.host = fromPaste.host
-      if (fromPaste.port >= 1 && fromPaste.port <= 65535) persist.port = fromPaste.port
+      if (fromPaste.port) persist.port = fromPaste.port
     } else {
       persist.host = host
       if (portText !== "") {
         var persistPort = parseInt(portText, 10)
-        if (persistPort >= 1 && persistPort <= 65535) persist.port = persistPort
+        if (persistPort > 0) persist.port = persistPort
       }
     }
     if (Object.keys(persist).length > 0) persistSettings(persist)

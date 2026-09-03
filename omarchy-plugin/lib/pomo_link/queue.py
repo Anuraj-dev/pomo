@@ -44,11 +44,7 @@ class SessionQueue:
                 continue
             client_id = str(row.get("client_id") or "")
             typ = str(row.get("type") or "")
-            try:
-                duration = int(row.get("duration") or 0)
-            except (TypeError, ValueError):
-                skipped += 1
-                continue
+            duration = int(row.get("duration") or 0)
             if not client_id or not _valid_type(typ) or duration <= 0:
                 skipped += 1
                 continue
