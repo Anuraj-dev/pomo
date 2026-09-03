@@ -84,3 +84,33 @@ Run the plugin validator after source changes, then reload the shell:
 omarchy plugin validate /path/to/omarchy-plugin
 omarchy-shell shell rescanPlugins
 ```
+
+## Waybar
+
+The same `pomo-link` engine can run as a user daemon for Hyprland/Waybar.
+Phone reachable: follow `/ws`. Phone gone: local timer, queued import, adopt
+on reconnect. Pairing is imported from
+`${XDG_CONFIG_HOME:-~/.config}/pomo/desktop-client.json` when the engine has
+no token yet.
+
+```bash
+omarchy-plugin/bin/pomo-link service install
+```
+
+That writes `~/.config/systemd/user/pomo-link.service`, links `pomo-link` into
+`~/.local/bin`, and starts the daemon. Waybar module:
+
+```json
+"custom/pomo": {
+  "exec": "$HOME/.local/bin/pomo-link waybar",
+  "return-type": "json",
+  "markup": "pango",
+  "on-click": "$HOME/.local/bin/pomo-link cmd toggle",
+  "on-click-right": "$HOME/.local/bin/pomo-link cmd skip",
+  "tooltip": true
+}
+```
+
+`waybar` streams JSON from `${XDG_STATE_HOME:-~/.local/state}/pomo/waybar.json`.
+Clicks go to `$XDG_RUNTIME_DIR/pomo/pomo-link.sock`. Do not also run the Omarchy
+plugin against the same data directory.

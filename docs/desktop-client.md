@@ -5,6 +5,10 @@ does not own timer state, write history, or reconcile sync conflicts. It stores
 pairing details and a stale display cache, then talks to the phone API for every
 real command.
 
+A live Waybar module that still works when the phone is gone is `pomo-link`, not
+this client. See [omarchy-plugin/README.md](../omarchy-plugin/README.md).
+`status --waybar` remains a stale-cache helper.
+
 ## Shape
 
 ```text

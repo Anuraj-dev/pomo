@@ -129,14 +129,14 @@ node desktop-client/dist/cli.js service status
 See [docs/desktop-client.md](docs/desktop-client.md) for service paths, Waybar
 output, QR commands, and failure behavior.
 
-## Omarchy plugin
+## Omarchy plugin and Waybar
 
-The `omarchy-plugin/` directory contains the `raja.pomo` Omarchy shell plugin.
-It provides a phone-synced bar timer, local offline timing, pairing controls,
-and a side-anchored panel. The bar display can be set per widget entry to
-`Timer + phase`, `Timer only`, or `Icon only`. See
-[omarchy-plugin/README.md](omarchy-plugin/README.md) for installation,
-configuration, and pairing details.
+The `omarchy-plugin/` directory contains the `raja.pomo` Omarchy shell plugin
+and the shared `pomo-link` engine. Omarchy gets a bar widget and panel. Waybar
+runs the same engine as a user daemon (`pomo-link --daemon`) and streams JSON
+from a status file. Both follow the phone on the LAN and run a local timer
+while the phone is gone. See [omarchy-plugin/README.md](omarchy-plugin/README.md)
+for installation, pairing, and the Waybar module snippet.
 
 ## Architecture
 
@@ -178,7 +178,7 @@ state over the local network; it does not merge state from a desktop process.
 - [docs/desktop-client.md](docs/desktop-client.md): CLI, service, cache, and
   Waybar behavior.
 - [omarchy-plugin/README.md](omarchy-plugin/README.md): Omarchy installation,
-  bar display settings, hover behavior, and pairing.
+  bar display settings, hover behavior, pairing, and Waybar.
 
 ## Validation
 

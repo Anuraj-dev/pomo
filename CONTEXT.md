@@ -1,9 +1,9 @@
 # Pomo
 
 Glossary for the Pomo focus-timer domain. The phone is the source of truth for
-timer state, history, stats, and Crew. Desk, Omarchy, and Chrome are hybrid
-instruments: they follow the phone when it is reachable and run a local timer
-when it is not. This file defines the language we use to talk about the product;
+timer state, history, stats, and Crew. Desk, Omarchy, Waybar, and Chrome are
+hybrid instruments: they follow the phone when it is reachable and run a local
+timer when it is not. This file defines the language we use to talk about the product;
 it is not a spec and carries no implementation detail.
 
 ## Language
@@ -182,14 +182,14 @@ servers anywhere".
 
 **Instrument**:
 Any display-and-control surface that renders the timer. The phone's screens,
-widget, and notification are instruments; so are the desk, the Omarchy bar, and
+widget, and notification are instruments; so are the desk, the Omarchy bar, Waybar, and
 the extension surfaces (New Tab, side panel, popup, badge).
 _Avoid_: screen, panel, view (when the concept is the state-ownership rule).
 
 **Hybrid instrument**:
 A client that follows the phone clock while the phone API is reachable, runs its
 own local engine while the phone is gone, then flushes completed Work blocks and
-may hand a live timer to the phone on reconnect. PomoLink and the Omarchy plugin
+may hand a live timer to the phone on reconnect. PomoLink, the Omarchy plugin, and Waybar
 already are this. Chrome is this.
 _Avoid_: Replica, peer, Full device, account.
 
