@@ -114,10 +114,18 @@ class Engine:
             # CONNECTING / enter-SYNC). Never dropped silently.
             return
         gesture = self.pending_gesture
-        self.pending_gesture = None
         if self.client.message == "waiting to connect":
             self.client.message = ""
-        self.client.send_gesture(gesture)
+        # Announce busy BEFORE the (still blocking, until Phase 3) POST so
+        # QML can disable the buttons while the engine cannot answer.
+        self.client.busy = True
+        self.emit_status(force=True)
+        try:
+            self.client.send_gesture(gesture)
+        except Exception:
+            self.client.busy = False
+            raise
+        self.pending_gesture = None
         if self.model.local_owner:
             if self.model.is_live():
                 self.persist_live_timer()
@@ -225,7 +233,7 @@ class Engine:
             and now - self.last_status_at < interval
         ):
             return
-        # remaining changes every second while running even if other fields match
+        # remaining/busy change without other fields moving
         if (
             not force
             and self.last_status
@@ -233,6 +241,7 @@ class Engine:
             and payload.get("mode") == self.last_status.get("mode")
             and payload.get("status") == self.last_status.get("status")
             and payload.get("phase") == self.last_status.get("phase")
+            and payload.get("busy") == self.last_status.get("busy")
             and now - self.last_status_at < interval
         ):
             return

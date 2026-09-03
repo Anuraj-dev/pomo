@@ -212,6 +212,66 @@ class GestureFailureTest(unittest.TestCase):
         engine.client.tick()
         self.assertFalse(engine.client.resync_after_command)
 
+    def test_failed_gesture_emits_ndjson_error_event(self):
+        import io
+        import pomo_link.main as main_mod
+
+        engine = self.engine
+        engine.client.host = "h"
+        engine.client.token = "t"
+        engine.client.rest = StubRest(results=[(0, "")])
+        engine.client.set_mode("SYNCED")
+        engine.handle_line('{"cmd":"toggle"}')
+        captured = io.StringIO()
+        orig_stdout = sys.stdout
+        main_mod._last_error_message = ""
+        main_mod._last_error_at = 0.0
+        try:
+            sys.stdout = captured
+            engine.drain_pending_gesture()
+            # The loop body drains client errors into _emit_error each
+            # iteration; exercise that exact path here.
+            for msg in engine.client.drain_errors():
+                main_mod._emit_error(msg)
+        finally:
+            sys.stdout = orig_stdout
+        self.assertIn('"type":"error"', captured.getvalue())
+        self.assertIn("unreachable", captured.getvalue())
+        self.assertIsNone(engine.pending_gesture)
+
+    def test_busy_true_emitted_before_slow_post(self):
+        engine = self.engine
+        engine.client.host = "h"
+        engine.client.token = "t"
+
+        class SlowThenOkRest(StubRest):
+            def request(self, method, path, **kwargs):
+                self.calls.append((method, path))
+                import time as _t
+                _t.sleep(0.05)
+                return 200, '{"success": true, "state": {"status": "running", "phase": "work", "remaining": 100.0, "duration": 1500.0, "completed": 0, "daily_goal": 8, "start_time": 1.0}}'
+
+        engine.client.rest = SlowThenOkRest()
+        engine.client.set_mode("SYNCED")
+        engine.handle_line('{"cmd":"toggle"}')
+        import io
+        captured = io.StringIO()
+        orig_stdout = sys.stdout
+        try:
+            sys.stdout = captured
+            engine.drain_pending_gesture()
+        finally:
+            sys.stdout = orig_stdout
+        lines = [
+            line
+            for line in captured.getvalue().splitlines()
+            if line.strip().startswith("{")
+        ]
+        payload = [__import__("json").loads(line) for line in lines]
+        busy_flags = [p.get("busy") for p in payload if p.get("type") == "status"]
+        self.assertIn(True, busy_flags)
+        self.assertEqual(busy_flags[-1], False)
+
 
 class PairingNoopTest(unittest.TestCase):
     def setUp(self):
