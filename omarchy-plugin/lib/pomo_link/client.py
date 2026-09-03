@@ -10,6 +10,7 @@ from .constants import (
     BOOT_PROBE_S,
     CONFIG_REFRESH_S,
     CONFIG_RETRY_S,
+    CONNECT_RETRY_MAX,
     DEFAULT_PORT,
     EXTEND_SECONDS,
     OFFLINE_PROBE_S,
@@ -17,6 +18,7 @@ from .constants import (
     SOFT_RESYNC_MAX,
     STALE_AFTER_S,
     UNPAIRED_RETRY_S,
+    WS_PING_S,
 )
 from .discovery import browse_pomo
 from .rest import RestClient
@@ -150,6 +152,8 @@ class PomoClient:
         # further gestures wait instead of stacking.
         self.busy = False
         self.resync_after_command = False
+        self.last_ping_at = 0.0
+        self.connect_failures = 0
 
     def log(self, text):
         self.log_lines.append(text)
@@ -210,6 +214,7 @@ class PomoClient:
         self.queue_flush_pending = False
         self.pending_sync_state = None
         self.prefer_known_host = False
+        self.connect_failures = 0
         self.last_poll_at = 0.0
         self.message = reason
         self.schedule_rediscover()
@@ -326,15 +331,24 @@ class PomoClient:
             self.log("WS connected, hello sent")
         except Exception as exc:
             self.log("WS connect failed: %s" % exc)
-            now = time.monotonic()
-            self.last_contact_at = now
-            self.last_socket_contact_at = now
+            self.connect_failures += 1
+            # A failed open proves nothing about the socket; stamping contact
+            # here made the engine wait a phantom 20s stale window before the
+            # first retry. Schedule a short retry instead.
+            self.last_socket_contact_at = 0.0
+            self.retry_started_at = time.monotonic()
+            self.retry_delay_s = RECONNECT_INTERVAL_S
             self.set_mode("CONNECTING")
+            if self.connect_failures >= CONNECT_RETRY_MAX:
+                self.log("connect failed %sx -> OFFLINE" % self.connect_failures)
+                self.enter_offline("connect retries exhausted")
             return False
         now = time.monotonic()
         self.last_contact_at = now
         self.last_socket_contact_at = now
         self.last_poll_at = now
+        self.last_ping_at = 0.0
+        self.connect_failures = 0
         self.retry_delay_s = 0
         self.set_mode("CONNECTING")
         return True
@@ -531,6 +545,42 @@ class PomoClient:
                 self.enter_offline("ws connect failed")
             return
         self.log("WS drop CONNECTING REST code=%s" % code)
+
+    def refresh_socket_contact(self):
+        """A pong, ping, or any data frame proves the socket is alive.
+
+        The phone sends no frames while paused/stopped, so without this the
+        stale check would soft-resync a healthy idle socket every 20s.
+        """
+        activity = getattr(self.ws, "last_peer_activity_mono", 0.0)
+        if activity > self.last_socket_contact_at:
+            self.last_socket_contact_at = activity
+            self.last_contact_at = activity
+
+    def tick_ws_ping(self):
+        if self.mode not in ("CONNECTING", "SYNCED"):
+            return
+        if not self.ws.connected:
+            return
+        now = time.monotonic()
+        if self.last_ping_at and now - self.last_ping_at < WS_PING_S:
+            return
+        self.last_ping_at = now
+        try:
+            self.ws.send_ping()
+        except WebSocketError:
+            self.on_websocket_disconnected()
+
+    def tick_connect_retry(self):
+        if self.mode != "CONNECTING" or self.ws.connected:
+            return
+        if not self.retry_delay_s:
+            return
+        if time.monotonic() - self.retry_started_at < self.retry_delay_s:
+            return
+        self.retry_delay_s = 0
+        self.log("connect retry timer elapsed")
+        self.begin_websocket("connect retry")
 
     def pump_websocket(self):
         if self.mode not in ("CONNECTING", "SYNCED"):
@@ -851,6 +901,10 @@ class PomoClient:
             return
         if self.mode in ("CONNECTING", "SYNCED"):
             self.pump_websocket()
+            self.refresh_socket_contact()
+            self.tick_ws_ping()
+        if self.mode == "CONNECTING":
+            self.tick_connect_retry()
         if self.mode in ("BOOT",):
             if not self.token:
                 self.enter_unpaired("no token")
