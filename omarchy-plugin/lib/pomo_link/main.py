@@ -116,22 +116,24 @@ class Engine:
         gesture = self.pending_gesture
         if self.client.message == "waiting to connect":
             self.client.message = ""
-        # Announce busy BEFORE the (still blocking, until Phase 3) POST so
-        # QML can disable the buttons while the engine cannot answer. Drain
-        # owns the full busy lifecycle: send_gesture's internal finally only
-        # covers the phone branch, not the local one.
+        # Announce busy, then submit. On the phone path the gesture goes to
+        # the worker and busy stays set until its result lands; on the local
+        # path it is applied synchronously and busy is released here.
         self.client.busy = True
         self.emit_status(force=True)
         try:
-            self.client.send_gesture(gesture)
-        finally:
+            went_async = self.client.send_gesture(gesture)
+        except Exception:
             self.client.busy = False
+            raise
         self.pending_gesture = None
-        if self.model.local_owner:
-            if self.model.is_live():
-                self.persist_live_timer()
-            else:
-                self.clear_live_timer()
+        if not went_async:
+            self.client.busy = False
+            if self.model.local_owner:
+                if self.model.is_live():
+                    self.persist_live_timer()
+                else:
+                    self.clear_live_timer()
         self.emit_status(force=True)
 
     def _restore_timer(self):
@@ -369,10 +371,11 @@ class Engine:
         while self.pending_events:
             _emit(self.pending_events.pop(0))
 
-        self.client.tick()
-        for msg in self.client.drain_errors():
-            _emit_error(msg)
-        self.drain_pending_gesture()
+            self.client.tick()
+            self.client.drain_worker_results()
+            for msg in self.client.drain_errors():
+                _emit_error(msg)
+            self.drain_pending_gesture()
         for line in self.client.drain_logs():
             sys.stderr.write("[pomo-link] %s\n" % line)
             sys.stderr.flush()
@@ -404,6 +407,7 @@ def main(argv=None):
         if engine.model.local_owner and engine.model.is_live():
             engine.persist_live_timer()
         engine.client.ws.close()
+        engine.client.worker.stop()
     return 0
 
 

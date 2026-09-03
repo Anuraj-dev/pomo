@@ -14,7 +14,7 @@ from pomo_link.store import ConfigStore
 from pomo_link.timer import TimerModel
 from pomo_link.ws import Rfc6455Client, WebSocketError, _decode_frames
 
-from test_stdin import StubRest
+from test_stdin import FakeWorker, StubRest, run_pending_jobs
 
 
 class FailingConnectWS:
@@ -62,6 +62,7 @@ class FailedConnectTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="pomo-ws-")
         self.client = make_client(self.dir)
+        self.client.worker = FakeWorker()
         self.client.ws = FailingConnectWS()
         self.client.host = "h"
         self.client.port = 9876
@@ -71,17 +72,20 @@ class FailedConnectTest(unittest.TestCase):
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def test_failed_open_does_not_stamp_contact(self):
-        self.client.begin_websocket("test")
+        self.assertTrue(self.client.begin_websocket("test"))
+        run_pending_jobs(self.client)
         self.assertEqual(self.client.mode, "CONNECTING")
         self.assertEqual(self.client.last_socket_contact_at, 0.0)
 
     def test_failed_open_schedules_short_retry(self):
         self.client.begin_websocket("test")
+        run_pending_jobs(self.client)
         self.assertEqual(self.client.retry_delay_s, 5.0)
         self.assertGreater(self.client.retry_started_at, 0)
 
     def test_connect_retry_timer_fires(self):
         self.client.begin_websocket("test")
+        run_pending_jobs(self.client)
         self.client.retry_started_at -= 10.0  # timer long elapsed
         calls = []
         self.client.begin_websocket = lambda reason: calls.append(reason) or False
@@ -91,10 +95,36 @@ class FailedConnectTest(unittest.TestCase):
 
     def test_repeated_failures_reach_offline(self):
         self.client.begin_websocket("test")  # failure 1, retry scheduled
+        run_pending_jobs(self.client)
         for _ in range(2):  # retries 2 and 3; third failure -> OFFLINE
             self.client.retry_started_at -= 10.0
             self.client.tick_connect_retry()
+            run_pending_jobs(self.client)
         self.assertEqual(self.client.mode, "OFFLINE")
+
+    def test_hello_sent_on_success(self):
+        class OkWS:
+            def __init__(self):
+                self.connected = False
+                self.sent = []
+
+            def connect(self, *args, **kwargs):
+                self.connected = True
+                return True
+
+            def send_text(self, text):
+                self.sent.append(text)
+
+            def close(self):
+                pass
+
+        self.client.ws = OkWS()
+        self.client.begin_websocket("test")
+        run_pending_jobs(self.client)
+        self.assertEqual(self.client.mode, "CONNECTING")
+        self.assertTrue(any("hello" in text for text in self.client.ws.sent))
+        self.assertGreater(self.client.last_socket_contact_at, 0)
+        self.assertEqual(self.client.connect_failures, 0)
 
 
 class PingTest(unittest.TestCase):

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import queue as job_queue
 import time
 from urllib.parse import urlparse
 
@@ -13,6 +14,8 @@ from .constants import (
     CONNECT_RETRY_MAX,
     DEFAULT_PORT,
     EXTEND_SECONDS,
+    HTTP_FLUSH_TIMEOUT_S,
+    IMPORT_RETRY_MAX,
     OFFLINE_PROBE_S,
     RECONNECT_INTERVAL_S,
     SOFT_RESYNC_MAX,
@@ -22,6 +25,7 @@ from .constants import (
 )
 from .discovery import browse_pomo
 from .rest import RestClient
+from .worker import RestWorker
 from .ws import Rfc6455Client, WebSocketError
 
 
@@ -113,12 +117,13 @@ def parse_pairing_payload(value):
 
 
 class PomoClient:
-    def __init__(self, model, queue, store, rest=None, ws=None):
+    def __init__(self, model, queue, store, rest=None, ws=None, worker=None):
         self.model = model
         self.queue = queue
         self.store = store
         self.rest = rest or RestClient()
         self.ws = ws or Rfc6455Client()
+        self.worker = worker or RestWorker()
 
         self.mode = "BOOT"
         self.host = store.host
@@ -129,11 +134,11 @@ class PomoClient:
         self.ever_synced = False
         self.entering_sync = False
         self.ws_dropped_during_enter = False
-        self.queue_flush_pending = False
         self.pending_sync_state = None
         self.prefer_known_host = False
         self.soft_resync_count = 0
         self.soft_resyncing = False
+        self.soft_resync_reason = ""
         self.probe_started_at = time.monotonic()
         self.probe_active = True
         self.last_contact_at = 0.0
@@ -154,6 +159,17 @@ class PomoClient:
         self.resync_after_command = False
         self.last_ping_at = 0.0
         self.connect_failures = 0
+        # Async job bookkeeping (Phase 3): at most one job runs on the worker
+        # at a time; per-tag in-flight guards stop duplicate submissions.
+        self.connecting = False
+        self.status_inflight = False
+        self.wsdrop_inflight = False
+        self.config_inflight = False
+        self.discover_inflight = False
+        self.import_inflight = False
+        self.adopt_inflight = False
+        self.import_failures = 0
+        self.import_retry_at = 0.0
 
     def log(self, text):
         self.log_lines.append(text)
@@ -175,6 +191,63 @@ class PomoClient:
         lines = self.error_lines
         self.error_lines = []
         return lines
+
+    # --- Phase 3: async phone I/O -------------------------------------
+    # Every blocking call (REST, avahi, WS handshake) runs on the worker
+    # thread; the select loop only submits jobs and applies results.
+
+    def submit_rest(self, tag, method, path, body=None, timeout=None, host=None, port=None, token=None):
+        h = host if host is not None else self.host
+        p = int(port if port is not None else self.port)
+        tok = token if token is not None else self.token
+        rest = self.rest
+
+        def job():
+            return rest.request(method, path, body=body, timeout=timeout, host=h, port=p, token=tok)
+
+        self.worker.submit(tag, job)
+
+    def drain_worker_results(self):
+        while True:
+            try:
+                tag, result = self.worker.results.get_nowait()
+            except job_queue.Empty:
+                return
+            try:
+                self.apply_result(tag, result)
+            except Exception as exc:
+                self.note_error("result %s error: %s" % (tag, exc))
+
+    def apply_result(self, tag, result):
+        if tag == "connect":
+            self._apply_connect_result(result)
+        elif tag in ("toggle", "skip", "reset", "extend"):
+            self._apply_gesture_result(tag, result)
+        elif tag == "soft_resync":
+            self._apply_soft_resync_result(result)
+        elif tag == "status":
+            self._apply_status_result(result)
+        elif tag == "wsdrop":
+            self._apply_wsdrop_result(result)
+        elif tag == "import":
+            self._apply_import_result(result)
+        elif tag == "adopt":
+            self._apply_adopt_result(result)
+        elif tag == "config":
+            self._apply_config_result(result)
+        elif tag == "discover":
+            self._apply_discover_result(result)
+        else:
+            self.log("unknown job result tag %s" % tag)
+
+    @staticmethod
+    def _result_tuple(result):
+        """REST jobs yield (code, text); unexpected raises yield the exception."""
+        if isinstance(result, Exception):
+            return 0, ""
+        if isinstance(result, tuple) and len(result) == 2:
+            return result
+        return 0, ""
 
     def set_mode(self, next_mode):
         if self.mode == next_mode:
@@ -211,10 +284,13 @@ class PomoClient:
         self.entering_sync = False
         self.ws_dropped_during_enter = False
         self.soft_resync_count = 0
-        self.queue_flush_pending = False
         self.pending_sync_state = None
         self.prefer_known_host = False
         self.connect_failures = 0
+        self.import_inflight = False
+        self.adopt_inflight = False
+        self.import_failures = 0
+        self.import_retry_at = 0.0
         self.last_poll_at = 0.0
         self.message = reason
         self.schedule_rediscover()
@@ -229,8 +305,11 @@ class PomoClient:
         self.entering_sync = False
         self.ws_dropped_during_enter = False
         self.soft_resync_count = 0
-        self.queue_flush_pending = False
         self.pending_sync_state = None
+        self.import_inflight = False
+        self.adopt_inflight = False
+        self.import_failures = 0
+        self.import_retry_at = 0.0
         self.retry_started_at = time.monotonic()
         self.retry_delay_s = UNPAIRED_RETRY_S
         self.message = reason
@@ -319,18 +398,31 @@ class PomoClient:
         return ok
 
     def begin_websocket(self, reason):
+        """Submit the WS handshake to the worker; completes in
+        _apply_connect_result. Returns True when a connect job was queued."""
+        if self.connecting:
+            self.log("connect already in flight; ignoring %s" % reason)
+            return False
         self.log("begin WebSocket %s:%s (%s)" % (self.host, self.port, reason))
         self._disconnect_ws()
         if not self.host or not self.port or not self.token:
             self.enter_unpaired("missing host/token")
             return False
         self.rest.configure(self.host, self.port, self.token)
-        try:
-            self.ws.connect(self.host, self.port, path="/ws", timeout=5.0)
-            self.ws.send_text(json.dumps({"type": "hello", "token": self.token}))
-            self.log("WS connected, hello sent")
-        except Exception as exc:
-            self.log("WS connect failed: %s" % exc)
+        self.connecting = True
+        ws_obj = self.ws
+        host, port = self.host, self.port
+
+        def job():
+            return ws_obj.connect(host, port, path="/ws", timeout=5.0)
+
+        self.worker.submit("connect", job)
+        return True
+
+    def _apply_connect_result(self, result):
+        self.connecting = False
+        if isinstance(result, Exception) or result is None:
+            self.log("WS connect failed: %s" % result)
             self.connect_failures += 1
             # A failed open proves nothing about the socket; stamping contact
             # here made the engine wait a phantom 20s stale window before the
@@ -342,7 +434,20 @@ class PomoClient:
             if self.connect_failures >= CONNECT_RETRY_MAX:
                 self.log("connect failed %sx -> OFFLINE" % self.connect_failures)
                 self.enter_offline("connect retries exhausted")
-            return False
+            return
+        try:
+            self.ws.send_text(json.dumps({"type": "hello", "token": self.token}))
+        except WebSocketError as exc:
+            self.log("hello send failed: %s" % exc)
+            self.connect_failures += 1
+            self.last_socket_contact_at = 0.0
+            self.retry_started_at = time.monotonic()
+            self.retry_delay_s = RECONNECT_INTERVAL_S
+            self.set_mode("CONNECTING")
+            if self.connect_failures >= CONNECT_RETRY_MAX:
+                self.enter_offline("connect retries exhausted")
+            return
+        self.log("WS connected, hello sent")
         now = time.monotonic()
         self.last_contact_at = now
         self.last_socket_contact_at = now
@@ -351,9 +456,10 @@ class PomoClient:
         self.connect_failures = 0
         self.retry_delay_s = 0
         self.set_mode("CONNECTING")
-        return True
 
     def soft_resync(self, reason):
+        """Submit the reachability probe; completion continues in
+        _apply_soft_resync_result. Never blocks the select loop."""
         if self.soft_resyncing:
             return False
         if not self.host or not self.port:
@@ -364,47 +470,65 @@ class PomoClient:
             self.enter_offline("soft resync budget")
             return False
         self.soft_resyncing = True
-        code, _body = self.rest.get_status()
+        self.soft_resync_reason = reason or ""
+        self.submit_rest("soft_resync", "GET", "/api/status")
+        return True
+
+    def _apply_soft_resync_result(self, result):
+        self.soft_resyncing = False
+        code, _body = self._result_tuple(result)
+        if self.mode == "SYNCED":
+            # The old socket delivered a state frame while we probed; the
+            # light path already re-synced us.
+            return
         if code == 401:
-            self.soft_resyncing = False
             self.enter_unpaired("soft resync 401")
-            return False
+            return
         if code != 200:
-            self.soft_resyncing = False
             self.log("soft resync REST code=%s -> OFFLINE" % code)
-            self.enter_offline(reason or "soft resync unreachable")
-            return False
+            self.enter_offline(self.soft_resync_reason or "soft resync unreachable")
+            return
         self.soft_resync_count += 1
         self.entering_sync = False
         self.ws_dropped_during_enter = False
         self.model.set_local_owner(False)
-        self.log("soft resync #%s: %s (phone still owns clock)" % (self.soft_resync_count, reason))
-        ok = self.begin_websocket("soft resync")
-        self.soft_resyncing = False
-        return ok
+        self.log("soft resync #%s: %s (phone still owns clock)" % (self.soft_resync_count, self.soft_resync_reason))
+        self.begin_websocket("soft resync")
 
-    def probe_host_status(self, host, port):
-        code, _body = self.rest.get_status(host=host, port=port, token=self.token)
-        return code
+    def tick_offline(self):
+        now = time.monotonic()
+        if self.host and not self.status_inflight:
+            if self.last_poll_at == 0 or now - self.last_poll_at >= OFFLINE_PROBE_S:
+                self.last_poll_at = now
+                self.status_inflight = True
+                self.submit_rest("status", "GET", "/api/status")
+        if self.retry_delay_s and now - self.retry_started_at >= self.retry_delay_s:
+            self.retry_delay_s = 0
+            self.log("rediscover timer elapsed -> DISCOVERING")
+            self.set_mode("DISCOVERING")
 
-    def fetch_status(self):
-        if not self.host:
-            return False
-        code, body = self.rest.get_status()
-        if code == 401:
-            self.enter_unpaired("GET /api/status")
-            return False
-        if code != 200:
-            return False
-        # Never REST-promote to SYNCED.
+    def _apply_status_result(self, result):
+        self.status_inflight = False
+        code, body = self._result_tuple(result)
+        if self.mode == "OFFLINE":
+            if code == 401:
+                self.enter_unpaired("GET /api/status")
+                return
+            if code == 200:
+                self.log("phone reachable while OFFLINE -> reconnect known host")
+                self.retry_delay_s = 0
+                self.prefer_known_host = True
+                self.set_mode("DISCOVERING")
+            return
         if self.mode == "SYNCED":
+            # Never REST-promote to SYNCED; only refresh an existing sync.
             try:
                 data = json.loads(body)
             except json.JSONDecodeError:
                 data = None
             if isinstance(data, dict):
                 self.apply_phone_object(data, force=False)
-        return True
+            return
 
     def tick_discovery(self):
         now = time.monotonic()
@@ -418,54 +542,69 @@ class PomoClient:
             self.host = self.store.host
             self.port = self.store.port or DEFAULT_PORT
             self.log("using configured host %s:%s (mDNS not queried)" % (self.host, self.port))
-        elif self.prefer_known_host and self.host and self.port:
+            self.rest.configure(self.host, self.port, self.token)
+            self.begin_websocket("discovery")
+            return
+        if self.prefer_known_host and self.host and self.port:
             self.prefer_known_host = False
             self.log("reusing known host %s:%s (REST-proven)" % (self.host, self.port))
-        else:
-            self.prefer_known_host = False
+            self.rest.configure(self.host, self.port, self.token)
+            self.begin_websocket("discovery")
+            return
+        if self.discover_inflight:
+            return
+        self.prefer_known_host = False
+        self.discover_inflight = True
+        token = self.token
+        rest = self.rest
+
+        def job():
             candidates = browse_pomo()
             if not candidates:
-                self.log("mDNS miss, no configured host")
-                if self.in_boot_probe():
-                    self.retry_started_at = now
-                    self.retry_delay_s = 1.0
-                else:
-                    self.enter_offline("mDNS miss on rediscover")
-                return
-            picked = None
+                return {"picked": None, "unauthorized": 0, "responders": 0}
             unauthorized = 0
+            picked = None
             for i, cand in enumerate(candidates):
-                self.log(
-                    "mDNS candidate %s/%s %s:%s — probing token"
-                    % (i + 1, len(candidates), cand["host"], cand["port"])
+                code, _text = rest.request(
+                    "GET", "/api/status", host=cand["host"], port=cand["port"], token=token
                 )
-                code = self.probe_host_status(cand["host"], cand["port"])
                 if code == 200:
                     picked = cand
-                    self.log(
-                        "discovered %s:%s via mDNS (selected %s of %s)"
-                        % (cand["host"], cand["port"], i + 1, len(candidates))
-                    )
                     break
                 if code == 401:
                     unauthorized += 1
-                    self.log("candidate %s:%s rejected token (401)" % (cand["host"], cand["port"]))
-                    continue
-                self.log("candidate %s:%s probe code=%s" % (cand["host"], cand["port"], code))
-            if picked is None:
-                if unauthorized > 0 and unauthorized == len(candidates):
-                    self.log("all mDNS responders rejected token")
-                    self.enter_unpaired("mDNS all 401")
-                    return
-                self.log("mDNS had %s responders but none authed" % len(candidates))
-                if self.in_boot_probe():
-                    self.retry_started_at = now
-                    self.retry_delay_s = 1.0
-                else:
-                    self.enter_offline("mDNS candidates failed auth/reachability")
+            return {
+                "picked": picked,
+                "unauthorized": unauthorized,
+                "responders": len(candidates),
+            }
+
+        self.worker.submit("discover", job)
+
+    def _apply_discover_result(self, result):
+        self.discover_inflight = False
+        if isinstance(result, Exception) or result is None:
+            result = {"picked": None, "unauthorized": 0, "responders": 0}
+        now = time.monotonic()
+        picked = result.get("picked")
+        if picked is None:
+            if result.get("responders") and result.get("unauthorized") == result.get("responders"):
+                self.log("all mDNS responders rejected token")
+                self.enter_unpaired("mDNS all 401")
                 return
-            self.host = picked["host"]
-            self.port = picked["port"]
+            if result.get("responders"):
+                self.log("mDNS had %s responders but none authed" % result.get("responders"))
+            else:
+                self.log("mDNS miss, no configured host")
+            if self.in_boot_probe():
+                self.retry_started_at = now
+                self.retry_delay_s = 1.0
+            else:
+                self.enter_offline("mDNS miss on rediscover")
+            return
+        self.host = picked["host"]
+        self.port = picked["port"]
+        self.log("discovered %s:%s via mDNS" % (self.host, self.port))
         self.rest.configure(self.host, self.port, self.token)
         self.begin_websocket("discovery")
 
@@ -491,10 +630,13 @@ class PomoClient:
             if self.mode == "SYNCED":
                 self.apply_phone_object(data, force=False)
                 return
-            if self.mode == "CONNECTING" and not self.entering_sync:
-                self.pending_sync_state = data
-                if self.queue_flush_pending:
+            if self.mode == "CONNECTING":
+                if self.entering_sync:
+                    # A fresher frame arrived mid-pipeline; it becomes the
+                    # snap target instead of the frame that started it.
+                    self.update_pending_sync_state(data)
                     return
+                self.pending_sync_state = data
                 if self.ever_synced and not self.model.local_owner:
                     self.apply_phone_object(data, force=True)
                     self.soft_resync_count = 0
@@ -502,7 +644,7 @@ class PomoClient:
                     self.set_mode("SYNCED")
                     self.log("soft resync complete -> SYNCED (light path)")
                     return
-                self.enter_sync_from_phone_state(data)
+                self.begin_enter_sync()
             return
 
         if frame_type == "event":
@@ -530,8 +672,15 @@ class PomoClient:
             return
         if self.mode != "CONNECTING":
             return
+        if self.wsdrop_inflight:
+            return
         self.log("WS drop while CONNECTING — token/reachability probe")
-        code, _body = self.rest.get_status()
+        self.wsdrop_inflight = True
+        self.submit_rest("wsdrop", "GET", "/api/status")
+
+    def _apply_wsdrop_result(self, result):
+        self.wsdrop_inflight = False
+        code, _body = self._result_tuple(result)
         if code == 401:
             self.enter_unpaired("ws drop 401")
             return
@@ -598,13 +747,43 @@ class PomoClient:
         for text in texts:
             self.on_websocket_text(text)
 
-    def flush_session_queue(self):
+    # --- Stepped enter-SYNC pipeline -----------------------------------
+    # state frame → begin_enter_sync → import job → on_import_done →
+    #   adopt job (desk live) or snap → finish_enter_sync → SYNCED.
+    # Newer state frames refresh pending_sync_state while the pipeline
+    # runs; stdin and the WS keep pumping throughout.
+
+    def update_pending_sync_state(self, data):
+        """Newest-wins by server_time so a delayed duplicate can never
+        become the snap target and bypass the stale-frame contract."""
+        if self.pending_sync_state is None:
+            self.pending_sync_state = data
+            return
+        new_st = _safe_int(data.get("server_time"))
+        old_st = _safe_int(self.pending_sync_state.get("server_time"))
+        if new_st is not None and old_st is not None:
+            if new_st >= old_st:
+                self.pending_sync_state = data
+        else:
+            self.pending_sync_state = data
+
+    def begin_enter_sync(self):
+        self.entering_sync = True
+        self.import_failures = 0
+        self.import_retry_at = 0.0
+        self.log("enter SYNC pipeline start")
+        self.start_import()
+
+    def start_import(self):
         if self.queue.empty():
             self.log("flush skip: empty queue")
-            return True
+            self.import_inflight = False
+            self.on_import_done(True)
+            return
         if not self.host:
             self.log("flush failed: no host")
-            return False
+            self.on_import_done(False)
+            return
         self.queue.strip_implausible_starts(int(time.time()))
         body = {
             "source": "omarchy",
@@ -622,50 +801,81 @@ class PomoClient:
             if item.get("tag"):
                 row["tag"] = item["tag"]
             body["sessions"].append(row)
-        self.log("flush POST /api/sessions/import count=%s" % self.queue.count())
-        code, response = self.rest.post("/api/sessions/import", body)
+        self.log("POST /api/sessions/import count=%s" % self.queue.count())
+        self.import_inflight = True
+        self.submit_rest("import", "POST", "/api/sessions/import", body=body, timeout=HTTP_FLUSH_TIMEOUT_S)
+
+    def _apply_import_result(self, result):
+        self.import_inflight = False
+        if not self.entering_sync or self.mode in ("UNPAIRED", "OFFLINE"):
+            return
+        code, response = self._result_tuple(result)
         if code == 401:
             self.enter_unpaired("/api/sessions/import")
-            return False
-        if code != 200:
+            return
+        ok = False
+        if code == 200:
+            try:
+                resp = json.loads(response)
+            except json.JSONDecodeError:
+                resp = None
+            if isinstance(resp, dict) and isinstance(resp.get("accepted"), list):
+                terminal = []
+                for item in resp["accepted"]:
+                    if isinstance(item, str) and item:
+                        terminal.append(item)
+                rejected = resp.get("rejected")
+                if isinstance(rejected, list):
+                    for row in rejected:
+                        if not isinstance(row, dict):
+                            continue
+                        cid = str(row.get("client_id") or "")
+                        self.log("flush row rejected id=%s err=%s" % (cid, row.get("error") or ""))
+                        if cid:
+                            terminal.append(cid)
+                self.queue.drop_by_client_id(terminal)
+                ok = self.queue.empty()
+                if not ok:
+                    self.log("flush incomplete; retryable rows remain queued")
+            else:
+                self.log("flush rejected: response parse failed")
+        else:
             self.log("flush rejected: http %s" % code)
-            return False
-        try:
-            resp = json.loads(response)
-        except json.JSONDecodeError:
-            self.log("flush rejected: response parse failed")
-            return False
-        accepted = resp.get("accepted")
-        if not isinstance(accepted, list):
-            self.log("flush rejected: no accepted array")
-            return False
-        terminal = []
-        for item in accepted:
-            if isinstance(item, str) and item:
-                terminal.append(item)
-        rejected = resp.get("rejected")
-        if isinstance(rejected, list):
-            for row in rejected:
-                if not isinstance(row, dict):
-                    continue
-                cid = str(row.get("client_id") or "")
-                self.log("flush row rejected id=%s err=%s" % (cid, row.get("error") or ""))
-                if cid:
-                    terminal.append(cid)
-        self.queue.drop_by_client_id(terminal)
-        if not self.queue.empty():
-            self.log("flush incomplete; retryable rows remain queued")
-            return False
-        return True
+        if ok:
+            self.on_import_done(True)
+            return
+        self.import_failures += 1
+        if self.import_failures >= IMPORT_RETRY_MAX:
+            self.note_error("session import failed %sx; syncing anyway" % self.import_failures)
+            self.on_import_done(False)
+            return
+        self.log("session import retry #%s in %ss" % (self.import_failures, int(RECONNECT_INTERVAL_S)))
+        self.import_retry_at = time.monotonic() + RECONNECT_INTERVAL_S
 
-    def _ensure_live_start_time(self):
-        """Live adopt requires start_time > 0. Stamp unix now; do not reconstruct."""
-        if self.model.is_live() and self.model.start_time <= 0.0:
-            self.model.set_start_time(float(int(time.time())))
+    def on_import_done(self, imported):
+        del imported
+        data = self.pending_sync_state
+        if data is None:
+            self.log("enter SYNC aborted: no phone state")
+            self.entering_sync = False
+            return
+        phone_status = str(data.get("status") or "stopped")
+        phone_stopped = phone_status == "stopped"
+        desk_live = self.model.is_live() and (self.model.local_owner or not self.ever_synced)
 
-    def try_adopt_local_timer(self):
-        if not self.host:
-            return -1
+        if desk_live:
+            # Always POST when live. Phone canAdopt / 409 decides same-session
+            # vs least-remaining. Do not pre-filter on remaining (that skips
+            # same-session refresh).
+            self.log("desk live -> try adopt")
+            self.adopt_inflight = True
+            self.submit_rest("adopt", "POST", "/api/timer/adopt", body=self.adopt_payload(), timeout=HTTP_FLUSH_TIMEOUT_S)
+            return
+
+        self.log("adopt result=skip desk_idle -> snap latest pending")
+        self.finish_enter_sync(snap=True)
+
+    def adopt_payload(self):
         remaining = float(self.model.displayed_seconds())
         duration = self.model.duration
         if duration <= 0.0:
@@ -676,7 +886,7 @@ class PomoClient:
         if rem > duration:
             rem = duration
         self._ensure_live_start_time()
-        body = {
+        return {
             "status": self.model.status,
             "phase": self.model.phase,
             "remaining": rem,
@@ -686,14 +896,26 @@ class PomoClient:
             "daily_goal": self.model.goal,
             "tag": "",
         }
-        self.log("POST /api/timer/adopt")
-        code, response = self.rest.post("/api/timer/adopt", body)
+
+    def _apply_adopt_result(self, result):
+        self.adopt_inflight = False
+        if not self.entering_sync or self.mode in ("UNPAIRED", "OFFLINE"):
+            return
+        code, response = self._result_tuple(result)
         if code == 401:
             self.enter_unpaired("/api/timer/adopt")
-            return -1
+            return
         if code == 0:
-            self.log("adopt result=transport_fail")
-            return -1
+            data = self.pending_sync_state
+            phone_stopped = data is None or str(data.get("status") or "stopped") == "stopped"
+            if phone_stopped:
+                self.entering_sync = False
+                self.log("adopt result=transport_fail (keep local)")
+                self.enter_offline("adopt transport fail")
+                return
+            self.log("adopt result=transport_fail phone_active -> snap latest pending")
+            self.finish_enter_sync(snap=True)
+            return
         if code == 409:
             self.log("adopt result=409 timer_busy")
             try:
@@ -703,91 +925,34 @@ class PomoClient:
             if isinstance(resp, dict) and isinstance(resp.get("state"), dict):
                 self.apply_phone_object(resp["state"], force=True)
                 self.log("adopt 409 applied phone state")
-                return 1
-            return 0
+                self.finish_enter_sync(snap=False)
+                return
+            self.finish_enter_sync(snap=True)
+            return
         if code != 200:
-            self.log("adopt result=http_%s (snap)" % code)
-            return 0
+            self.log("adopt result=http_%s (snap latest pending)" % code)
+            self.finish_enter_sync(snap=True)
+            return
         try:
             resp = json.loads(response)
         except json.JSONDecodeError:
-            self.model.apply_state(
-                self.model.status,
-                self.model.phase,
-                rem,
-                duration,
-                self.model.completed,
-                self.model.goal,
-                self.model.start_time,
-            )
-            return 1
+            self.log("adopt response parse failed (snap latest pending)")
+            self.finish_enter_sync(snap=True)
+            return
         if not resp.get("success"):
-            self.log("adopt result=success_false (snap)")
-            return 0
+            self.log("adopt result=success_false (snap latest pending)")
+            self.finish_enter_sync(snap=True)
+            return
         state = resp.get("state")
         if isinstance(state, dict):
             self.apply_phone_object(state, force=True)
-        else:
-            self.model.apply_state(
-                self.model.status,
-                self.model.phase,
-                rem,
-                duration,
-                self.model.completed,
-                self.model.goal,
-                self.model.start_time,
-            )
-        self.log("adopt result=ok")
-        return 1
+        self.log("adopt result=ok (phone owns clock)")
+        self.finish_enter_sync(snap=False)
 
-    def enter_sync_from_phone_state(self, data):
-        self.entering_sync = True
-        self.log("enter SYNC pipeline start")
-        phone_status = str(data.get("status") or "stopped")
-        phone_stopped = phone_status == "stopped"
-        desk_live = self.model.is_live() and (self.model.local_owner or not self.ever_synced)
-
-        flush_ok = self.flush_session_queue()
-        self.log("flush result=%s" % ("ok" if flush_ok else "failed"))
-        if self.mode == "UNPAIRED":
-            self.entering_sync = False
-            return
-        if not flush_ok:
-            self.queue_flush_pending = True
-            self.retry_started_at = time.monotonic()
-            self.retry_delay_s = RECONNECT_INTERVAL_S
-            self.entering_sync = False
-            self.message = "session import incomplete"
-            self.log("session import incomplete; staying CONNECTING")
-            return
-        self.queue_flush_pending = False
-
-        if desk_live:
-            # Always POST when live. Phone canAdopt / 409 decides same-session
-            # vs least-remaining. Do not pre-filter on remaining (that skips
-            # same-session refresh).
-            self.log("desk live -> try adopt")
-            adopt_result = self.try_adopt_local_timer()
-            if self.mode == "UNPAIRED":
-                self.entering_sync = False
-                return
-            if adopt_result < 0:
-                if phone_stopped:
-                    self.entering_sync = False
-                    self.log("adopt result=transport_fail (keep local)")
-                    self.enter_offline("adopt transport fail")
-                    return
-                self.log("adopt result=transport_fail phone_active -> snap")
-                self.apply_phone_object(data, force=True)
-            elif adopt_result == 0:
-                self.log("adopt result=snap (not applied)")
-                self.apply_phone_object(data, force=True)
-            else:
-                self.log("adopt result=ok (phone owns clock)")
-        else:
-            self.log("adopt result=skip desk_idle -> snap")
-            self.apply_phone_object(data, force=True)
-
+    def finish_enter_sync(self, snap=True):
+        if snap and self.pending_sync_state is not None:
+            self.apply_phone_object(self.pending_sync_state, force=True)
+        self.pending_sync_state = None
         self.config_fetch_failed = False
         self.last_config_fetch_at = time.monotonic()
         self.log("config fetch deferred until SYNC is stable")
@@ -795,8 +960,9 @@ class PomoClient:
         self.probe_active = False
         self.ever_synced = True
         self.entering_sync = False
+        self.import_failures = 0
+        self.import_retry_at = 0.0
         self.soft_resync_count = 0
-        self.pending_sync_state = None
         self.last_contact_at = time.monotonic()
         self.set_mode("SYNCED")
         self.message = ""
@@ -806,28 +972,47 @@ class PomoClient:
             self.log("WS died during enter-SYNC pipeline -> soft resync")
             self.soft_resync("ws drop during enter")
 
-    def tick_session_queue_retry(self):
-        if not self.queue_flush_pending or self.entering_sync or not self.pending_sync_state:
+    def tick_enter_sync(self):
+        if not self.entering_sync:
             return
-        now = time.monotonic()
-        if self.retry_delay_s and now - self.retry_started_at < self.retry_delay_s:
+        if self.import_inflight or self.adopt_inflight:
             return
-        self.log("retrying pending session import")
-        self.enter_sync_from_phone_state(self.pending_sync_state)
+        if self.import_retry_at and time.monotonic() >= self.import_retry_at:
+            self.import_retry_at = 0.0
+            self.start_import()
 
-    def fetch_and_cache_config(self):
-        if not self.host:
-            return False
-        code, response = self.rest.get_config()
+    def _ensure_live_start_time(self):
+        """Live adopt requires start_time > 0. Stamp unix now; do not reconstruct."""
+        if self.model.is_live() and self.model.start_time <= 0.0:
+            self.model.set_start_time(float(int(time.time())))
+
+    def tick_config_refresh(self):
+        now = time.monotonic()
+        every = CONFIG_RETRY_S if self.config_fetch_failed else CONFIG_REFRESH_S
+        if self.last_config_fetch_at and now - self.last_config_fetch_at < every:
+            return
+        if self.config_inflight:
+            return
+        self.last_config_fetch_at = now
+        self.config_inflight = True
+        self.submit_rest("config", "GET", "/api/config")
+
+    def _apply_config_result(self, result):
+        self.config_inflight = False
+        code, response = self._result_tuple(result)
         if code == 401:
             self.enter_unpaired("GET /api/config")
-            return False
+            self.config_fetch_failed = True
+            return
         if code != 200:
-            return False
+            self.config_fetch_failed = True
+            self.log("config refresh failed; will retry")
+            return
         try:
             doc = json.loads(response)
         except json.JSONDecodeError:
-            return False
+            self.config_fetch_failed = True
+            return
         durations = doc.get("durations") if isinstance(doc.get("durations"), dict) else {}
         work = durations.get("work", self.store.work_minutes)
         short_m = durations.get("short_break", self.store.short_minutes)
@@ -841,27 +1026,13 @@ class PomoClient:
         self.store.set_durations(work, short_m, long_m, long_after, goal)
         self.store.save()
         self.model.set_config(work, short_m, long_m, long_after, goal)
+        self.config_fetch_failed = False
         self.log("config cached %s/%s/%s after=%s goal=%s" % (work, short_m, long_m, long_after, goal))
-        return True
-
-    def tick_config_refresh(self):
-        now = time.monotonic()
-        every = CONFIG_RETRY_S if self.config_fetch_failed else CONFIG_REFRESH_S
-        if self.last_config_fetch_at and now - self.last_config_fetch_at < every:
-            return
-        self.last_config_fetch_at = now
-        if self.fetch_and_cache_config():
-            self.config_fetch_failed = False
-        else:
-            self.config_fetch_failed = True
-            self.log("config refresh failed; will retry")
 
     def tick_heartbeat(self):
         now = time.monotonic()
-        if self.mode == "CONNECTING" and self.queue_flush_pending:
-            self.tick_session_queue_retry()
-            if self.queue_flush_pending or self.entering_sync:
-                return
+        if self.mode == "CONNECTING":
+            self.tick_enter_sync()
         if self.mode == "SYNCED" and not self.entering_sync:
             self.tick_config_refresh()
         if self.entering_sync or self.mode == "UNPAIRED":
@@ -917,20 +1088,7 @@ class PomoClient:
             self.tick_discovery()
             return
         if self.mode == "OFFLINE":
-            now = time.monotonic()
-            if self.host:
-                if self.last_poll_at == 0 or now - self.last_poll_at >= OFFLINE_PROBE_S:
-                    self.last_poll_at = now
-                    if self.fetch_status():
-                        self.log("phone reachable while OFFLINE -> reconnect known host")
-                        self.retry_delay_s = 0
-                        self.prefer_known_host = True
-                        self.set_mode("DISCOVERING")
-                        return
-            if self.retry_delay_s and now - self.retry_started_at >= self.retry_delay_s:
-                self.retry_delay_s = 0
-                self.log("rediscover timer elapsed -> DISCOVERING")
-                self.set_mode("DISCOVERING")
+            self.tick_offline()
             return
         if self.mode in ("CONNECTING", "SYNCED"):
             self.tick_heartbeat()
@@ -942,11 +1100,16 @@ class PomoClient:
                     self.retry_delay_s = 0
                     self.set_mode("DISCOVERING")
 
-    def post_command(self, path, body=None):
-        code, response = self.rest.post(path, body if body is not None else "")
+    def post_command(self, tag, path, body=None):
+        """Submit the gesture POST; completion in _apply_gesture_result."""
+        self.submit_rest(tag, "POST", path, body=body if body is not None else "")
+
+    def _apply_gesture_result(self, tag, result):
+        self.busy = False
+        code, response = self._result_tuple(result)
         if code == 401:
-            self.enter_unpaired(path)
-            return False
+            self.enter_unpaired(tag)
+            return
         if code == 200:
             try:
                 doc = json.loads(response) if response else {}
@@ -958,30 +1121,28 @@ class PomoClient:
                 # Applied on the phone but no state came back: reconcile via a
                 # soft resync on the next tick so the UI cannot sit stale.
                 self.resync_after_command = True
-            return True
+            return
         if code == 0:
-            self.note_error("%s failed: phone unreachable" % path)
-            return False
-        self.note_error("%s failed: http %s" % (path, code))
-        return False
+            self.note_error("%s failed: phone unreachable" % tag)
+            return
+        self.note_error("%s failed: http %s" % (tag, code))
 
     def send_gesture(self, gesture):
+        """Returns True when the gesture went async on the phone path (busy
+        stays set until the result lands), False when applied locally."""
         if self.phone_commands_active():
             self.busy = True
-            try:
-                if gesture == "toggle":
-                    self.post_command("/api/toggle", "")
-                elif gesture == "skip":
-                    self.post_command("/api/skip", "")
-                elif gesture == "reset":
-                    self.post_command("/api/reset", "")
-                elif gesture == "extend":
-                    self.post_command("/api/extend", {"seconds_delta": EXTEND_SECONDS})
-            finally:
-                self.busy = False
-            return
+            if gesture == "toggle":
+                self.post_command("toggle", "/api/toggle", "")
+            elif gesture == "skip":
+                self.post_command("skip", "/api/skip", "")
+            elif gesture == "reset":
+                self.post_command("reset", "/api/reset", "")
+            elif gesture == "extend":
+                self.post_command("extend", "/api/extend", {"seconds_delta": EXTEND_SECONDS})
+            return True
         if not self.model.local_owner:
-            return
+            return False
         if gesture == "toggle":
             self.model.toggle()
         elif gesture == "skip":
@@ -990,3 +1151,4 @@ class PomoClient:
             self.model.reset()
         elif gesture == "extend":
             self.model.extend(EXTEND_SECONDS)
+        return False

@@ -30,6 +30,7 @@ HTTP_FLUSH_TIMEOUT_S = 5.0
 
 IMPORT_MAX_FUTURE_S = 5 * 60
 IMPORT_MAX_AGE_S = 14 * 24 * 60 * 60
+IMPORT_RETRY_MAX = 3
 
 STATUSES = ("stopped", "running", "paused")
 PHASES = ("work", "short", "long")

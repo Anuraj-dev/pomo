@@ -194,33 +194,70 @@ class GestureQueueTest(unittest.TestCase):
         self.assertTrue(self.engine.status_payload()["busy"])
 
 
+class FakeWorker:
+    """Deterministic stand-in for RestWorker: jobs queue up; the test runs
+    them and feeds results back explicitly."""
+
+    def __init__(self):
+        self.jobs = []
+        self.results = __import__("queue").Queue()
+
+    def submit(self, tag, func):
+        self.jobs.append((tag, func))
+
+    def stop(self):
+        pass
+
+
+def run_pending_jobs(client, count=1):
+    """Execute up to `count` queued jobs synchronously and apply results."""
+    ran = 0
+    while client.worker.jobs and ran < count:
+        tag, func = client.worker.jobs.pop(0)
+        try:
+            result = func()
+        except Exception as exc:
+            result = exc
+        client.apply_result(tag, result)
+        ran += 1
+    return ran
+
+
 class GestureFailureTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="pomo-fail-")
         self.engine = Engine(directory=self.dir)
         self.engine.client.ws = StubWS()
         self.engine.client.rest = StubRest()
+        self.engine.client.worker = FakeWorker()
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)
 
-    def test_unreachable_phone_gesture_emits_error(self):
+    def _synced(self, rest=None):
         engine = self.engine
         engine.client.host = "h"
         engine.client.token = "t"
+        if rest is not None:
+            engine.client.rest = rest
         engine.client.set_mode("SYNCED")
+
+    def test_unreachable_phone_gesture_emits_error(self):
+        self._synced()
+        engine = self.engine
         engine.client.send_gesture("toggle")
+        self.assertTrue(engine.client.busy)
+        run_pending_jobs(engine.client)
+        self.assertFalse(engine.client.busy)
         errors = engine.client.drain_errors()
         self.assertEqual(len(errors), 1)
         self.assertIn("unreachable", errors[0])
 
     def test_success_without_state_schedules_resync(self):
+        self._synced(rest=StubRest(results=[(200, '{"success": true}')]))
         engine = self.engine
-        engine.client.host = "h"
-        engine.client.token = "t"
-        engine.client.rest = StubRest(results=[(200, '{"success": true}')])
-        engine.client.set_mode("SYNCED")
         engine.client.send_gesture("toggle")
+        run_pending_jobs(engine.client)
         self.assertTrue(engine.client.resync_after_command)
         engine.client.tick()
         self.assertFalse(engine.client.resync_after_command)
@@ -229,11 +266,8 @@ class GestureFailureTest(unittest.TestCase):
         import io
         import pomo_link.main as main_mod
 
+        self._synced()
         engine = self.engine
-        engine.client.host = "h"
-        engine.client.token = "t"
-        engine.client.rest = StubRest(results=[(0, "")])
-        engine.client.set_mode("SYNCED")
         engine.handle_line('{"cmd":"toggle"}')
         captured = io.StringIO()
         orig_stdout = sys.stdout
@@ -242,8 +276,7 @@ class GestureFailureTest(unittest.TestCase):
         try:
             sys.stdout = captured
             engine.drain_pending_gesture()
-            # The loop body drains client errors into _emit_error each
-            # iteration; exercise that exact path here.
+            run_pending_jobs(engine.client)
             for msg in engine.client.drain_errors():
                 main_mod._emit_error(msg)
         finally:
@@ -253,34 +286,33 @@ class GestureFailureTest(unittest.TestCase):
         self.assertIsNone(engine.pending_gesture)
 
     def test_busy_true_emitted_before_slow_post(self):
-        engine = self.engine
-        engine.client.host = "h"
-        engine.client.token = "t"
+        import io
+        import json as json_mod
+        import time as _t
 
         class SlowThenOkRest(StubRest):
             def request(self, method, path, **kwargs):
                 self.calls.append((method, path))
-                import time as _t
                 _t.sleep(0.05)
                 return 200, '{"success": true, "state": {"status": "running", "phase": "work", "remaining": 100.0, "duration": 1500.0, "completed": 0, "daily_goal": 8, "start_time": 1.0}}'
 
-        engine.client.rest = SlowThenOkRest()
-        engine.client.set_mode("SYNCED")
+        self._synced(rest=SlowThenOkRest())
+        engine = self.engine
         engine.handle_line('{"cmd":"toggle"}')
-        import io
         captured = io.StringIO()
         orig_stdout = sys.stdout
         try:
             sys.stdout = captured
             engine.drain_pending_gesture()
+            run_pending_jobs(engine.client)
+            engine.emit_status(force=True)
         finally:
             sys.stdout = orig_stdout
-        lines = [
-            line
+        payload = [
+            json_mod.loads(line)
             for line in captured.getvalue().splitlines()
             if line.strip().startswith("{")
         ]
-        payload = [__import__("json").loads(line) for line in lines]
         busy_flags = [p.get("busy") for p in payload if p.get("type") == "status"]
         self.assertIn(True, busy_flags)
         self.assertEqual(busy_flags[-1], False)
