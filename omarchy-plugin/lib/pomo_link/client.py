@@ -173,6 +173,7 @@ class PomoClient:
         self.zero_observed_at = 0.0
         self.zero_refresh_at = 0.0
         self.zero_session = None
+        self.zero_refresh_session = None
 
     def log(self, text):
         self.log_lines.append(text)
@@ -527,6 +528,8 @@ class PomoClient:
 
     def _apply_status_result(self, result):
         self.status_inflight = False
+        zero_refresh_session = self.zero_refresh_session
+        self.zero_refresh_session = None
         code, body = self._result_tuple(result)
         if self.mode == "OFFLINE":
             if code == 401:
@@ -545,6 +548,12 @@ class PomoClient:
             except json.JSONDecodeError:
                 data = None
             if isinstance(data, dict):
+                if (
+                    zero_refresh_session is not None
+                    and (self.model.start_time, self.model.phase) != zero_refresh_session
+                ):
+                    self.log("zero refresh ignored (session changed)")
+                    return
                 self.apply_phone_object(data, force=False)
             return
 
@@ -1029,6 +1038,7 @@ class PomoClient:
         if self.status_inflight or now - self.zero_refresh_at < 3.0:
             return
         self.zero_refresh_at = now
+        self.zero_refresh_session = session
         self.status_inflight = True
         self.submit_rest("status", "GET", "/api/status")
 

@@ -222,18 +222,77 @@ class OfflineProbeTest(EnterSyncBase):
 
 class ZeroRefreshTest(EnterSyncBase):
     def test_zero_running_state_refreshes_after_delay_without_local_completion(self):
+        self.client.rest = StubRest(results=[(200, json.dumps({
+            "status": "running", "phase": "work", "remaining": 0,
+            "duration": 1500, "completed": 0, "start_time": 1710000000,
+        }))])
         self.client.set_mode("SYNCED")
         self.client.apply_phone_object({
             "status": "running", "phase": "work", "remaining": 0,
             "duration": 1500, "completed": 0, "start_time": 1710000000,
         })
         self.client.model.received_at_mono = 10.0
-        self.client.zero_session = (1710000000.0, "work")
+        clock = [10.0]
+        with patch.object(client_module.time, "monotonic", side_effect=lambda: clock[0]):
+            self.client.tick_zero_refresh()
+            clock[0] = 12.1
+            self.client.tick_zero_refresh()
+            self.assertEqual([tag for tag, _func in self.client.worker.jobs], ["status"])
+            self.assertTrue(self.client.status_inflight)
+            self.client.tick_zero_refresh()
+            self.assertEqual(len(self.client.worker.jobs), 1, "in-flight refresh is reused")
+
+            tag, job = self.client.worker.jobs.pop(0)
+            self.client.apply_result(tag, job())
+            self.assertFalse(self.client.status_inflight)
+            self.assertEqual(self.client.model.status, "running")
+            self.assertEqual(self.engine.pending_events, [])
+            self.assertEqual(self.client.queue.count(), 0)
+
+            clock[0] = 13.0
+            self.client.tick_zero_refresh()
+            self.assertEqual(self.client.worker.jobs, [], "zero refresh is throttled")
+
+            self.client.apply_phone_object({
+                "status": "running", "phase": "work", "remaining": 5,
+                "duration": 1500, "completed": 0, "start_time": 1710000000,
+            })
+            self.assertEqual(self.client.zero_observed_at, 0.0)
+            self.assertIsNone(self.client.zero_session)
+
+            self.client.zero_session = (1710000000.0, "work")
+            self.client.zero_observed_at = 12.1
+            self.client.apply_phone_object({
+                "status": "running", "phase": "short", "remaining": 0,
+                "duration": 300, "completed": 1, "start_time": 1710000001,
+            })
+            self.assertEqual(self.client.zero_observed_at, 0.0)
+            self.assertIsNone(self.client.zero_session)
+
+    def test_zero_refresh_result_cannot_overwrite_new_websocket_session(self):
+        old_state = {
+            "status": "running", "phase": "work", "remaining": 0,
+            "duration": 1500, "completed": 0, "start_time": 1111,
+            "server_time": 100,
+        }
+        self.client.rest = StubRest(results=[(200, json.dumps(old_state))])
+        self.client.set_mode("SYNCED")
+        self.client.apply_phone_object(old_state)
+        self.client.model.received_at_mono = 10.0
+        self.client.zero_session = (1111.0, "work")
         self.client.zero_observed_at = 10.0
         with patch.object(client_module.time, "monotonic", return_value=12.1):
             self.client.tick_zero_refresh()
-        self.assertEqual(self.client.worker.jobs[0][0], "status")
-        self.assertEqual(self.client.model.status, "running")
+            self.assertTrue(self.client.status_inflight)
+            tag, job = self.client.worker.jobs.pop(0)
+            old_result = job()
+
+            self.client.on_websocket_text(state_frame(int(time.time()), 90.0, 2222.0))
+            self.client.apply_result(tag, old_result)
+
+        self.assertFalse(self.client.status_inflight)
+        self.assertEqual(self.client.model.start_time, 2222.0)
+        self.assertEqual(self.client.model.remaining, 90.0)
 
 
 if __name__ == "__main__":
