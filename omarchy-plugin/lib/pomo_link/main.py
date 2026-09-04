@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import select
 import signal
 import sys
@@ -14,10 +15,32 @@ from .queue import SessionQueue
 from .store import ConfigStore, wall_adjust_remaining
 from .timer import TimerModel
 
+_last_error_message = ""
+_last_error_at = 0.0
+
+GESTURE_COMMANDS = ("toggle", "skip", "reset", "extend")
+
 
 def _emit(obj):
     sys.stdout.write(json.dumps(obj, separators=(",", ":")) + "\n")
     sys.stdout.flush()
+
+
+def _emit_error(message):
+    """Best-effort error event. Must never raise — a broken stdout would
+    otherwise turn one loop exception into a live-lock. The same message is
+    suppressed for 5s so a persistent failure cannot flood the UI at ~5 Hz."""
+    global _last_error_message, _last_error_at
+    text = str(message or "")[:200]
+    now = time.monotonic()
+    if text == _last_error_message and now - _last_error_at < 5.0:
+        return
+    _last_error_message = text
+    _last_error_at = now
+    try:
+        _emit({"type": "error", "message": text})
+    except Exception:
+        pass
 
 
 class Engine:
@@ -33,6 +56,7 @@ class Engine:
         )
         self.queue = SessionQueue(self.store.sessions_path)
         self.queue.strip_implausible_starts(int(time.time()))
+        self.pending_events = []
         self.model.phase_complete_handler = self._on_phase_complete
         self.model.session_complete_handler = self._on_session_complete
         self._restore_timer()
@@ -46,13 +70,99 @@ class Engine:
         self.last_status = None
         self.last_status_at = 0.0
         self.running = True
-        self.pending_events = []
+        # Last-wins gesture slot: a press replaces the queued one instead of
+        # queueing behind it, so 3x Start is one toggle, not start-pause-start.
+        self.pending_gesture = None
+        self._stdin_remainder = b""
+        try:
+            os.set_blocking(sys.stdin.fileno(), False)
+        except (OSError, ValueError):
+            pass
+
+    def _drain_stdin(self):
+        """Read every complete stdin line available now.
+
+        Raw os.read on the fd: select() on sys.stdin cannot see bytes already
+        buffered inside TextIOWrapper, so one readline per wake could stall on
+        line 2 until line 3 arrived.
+        """
+        if sys.stdin.closed:
+            return
+        fd = sys.stdin.fileno()
+        while True:
+            try:
+                chunk = os.read(fd, 4096)
+            except (BlockingIOError, InterruptedError):
+                return
+            except OSError:
+                self.running = False
+                return
+            if not chunk:
+                self.running = False
+                return
+            data = self._stdin_remainder + chunk
+            lines = data.split(b"\n")
+            self._stdin_remainder = lines.pop()
+            for raw in lines:
+                self.handle_line(raw.decode("utf-8", "replace"))
+
+    def drain_pending_gesture(self):
+        if self.pending_gesture is None or self.client.busy:
+            return
+        if not (self.client.phone_commands_active() or self.model.local_owner):
+            # Held until the mode change that allows it (BOOT / first
+            # CONNECTING / enter-SYNC). Never dropped silently.
+            return
+        gesture = self.pending_gesture
+        if self.client.message == "waiting to connect":
+            self.client.message = ""
+        # Announce busy, then submit. On the phone path the gesture goes to
+        # the worker and busy stays set until its result lands; on the local
+        # path it is applied synchronously and busy is released here.
+        self.client.busy = True
+        self.emit_status(force=True)
+        try:
+            went_async = self.client.send_gesture(gesture)
+        except Exception:
+            self.client.busy = False
+            raise
+        self.pending_gesture = None
+        if not went_async:
+            self.client.busy = False
+            if self.model.local_owner:
+                if self.model.is_live():
+                    self.persist_live_timer()
+                else:
+                    self.clear_live_timer()
+        self.emit_status(force=True)
 
     def _restore_timer(self):
         snap = self.store.load_timer_snapshot()
         if not snap:
             return
         rem = wall_adjust_remaining(snap)
+        if snap["status"] == "running" and rem <= 0.0:
+            self.store.clear_timer_snapshot()
+            if snap.get("start_time", 0.0) > 0.0 and snap.get("duration", 0.0) > 0.0:
+                today = time.strftime("%Y-%m-%d")
+                self.model.completed_date = snap.get("completed_date", "")
+                if self.model.completed_date and self.model.completed_date != today:
+                    self.model.completed = 0
+                    self.model.completed_date = today
+                else:
+                    if not self.model.completed_date:
+                        self.model.completed_date = today
+                    self.model.completed = snap.get("completed", 0)
+                self.model.restore_live_state(
+                    "running",
+                    snap["phase"],
+                    0.0,
+                    snap["duration"],
+                    self.model.completed,
+                    snap["start_time"],
+                )
+                self.model._handle_local_complete()
+            return
         if not self.model.restore_live_state(
             snap["status"],
             snap["phase"],
@@ -63,6 +173,7 @@ class Engine:
         ):
             self.store.clear_timer_snapshot()
             return
+        self.model.completed_date = snap.get("completed_date", "")
         if snap.get("goal") is not None and int(snap["goal"]) >= 0:
             self.model.set_config(
                 self.model.work_minutes,
@@ -101,6 +212,7 @@ class Engine:
             "duration": self.model.duration,
             "start_time": self.model.start_time,
             "completed": self.model.completed,
+            "completed_date": self.model.completed_date,
             "goal": self.model.goal,
             "saved_epoch": int(time.time()),
         }
@@ -114,6 +226,7 @@ class Engine:
         self.last_timer_snap_at = 0.0
 
     def status_payload(self):
+        local_today = time.strftime("%Y-%m-%d")
         remaining = self.model.displayed_seconds()
         if self.model.is_stopped() and self.model.has_state:
             remaining = int(self.model.duration)
@@ -126,10 +239,13 @@ class Engine:
             "remaining": remaining,
             "duration": int(self.model.duration),
             "completed": self.model.completed,
+            "date": self.model.date,
+            "local_today": local_today,
             "goal": self.model.goal,
             "start_time": self.model.start_time,
             "local_owner": self.model.local_owner,
             "ever_synced": self.client.ever_synced,
+            "busy": self.client.busy,
             "host": self.client.host,
             "port": self.client.port,
             "has_token": bool(self.client.token),
@@ -147,7 +263,7 @@ class Engine:
             and now - self.last_status_at < interval
         ):
             return
-        # remaining changes every second while running even if other fields match
+        # remaining/busy change without other fields moving
         if (
             not force
             and self.last_status
@@ -155,6 +271,7 @@ class Engine:
             and payload.get("mode") == self.last_status.get("mode")
             and payload.get("status") == self.last_status.get("status")
             and payload.get("phase") == self.last_status.get("phase")
+            and payload.get("busy") == self.last_status.get("busy")
             and now - self.last_status_at < interval
         ):
             return
@@ -197,14 +314,16 @@ class Engine:
         if cmd == "ping":
             self.emit_status(force=True)
             return
-        if cmd in ("toggle", "skip", "reset", "extend"):
-            self.client.send_gesture(cmd)
-            if self.model.local_owner:
-                if self.model.is_live():
-                    self.persist_live_timer()
-                else:
-                    self.clear_live_timer()
-            self.emit_status(force=True)
+        if cmd in GESTURE_COMMANDS:
+            self.pending_gesture = cmd
+            if self.client.message == "waiting to connect":
+                self.client.message = ""
+            if not (
+                self.client.phone_commands_active() or self.model.local_owner
+            ):
+                if not self.client.message:
+                    self.client.message = "waiting to connect"
+                self.emit_status(force=True)
             return
         if cmd == "pair":
             data = payload
@@ -241,46 +360,83 @@ class Engine:
     def loop(self):
         self.emit_status(force=True)
         while self.running:
-            timeout = 0.2
-            readers = []
-            if not sys.stdin.closed:
-                readers.append(sys.stdin)
-            if self.client.ws.connected and self.client.ws.sock is not None:
-                readers.append(self.client.ws.sock)
             try:
-                ready, _, _ = select.select(readers, [], [], timeout)
-            except (InterruptedError, ValueError):
-                ready = []
+                self._loop_once()
+            except Exception as exc:
+                try:
+                    sys.stderr.write("[pomo-link] loop error: %r\n" % (exc,))
+                    sys.stderr.flush()
+                except Exception:
+                    pass
+                _emit_error("engine error: %s" % exc)
 
-            if sys.stdin in ready:
-                line = sys.stdin.readline()
-                if line == "":
-                    self.running = False
-                    break
-                self.handle_line(line)
+    def _loop_once(self):
+        timeout = 0.2
+        readers = []
+        stdin_fd = None if sys.stdin.closed else sys.stdin.fileno()
+        if stdin_fd is not None:
+            readers.append(stdin_fd)
+        if self.client.ws.connected and self.client.ws.sock is not None:
+            readers.append(self.client.ws.sock)
+        try:
+            ready, _, _ = select.select(readers, [], [], timeout)
+        except (InterruptedError, ValueError):
+            ready = []
 
-            finished = self.model.tick()
-            if finished:
-                self.emit_status(force=True)
-            if self.client.last_event:
-                event = self.client.last_event
-                self.client.last_event = None
-                _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
-            while self.pending_events:
-                _emit(self.pending_events.pop(0))
+        if stdin_fd is not None and stdin_fd in ready:
+            self._drain_stdin()
+        if not self.running:
+            return
 
-            self.client.tick()
-            for line in self.client.drain_logs():
-                sys.stderr.write("[pomo-link] %s\n" % line)
-                sys.stderr.flush()
+        finished = self.model.tick()
+        if finished:
+            self.emit_status(force=True)
+        if self.client.last_event:
+            event = self.client.last_event
+            self.client.last_event = None
+            _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
+        while self.pending_events:
+            _emit(self.pending_events.pop(0))
 
-            self.tick_persist()
-            self.emit_status(force=False)
+        self.client.tick()
+        self.client.drain_worker_results()
+        self.ensure_local_day()
+        for msg in self.client.drain_errors():
+            _emit_error(msg)
+        self.drain_pending_gesture()
+        for line in self.client.drain_logs():
+            sys.stderr.write("[pomo-link] %s\n" % line)
+            sys.stderr.flush()
+
+        self.tick_persist()
+        self.emit_status(force=False)
+
+    def ensure_local_day(self):
+        if self.client.mode == "SYNCED" or not self.model.local_owner:
+            return False
+        today = time.strftime("%Y-%m-%d")
+        if self.model.completed_date == today:
+            return False
+        had_date = bool(self.model.completed_date)
+        self.model.completed_date = today
+        if had_date:
+            self.model.completed = 0
+        if self.model.is_live():
+            self.persist_live_timer()
+        return True
 
 
 def main(argv=None):
     del argv
-    engine = Engine()
+    try:
+        engine = Engine()
+    except Exception as exc:
+        try:
+            sys.stderr.write("[pomo-link] init failed: %r\n" % (exc,))
+            sys.stderr.flush()
+        except Exception:
+            pass
+        return 1
 
     def _stop(_signum, _frame):
         engine.running = False
@@ -293,6 +449,7 @@ def main(argv=None):
         if engine.model.local_owner and engine.model.is_live():
             engine.persist_live_timer()
         engine.client.ws.close()
+        engine.client.worker.stop()
     return 0
 
 

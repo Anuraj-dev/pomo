@@ -2,13 +2,26 @@ import os
 import sys
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from pomo_link.timer import TimerModel
+import pomo_link.timer as timer_module
 
 
 class StaleFrameRejectionTest(unittest.TestCase):
+    def test_local_running_projection_uses_wall_clock_jump(self):
+        model = TimerModel()
+        model.status = "running"
+        model.local_owner = True
+        model.remaining = 100.0
+        model.duration = 100.0
+        model.received_at_epoch = 1000.0
+        with patch.object(timer_module.time, "time", side_effect=[1000.0, 1007.0]):
+            self.assertEqual(model.displayed_seconds(), 100)
+            self.assertEqual(model.displayed_seconds(), 93)
+
     def _running(self, remaining, server_time, epoch_now=None, duration=1500.0, start=1710000000.0):
         model = TimerModel()
         if epoch_now is None:
