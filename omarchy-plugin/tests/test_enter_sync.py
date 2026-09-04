@@ -5,6 +5,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
@@ -217,6 +218,22 @@ class OfflineProbeTest(EnterSyncBase):
         run_pending_jobs(self.client)
         self.assertEqual(self.client.mode, "DISCOVERING")
         self.assertTrue(self.client.prefer_known_host)
+
+
+class ZeroRefreshTest(EnterSyncBase):
+    def test_zero_running_state_refreshes_after_delay_without_local_completion(self):
+        self.client.set_mode("SYNCED")
+        self.client.apply_phone_object({
+            "status": "running", "phase": "work", "remaining": 0,
+            "duration": 1500, "completed": 0, "start_time": 1710000000,
+        })
+        self.client.model.received_at_mono = 10.0
+        self.client.zero_session = (1710000000.0, "work")
+        self.client.zero_observed_at = 10.0
+        with patch.object(client_module.time, "monotonic", return_value=12.1):
+            self.client.tick_zero_refresh()
+        self.assertEqual(self.client.worker.jobs[0][0], "status")
+        self.assertEqual(self.client.model.status, "running")
 
 
 if __name__ == "__main__":

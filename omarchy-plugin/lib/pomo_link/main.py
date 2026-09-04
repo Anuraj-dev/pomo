@@ -141,6 +141,16 @@ class Engine:
         if not snap:
             return
         rem = wall_adjust_remaining(snap)
+        if snap["status"] == "running" and rem <= 0.0:
+            self.store.clear_timer_snapshot()
+            if snap.get("start_time", 0.0) > 0.0 and snap.get("duration", 0.0) > 0.0:
+                self._on_session_complete(
+                    snap["phase"],
+                    snap["duration"],
+                    snap.get("completed", 0),
+                    snap["start_time"],
+                )
+            return
         if not self.model.restore_live_state(
             snap["status"],
             snap["phase"],

@@ -1,10 +1,13 @@
 import os
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 
 from pomo_link.adopt import can_adopt, is_same_session
+from pomo_link.main import Engine
 
 
 def phone(**kwargs):
@@ -99,6 +102,24 @@ class LeastRemainingAdoptTest(unittest.TestCase):
         current = phone(status="running", remaining=500.0, start_time=1.0, phase="work")
         desk = payload(status="stopped", remaining=0.0, start_time=2.0, phase="work")
         self.assertFalse(can_adopt(current, desk))
+
+    def test_equal_start_time_requires_equal_phase(self):
+        current = phone(status="running", remaining=500.0, start_time=42.0, phase="work")
+        desk = payload(status="running", remaining=100.0, start_time=42.0, phase="short")
+        self.assertFalse(is_same_session(current, desk))
+
+    def test_adopt_reconstructs_missing_start_time_from_firmware_semantics(self):
+        with tempfile.TemporaryDirectory() as directory, patch("pomo_link.client.time.time", return_value=2000):
+            engine = Engine(directory=directory)
+            engine.client.enter_offline("test")
+            engine.model.status = "running"
+            engine.model.duration = 1500.0
+            engine.model.remaining = 1200.0
+            engine.model.start_time = 0.0
+            engine.model.arm_running_baseline()
+            adopted = engine.client.adopt_payload()
+            self.assertEqual(adopted["start_time"], 1700.0)
+            self.assertEqual(engine.model.start_time, 1700.0)
 
 
 if __name__ == "__main__":

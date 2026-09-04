@@ -170,6 +170,9 @@ class PomoClient:
         self.adopt_inflight = False
         self.import_failures = 0
         self.import_retry_at = 0.0
+        self.zero_observed_at = 0.0
+        self.zero_refresh_at = 0.0
+        self.zero_session = None
 
     def log(self, text):
         self.log_lines.append(text)
@@ -393,6 +396,15 @@ class PomoClient:
             epoch_now,
             force,
         )
+        if ok:
+            session = (self.model.start_time, self.model.phase)
+            if (
+                not self.model.is_running()
+                or self.model.displayed_seconds() > 0
+                or (self.zero_session is not None and session != self.zero_session)
+            ):
+                self.zero_observed_at = 0.0
+                self.zero_session = None
         if not ok:
             self.log("state frame ignored (stale/out-of-order)")
         return ok
@@ -987,9 +999,38 @@ class PomoClient:
             self.start_import()
 
     def _ensure_live_start_time(self):
-        """Live adopt requires start_time > 0. Stamp unix now; do not reconstruct."""
-        if self.model.is_live() and self.model.start_time <= 0.0:
-            self.model.set_start_time(float(int(time.time())))
+        """Ensure a live adopt has the firmware's stable epoch identity."""
+        if not self.model.is_live() or self.model.start_time > 0.0:
+            return
+        now = int(time.time())
+        if now <= 0:
+            return
+        displayed = self.model.displayed_seconds()
+        elapsed = max(0.0, self.model.duration - displayed)
+        start_time = now - elapsed
+        if start_time > 0.0:
+            self.model.set_start_time(start_time)
+
+    def tick_zero_refresh(self):
+        if self.mode != "SYNCED" or not self.model.is_running():
+            return
+        if self.model.displayed_seconds() > 0:
+            self.zero_observed_at = 0.0
+            self.zero_session = None
+            return
+        session = (self.model.start_time, self.model.phase)
+        if self.zero_session != session:
+            self.zero_session = session
+            self.zero_observed_at = time.monotonic()
+            return
+        now = time.monotonic()
+        if now - self.zero_observed_at < 2.0:
+            return
+        if self.status_inflight or now - self.zero_refresh_at < 3.0:
+            return
+        self.zero_refresh_at = now
+        self.status_inflight = True
+        self.submit_rest("status", "GET", "/api/status")
 
     def tick_config_refresh(self):
         now = time.monotonic()
@@ -1097,6 +1138,8 @@ class PomoClient:
             return
         if self.mode in ("CONNECTING", "SYNCED"):
             self.tick_heartbeat()
+            if self.mode == "SYNCED":
+                self.tick_zero_refresh()
             return
         if self.mode == "UNPAIRED":
             if time.monotonic() - self.retry_started_at >= self.retry_delay_s:
