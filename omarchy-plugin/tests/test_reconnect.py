@@ -170,6 +170,11 @@ class ReconnectTest(unittest.TestCase):
         self.ws.fail = True
         self.assertTrue(self.client.soft_resync("reconnect connect stale"))
         self.assertEqual([tag for tag, _func in self.worker.jobs], ["soft_resync"])
+        self.worker.run_next(self.client)
+        self.assertTrue(self.model.local_owner)
+        self.assertEqual(self.client.mode, "OFFLINE")
+        self.assertEqual([tag for tag, _func in self.worker.jobs], ["connect"])
+        self.worker.run_next(self.client)
         self.assertTrue(self.model.local_owner)
         self.assertEqual(self.client.mode, "OFFLINE")
 
