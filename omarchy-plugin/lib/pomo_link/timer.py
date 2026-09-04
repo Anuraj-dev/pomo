@@ -31,6 +31,8 @@ class TimerModel:
         self.duration = 0.0
         self.start_time = 0.0
         self.completed = 0
+        self.date = ""
+        self.completed_date = ""
         self.goal = DEFAULT_GOAL
         self.received_at_mono = time.monotonic()
         self.received_at_epoch = time.time()

@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "today.js" as Today
 
 Panel {
   id: root
@@ -147,8 +148,7 @@ Panel {
 
   function todayLine() {
     if (!pomo) return ""
-    if (pomo.goal > 0) return pomo.completed + " / " + pomo.goal + " today"
-    return pomo.completed + " today"
+    return Today.formatTodayLine(pomo.completed, pomo.goal, pomo.date, pomo.localToday)
   }
 
   KeyboardPanel {

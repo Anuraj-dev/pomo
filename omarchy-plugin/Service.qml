@@ -20,6 +20,8 @@ Item {
   property int duration: 0
   property int completed: 0
   property int goal: 8
+  property string date: ""
+  property string localToday: ""
   property double startTime: 0
   property bool localOwner: false
   property bool everSynced: false
@@ -204,6 +206,8 @@ Item {
     duration = Number(parsed.duration || 0)
     completed = Number(parsed.completed || 0)
     goal = parsed.goal === undefined || parsed.goal === null ? goal : Number(parsed.goal)
+    date = typeof parsed.date === "string" ? parsed.date : ""
+    localToday = typeof parsed.local_today === "string" ? parsed.local_today : ""
     startTime = Number(parsed.start_time || 0)
     localOwner = parsed.local_owner === true
     everSynced = parsed.ever_synced === true

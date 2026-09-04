@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import date as date_type
 
 from .constants import (
     DEFAULT_GOAL,
@@ -155,6 +156,7 @@ class ConfigStore:
             "completed": int(data.get("completed") or 0),
             "goal": int(data.get("goal") if data.get("goal") is not None else self.goal),
             "saved_epoch": int(data.get("saved_epoch") or 0),
+            "completed_date": self._safe_date(data.get("completed_date")),
         }
         if snap["completed"] < 0:
             snap["completed"] = 0
@@ -163,6 +165,17 @@ class ConfigStore:
         if snap["saved_epoch"] < 0:
             snap["saved_epoch"] = 0
         return snap
+
+    @staticmethod
+    def _safe_date(value):
+        if not isinstance(value, str):
+            return ""
+        value = value.strip()
+        try:
+            parsed = date_type.fromisoformat(value)
+        except ValueError:
+            return ""
+        return value if parsed.isoformat() == value else ""
 
     def save_timer_snapshot(self, snap):
         status = snap.get("status")
@@ -183,6 +196,7 @@ class ConfigStore:
             "start_time": float(snap.get("start_time") or 0.0),
             "completed": max(0, int(snap.get("completed") or 0)),
             "goal": max(0, int(snap.get("goal") if snap.get("goal") is not None else self.goal)),
+            "completed_date": self._safe_date(snap.get("completed_date")),
         }
         saved_epoch = int(snap.get("saved_epoch") or 0)
         if saved_epoch > 0:

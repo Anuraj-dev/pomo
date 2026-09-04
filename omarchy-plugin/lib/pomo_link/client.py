@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import queue as job_queue
 import time
+from datetime import date as date_type
 from urllib.parse import urlparse
 
 from .constants import (
@@ -56,6 +57,17 @@ def _safe_int(value, default=None):
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def _safe_date(value):
+    if not isinstance(value, str):
+        return ""
+    value = value.strip()
+    try:
+        parsed = date_type.fromisoformat(value)
+    except ValueError:
+        return ""
+    return value if parsed.isoformat() == value else ""
 
 
 def parse_pairing_payload(value):
@@ -260,6 +272,7 @@ class PomoClient:
         self.mode = next_mode
         self.log("mode %s -> %s" % (prev, next_mode))
         if next_mode in ("OFFLINE", "UNPAIRED"):
+            self.model.date = ""
             self.model.set_local_owner(True)
         elif next_mode == "SYNCED":
             self.model.set_local_owner(False)
@@ -374,6 +387,7 @@ class PomoClient:
         remaining = _safe_float(data.get("remaining"))
         duration = _safe_float(data.get("duration"))
         completed = _safe_int(data.get("completed"))
+        phone_date = _safe_date(data.get("date"))
         server_time = _safe_int(data.get("server_time"))
         if server_time is None or server_time < 0:
             server_time = 0
@@ -398,6 +412,7 @@ class PomoClient:
             force,
         )
         if ok:
+            self.model.date = phone_date
             session = (self.model.start_time, self.model.phase)
             if (
                 not self.model.is_running()

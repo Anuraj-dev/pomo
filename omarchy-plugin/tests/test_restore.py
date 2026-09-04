@@ -45,6 +45,44 @@ class RestoreRecoveryTest(unittest.TestCase):
         self.assertEqual(engine.queue.at(0)["start"], 1000)
         self.assertFalse(os.path.exists(os.path.join(self.directory, "timer.json")))
 
+    def test_expired_work_snapshot_completes_once_and_uses_long_break_cadence(self):
+        self._save(completed=3, completed_date="2026-09-04")
+        with patch.object(main_module.time, "time", return_value=1005), patch.object(
+            main_module.time, "strftime", return_value="2026-09-04"
+        ):
+            engine = Engine(directory=self.directory)
+
+        self.assertEqual(engine.queue.count(), 1)
+        self.assertEqual(engine.model.completed, 4)
+        self.assertEqual(engine.model.phase, "long")
+        self.assertEqual(engine.model.duration, 15 * 60)
+        self.assertEqual(engine.model.remaining, 15 * 60)
+        self.assertEqual(engine.model.start_time, 0.0)
+        self.assertTrue(engine.model.is_stopped())
+
+    def test_expired_snapshot_without_start_time_does_not_complete(self):
+        self._save(start_time=0.0, completed=3, completed_date="2026-09-04")
+        with patch.object(main_module.time, "time", return_value=1005), patch.object(
+            main_module.time, "strftime", return_value="2026-09-04"
+        ):
+            engine = Engine(directory=self.directory)
+
+        self.assertEqual(engine.queue.count(), 0)
+        self.assertEqual(engine.model.completed, 0)
+        self.assertEqual(engine.model.phase, "work")
+        self.assertTrue(engine.model.is_stopped())
+
+    def test_expired_work_from_prior_day_stamps_today_before_counting(self):
+        self._save(completed=3, completed_date="2026-09-03")
+        with patch.object(main_module.time, "time", return_value=1005), patch.object(
+            main_module.time, "strftime", return_value="2026-09-04"
+        ):
+            engine = Engine(directory=self.directory)
+
+        self.assertEqual(engine.model.completed, 1)
+        self.assertEqual(engine.model.completed_date, "2026-09-04")
+        self.assertEqual(engine.model.phase, "short")
+
     def test_wall_clock_jump_back_does_not_inflate_remaining(self):
         snap = {"status": "running", "remaining": 10.0, "saved_epoch": 1000}
         with patch.object(main_module.time, "time", return_value=900):

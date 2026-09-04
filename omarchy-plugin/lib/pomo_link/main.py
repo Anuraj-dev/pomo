@@ -56,6 +56,7 @@ class Engine:
         )
         self.queue = SessionQueue(self.store.sessions_path)
         self.queue.strip_implausible_starts(int(time.time()))
+        self.pending_events = []
         self.model.phase_complete_handler = self._on_phase_complete
         self.model.session_complete_handler = self._on_session_complete
         self._restore_timer()
@@ -69,7 +70,6 @@ class Engine:
         self.last_status = None
         self.last_status_at = 0.0
         self.running = True
-        self.pending_events = []
         # Last-wins gesture slot: a press replaces the queued one instead of
         # queueing behind it, so 3x Start is one toggle, not start-pause-start.
         self.pending_gesture = None
@@ -144,12 +144,24 @@ class Engine:
         if snap["status"] == "running" and rem <= 0.0:
             self.store.clear_timer_snapshot()
             if snap.get("start_time", 0.0) > 0.0 and snap.get("duration", 0.0) > 0.0:
-                self._on_session_complete(
+                today = time.strftime("%Y-%m-%d")
+                self.model.completed_date = snap.get("completed_date", "")
+                if self.model.completed_date and self.model.completed_date != today:
+                    self.model.completed = 0
+                    self.model.completed_date = today
+                else:
+                    if not self.model.completed_date:
+                        self.model.completed_date = today
+                    self.model.completed = snap.get("completed", 0)
+                self.model.restore_live_state(
+                    "running",
                     snap["phase"],
+                    0.0,
                     snap["duration"],
-                    snap.get("completed", 0),
+                    self.model.completed,
                     snap["start_time"],
                 )
+                self.model._handle_local_complete()
             return
         if not self.model.restore_live_state(
             snap["status"],
@@ -161,6 +173,7 @@ class Engine:
         ):
             self.store.clear_timer_snapshot()
             return
+        self.model.completed_date = snap.get("completed_date", "")
         if snap.get("goal") is not None and int(snap["goal"]) >= 0:
             self.model.set_config(
                 self.model.work_minutes,
@@ -199,6 +212,7 @@ class Engine:
             "duration": self.model.duration,
             "start_time": self.model.start_time,
             "completed": self.model.completed,
+            "completed_date": self.model.completed_date,
             "goal": self.model.goal,
             "saved_epoch": int(time.time()),
         }
@@ -212,6 +226,7 @@ class Engine:
         self.last_timer_snap_at = 0.0
 
     def status_payload(self):
+        local_today = time.strftime("%Y-%m-%d")
         remaining = self.model.displayed_seconds()
         if self.model.is_stopped() and self.model.has_state:
             remaining = int(self.model.duration)
@@ -224,6 +239,8 @@ class Engine:
             "remaining": remaining,
             "duration": int(self.model.duration),
             "completed": self.model.completed,
+            "date": self.model.date,
+            "local_today": local_today,
             "goal": self.model.goal,
             "start_time": self.model.start_time,
             "local_owner": self.model.local_owner,
@@ -383,6 +400,7 @@ class Engine:
 
         self.client.tick()
         self.client.drain_worker_results()
+        self.ensure_local_day()
         for msg in self.client.drain_errors():
             _emit_error(msg)
         self.drain_pending_gesture()
@@ -392,6 +410,20 @@ class Engine:
 
         self.tick_persist()
         self.emit_status(force=False)
+
+    def ensure_local_day(self):
+        if self.client.mode == "SYNCED" or not self.model.local_owner:
+            return False
+        today = time.strftime("%Y-%m-%d")
+        if self.model.completed_date == today:
+            return False
+        had_date = bool(self.model.completed_date)
+        self.model.completed_date = today
+        if had_date:
+            self.model.completed = 0
+        if self.model.is_live():
+            self.persist_live_timer()
+        return True
 
 
 def main(argv=None):
