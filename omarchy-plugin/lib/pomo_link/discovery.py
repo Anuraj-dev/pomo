@@ -36,7 +36,7 @@ def browse_pomo(timeout=4.0):
             timeout=timeout,
             check=False,
         )
-    except OSError:
+    except FileNotFoundError:
         return []
     except subprocess.TimeoutExpired as exc:
         out = ""

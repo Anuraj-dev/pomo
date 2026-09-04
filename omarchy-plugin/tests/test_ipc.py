@@ -74,6 +74,26 @@ class EngineStatusFileTest(unittest.TestCase):
         finally:
             tmp.cleanup()
 
+    def test_ipc_gesture_burst_preserves_command_order(self):
+        tmp = tempfile.TemporaryDirectory()
+        try:
+            engine = Engine(directory=tmp.name, stdout_status=False)
+            engine.client.host = "phone"
+            engine.client.port = 9876
+            engine.client.token = "token"
+            engine.client.set_mode("SYNCED")
+            applied = []
+            engine.client.send_gesture = lambda command: applied.append(command) or False
+
+            engine._handle_ipc_line('{"cmd":"toggle"}')
+            engine._handle_ipc_line('{"cmd":"skip"}')
+            self.assertEqual(engine.pending_ipc_gestures, ["toggle", "skip"])
+            engine.drain_pending_gesture()
+            engine.drain_pending_gesture()
+            self.assertEqual(applied, ["toggle", "skip"])
+        finally:
+            tmp.cleanup()
+
     def test_close_removes_status_file(self):
         tmp = tempfile.TemporaryDirectory()
         try:
