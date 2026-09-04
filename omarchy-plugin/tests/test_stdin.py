@@ -223,6 +223,42 @@ def run_pending_jobs(client, count=1):
     return ran
 
 
+class WorkerPipelineTest(StdinDrainTest):
+    def test_loop_advances_boot_and_queues_connect(self):
+        engine = self._engine()
+        engine.client.worker = FakeWorker()
+        engine.client.ws = StubWS()
+        engine.client.host = "phone"
+        engine.client.port = 9876
+        engine.client.token = "token"
+        # A configured host takes the deterministic pinned-host path instead
+        # of submitting an mDNS job.
+        engine.client.store.host = "phone"
+        engine.client.store.port = 9876
+
+        # Keep select's normal 0.2s timeout in use, but make both iterations
+        # immediately readable through the real stdin pipe.
+        os.write(self.write_fd, b"\n")
+        engine._loop_once()
+        self.assertEqual(engine.client.mode, "DISCOVERING")
+        self.assertEqual(
+            [tag for tag, _func in engine.client.worker.jobs],
+            ["connect"],
+        )
+
+        os.write(self.write_fd, b"\n")
+        engine._loop_once()
+        # The second tick sees the handshake already in flight and must not
+        # submit a duplicate connect job.
+        self.assertEqual(
+            [tag for tag, _func in engine.client.worker.jobs],
+            ["connect"],
+        )
+
+        # Exercise the same worker handoff without touching the network.
+        self.assertEqual(run_pending_jobs(engine.client), 1)
+
+
 class GestureFailureTest(unittest.TestCase):
     def setUp(self):
         self.dir = tempfile.mkdtemp(prefix="pomo-fail-")

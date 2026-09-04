@@ -371,11 +371,11 @@ class Engine:
         while self.pending_events:
             _emit(self.pending_events.pop(0))
 
-            self.client.tick()
-            self.client.drain_worker_results()
-            for msg in self.client.drain_errors():
-                _emit_error(msg)
-            self.drain_pending_gesture()
+        self.client.tick()
+        self.client.drain_worker_results()
+        for msg in self.client.drain_errors():
+            _emit_error(msg)
+        self.drain_pending_gesture()
         for line in self.client.drain_logs():
             sys.stderr.write("[pomo-link] %s\n" % line)
             sys.stderr.flush()

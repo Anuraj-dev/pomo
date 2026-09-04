@@ -421,6 +421,11 @@ class PomoClient:
 
     def _apply_connect_result(self, result):
         self.connecting = False
+        if self.mode in ("UNPAIRED", "OFFLINE"):
+            # The pipeline was aborted while the handshake was in flight;
+            # a late success must not resurrect CONNECTING.
+            self.log("connect result discarded (mode %s)" % self.mode)
+            return
         if isinstance(result, Exception) or result is None:
             self.log("WS connect failed: %s" % result)
             self.connect_failures += 1
@@ -639,6 +644,7 @@ class PomoClient:
                 self.pending_sync_state = data
                 if self.ever_synced and not self.model.local_owner:
                     self.apply_phone_object(data, force=True)
+                    self.pending_sync_state = None
                     self.soft_resync_count = 0
                     self.last_contact_at = time.monotonic()
                     self.set_mode("SYNCED")
@@ -859,8 +865,6 @@ class PomoClient:
             self.log("enter SYNC aborted: no phone state")
             self.entering_sync = False
             return
-        phone_status = str(data.get("status") or "stopped")
-        phone_stopped = phone_status == "stopped"
         desk_live = self.model.is_live() and (self.model.local_owner or not self.ever_synced)
 
         if desk_live:
