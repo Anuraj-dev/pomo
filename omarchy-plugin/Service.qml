@@ -20,8 +20,6 @@ Item {
   property int duration: 0
   property int completed: 0
   property int goal: 8
-  property string date: ""
-  property string localToday: ""
   property double startTime: 0
   property bool localOwner: false
   property bool everSynced: false
@@ -31,16 +29,11 @@ Item {
   property int queueCount: 0
   property string message: ""
   property string lastError: ""
-  property bool busy: false
-  // Optimistic toggle: set on send, reconciled by the next real status or
-  // reverted by an error event. Prevents "still says Start → click again".
-  property string pendingToggle: ""
   property string phaseLabel: phaseName(phase, status)
 
   property bool _intentionalStop: false
   property bool _restartRequested: false
   property int _restartAttempt: 0
-  property double _bootAt: 0
   property var _pendingLines: []
 
   function phaseName(p, st) {
@@ -52,8 +45,6 @@ Item {
   }
 
   function toggleLabel() {
-    if (pendingToggle !== "")
-      return pendingToggle === "running" ? "Pause" : "Resume"
     var st = String(status || "stopped")
     if (st === "running") return "Pause"
     if (st === "paused") return "Resume"
@@ -99,7 +90,6 @@ Item {
     ready = false
     mode = "BOOT"
     marker = "."
-    _bootAt = Date.now()
     daemonProcess.command = daemonCommand()
     daemonProcess.running = true
   }
@@ -126,10 +116,7 @@ Item {
     writeLine(JSON.stringify(obj))
   }
 
-  function toggle() {
-    pendingToggle = String(status || "stopped") === "running" ? "paused" : "running"
-    sendCmd({ cmd: "toggle" })
-  }
+  function toggle() { sendCmd({ cmd: "toggle" }) }
   function skip() { sendCmd({ cmd: "skip" }) }
   function reset() { sendCmd({ cmd: "reset" }) }
   function extend() { sendCmd({ cmd: "extend" }) }
@@ -183,20 +170,13 @@ Item {
       return
     }
     if (!parsed || typeof parsed !== "object") return
-    if (parsed.type === "error") {
-      lastError = concise(parsed.message)
-      pendingToggle = ""
-      return
-    }
     if (parsed.type === "event" && parsed.event === "phase_complete") {
       notifyPhaseComplete(parsed.phase)
       return
     }
     if (parsed.type !== "status") return
     ready = true
-    // A crash-looping engine emitted status before dying; only a process
-    // that stayed up this long has earned a backoff reset.
-    if (_bootAt > 0 && Date.now() - _bootAt > 30000) _restartAttempt = 0
+    _restartAttempt = 0
     startupTimeout.stop()
     mode = String(parsed.mode || mode)
     marker = parsed.marker === undefined || parsed.marker === null ? marker : String(parsed.marker)
@@ -206,13 +186,9 @@ Item {
     duration = Number(parsed.duration || 0)
     completed = Number(parsed.completed || 0)
     goal = parsed.goal === undefined || parsed.goal === null ? goal : Number(parsed.goal)
-    date = typeof parsed.date === "string" ? parsed.date : ""
-    localToday = typeof parsed.local_today === "string" ? parsed.local_today : ""
     startTime = Number(parsed.start_time || 0)
     localOwner = parsed.local_owner === true
     everSynced = parsed.ever_synced === true
-    busy = parsed.busy === true
-    pendingToggle = ""
     host = String(parsed.host || "")
     port = Number(parsed.port || 9876)
     hasToken = parsed.has_token === true
@@ -237,6 +213,7 @@ Item {
   }
 
   onLinkPathChanged: if (linkPath !== "") launchTimer.restart()
+  Component.onCompleted: if (linkPath !== "") launchTimer.restart()
 
   Component.onDestruction: {
     _intentionalStop = true

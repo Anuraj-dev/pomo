@@ -1,7 +1,6 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "today.js" as Today
 
 Panel {
   id: root
@@ -57,6 +56,8 @@ Panel {
     for (var existing in root.settings)
       if (existing !== "id") entry[existing] = root.settings[existing]
     for (var key in values) entry[key] = values[key]
+    delete entry.token
+    delete entry.pairingJson
     root.settings = entry
     if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
@@ -94,7 +95,7 @@ Panel {
       if (host !== "") fields.host = host
       if (portText !== "") {
         var port = parseInt(portText, 10)
-        if (port > 0) fields.port = port
+        if (port >= 1 && port <= 65535) fields.port = port
       }
       if (token !== "") fields.token = token
     }
@@ -104,12 +105,12 @@ Panel {
     if (paste !== "") {
       var fromPaste = hostPortFromPairingJson(paste)
       if (fromPaste.host) persist.host = fromPaste.host
-      if (fromPaste.port) persist.port = fromPaste.port
+      if (fromPaste.port >= 1 && fromPaste.port <= 65535) persist.port = fromPaste.port
     } else {
       persist.host = host
       if (portText !== "") {
         var persistPort = parseInt(portText, 10)
-        if (persistPort > 0) persist.port = persistPort
+        if (persistPort >= 1 && persistPort <= 65535) persist.port = persistPort
       }
     }
     if (Object.keys(persist).length > 0) persistSettings(persist)
@@ -148,7 +149,8 @@ Panel {
 
   function todayLine() {
     if (!pomo) return ""
-    return Today.formatTodayLine(pomo.completed, pomo.goal, pomo.date, pomo.localToday)
+    if (pomo.goal > 0) return pomo.completed + " / " + pomo.goal + " today"
+    return pomo.completed + " today"
   }
 
   KeyboardPanel {
@@ -244,8 +246,6 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
-              enabled: root.pomo !== null && !root.pomo.busy
-              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.toggle()
             }
 
@@ -255,8 +255,6 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
-              enabled: root.pomo !== null && !root.pomo.busy
-              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.skip()
             }
 
@@ -266,8 +264,6 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
-              enabled: root.pomo !== null && !root.pomo.busy
-              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.reset()
             }
 
@@ -277,10 +273,6 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
-              // Local extend no-ops while not running; the button must not
-              // look live.
-              enabled: root.pomo !== null && !root.pomo.busy && root.pomo.status === "running"
-              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.extend()
             }
           }

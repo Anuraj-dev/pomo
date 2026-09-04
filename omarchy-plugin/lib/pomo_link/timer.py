@@ -31,11 +31,8 @@ class TimerModel:
         self.duration = 0.0
         self.start_time = 0.0
         self.completed = 0
-        self.date = ""
-        self.completed_date = ""
         self.goal = DEFAULT_GOAL
         self.received_at_mono = time.monotonic()
-        self.received_at_epoch = time.time()
         self.last_server_time = 0
         self.has_state = False
         self.local_owner = False
@@ -80,18 +77,13 @@ class TimerModel:
     def displayed_seconds(self):
         if not self.is_running():
             return 0 if self.remaining < 0 else int(self.remaining)
-        if self.local_owner:
-            elapsed = time.time() - self.received_at_epoch
-            if elapsed < 0.0:
-                elapsed = 0.0
-        else:
-            elapsed = time.monotonic() - self.received_at_mono
+        elapsed = time.monotonic() - self.received_at_mono
         value = int(self.remaining) - int(elapsed)
         return 0 if value < 0 else value
 
     def snap_remaining(self):
         self.remaining = float(self.displayed_seconds())
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
 
     def snap_for_persist(self):
         if not self.has_state:
@@ -100,11 +92,7 @@ class TimerModel:
             self.snap_remaining()
 
     def arm_running_baseline(self):
-        self._arm_projection_baseline()
-
-    def _arm_projection_baseline(self):
         self.received_at_mono = time.monotonic()
-        self.received_at_epoch = time.time()
 
     def set_start_time(self, start_time):
         self.start_time = float(start_time) if start_time and start_time > 0 else 0.0
@@ -188,8 +176,6 @@ class TimerModel:
             else:
                 self._init_local_idle()
             self.local_owner = True
-            if self.is_running():
-                self.arm_running_baseline()
         else:
             if self.is_running():
                 self.snap_remaining()
@@ -202,7 +188,7 @@ class TimerModel:
         self.remaining = self.duration
         self.start_time = 0.0
         self.last_server_time = 0
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
         self.has_state = True
 
     def restore_live_state(self, status, phase, remaining, duration, completed, start_time):
@@ -221,7 +207,7 @@ class TimerModel:
         self.completed = 0 if completed is None or int(completed) < 0 else int(completed)
         self.start_time = float(start_time) if start_time and start_time > 0 else 0.0
         self.last_server_time = 0
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
         self.has_state = True
         return True
 
@@ -252,7 +238,7 @@ class TimerModel:
         self.remaining = self.duration
         self.start_time = 0.0
         self.status = "stopped"
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
 
     def reset(self):
         if not self.local_owner:
@@ -261,7 +247,7 @@ class TimerModel:
         self.remaining = self.duration
         self.start_time = 0.0
         self.status = "stopped"
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
 
     def extend(self, seconds_delta=300):
         if not self.local_owner:
@@ -317,7 +303,7 @@ class TimerModel:
             self._advance_after_break_complete()
 
         self.remaining = self.duration
-        self._arm_projection_baseline()
+        self.received_at_mono = time.monotonic()
 
         if self.phase_complete_handler:
             self.phase_complete_handler(finished_phase)

@@ -124,7 +124,3 @@ chrome-sync-test-unpacked/
 
 # Firmware credentials (copy secrets.h.example and fill in locally)
 firmware/PomoLink/secrets.h
-
-# Python bytecode
-__pycache__/
-*.pyc
