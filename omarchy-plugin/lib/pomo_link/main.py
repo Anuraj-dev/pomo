@@ -92,6 +92,10 @@ class Engine:
         # Last-wins gesture slot: a press replaces the queued one instead of
         # queueing behind it, so 3x Start is one toggle, not start-pause-start.
         self.pending_gesture = None
+        # IPC commands are discrete requests from the CLI; preserve their
+        # order instead of applying stdin's last-wins coalescing rule.
+        self.pending_ipc_gestures = []
+        self._handling_ipc = False
         self._stdin_remainder = b""
         self._stdin_draining = False
         try:
@@ -133,13 +137,19 @@ class Engine:
             self._stdin_draining = False
 
     def drain_pending_gesture(self):
-        if self.pending_gesture is None or self.client.busy:
+        if self.client.busy:
+            return
+        from_ipc = bool(self.pending_ipc_gestures)
+        if from_ipc:
+            gesture = self.pending_ipc_gestures[0]
+        else:
+            gesture = self.pending_gesture
+        if gesture is None:
             return
         if not (self.client.phone_commands_active() or self.model.local_owner):
             # Held until the mode change that allows it (BOOT / first
             # CONNECTING / enter-SYNC). Never dropped silently.
             return
-        gesture = self.pending_gesture
         if self.client.message == "waiting to connect":
             self.client.message = ""
         # Announce busy, then submit. On the phone path the gesture goes to
@@ -152,7 +162,10 @@ class Engine:
         except Exception:
             self.client.busy = False
             raise
-        self.pending_gesture = None
+        if from_ipc:
+            self.pending_ipc_gestures.pop(0)
+        else:
+            self.pending_gesture = None
         if not went_async:
             self.client.busy = False
             if self.model.local_owner:
@@ -319,6 +332,13 @@ class Engine:
             except OSError:
                 pass
 
+    def _handle_ipc_line(self, line):
+        self._handling_ipc = True
+        try:
+            return self.handle_line(line)
+        finally:
+            self._handling_ipc = False
+
     def handle_line(self, line):
         text = line.strip()
         if not text:
@@ -355,7 +375,10 @@ class Engine:
             self.emit_status(force=True)
             return self.last_status
         if cmd in GESTURE_COMMANDS:
-            self.pending_gesture = cmd
+            if self._handling_ipc:
+                self.pending_ipc_gestures.append(cmd)
+            else:
+                self.pending_gesture = cmd
             if self.client.message == "waiting to connect":
                 self.client.message = ""
             if not (
@@ -456,7 +479,7 @@ class Engine:
         if stdin_fd is not None and stdin_fd in ready:
             self._drain_stdin()
         if self.server is not None:
-            self.server.pump(ready, self.handle_line)
+            self.server.pump(ready, self._handle_ipc_line)
         if not self.running:
             return
 
