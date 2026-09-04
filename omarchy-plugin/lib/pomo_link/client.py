@@ -866,7 +866,11 @@ class PomoClient:
         stale check would soft-resync a healthy idle socket every 20s.
         """
         activity = getattr(self.ws, "last_peer_activity_mono", 0.0)
-        if activity > self.last_socket_contact_at:
+        # 0.0 means "no peer frame yet" (fresh/teardown stub), not a real
+        # timestamp. Adopting it would stamp a falsy contact that disables
+        # the stale watchdog below (and on fresh CI runners with a small
+        # monotonic clock it even overwrites now-100).
+        if activity and activity > self.last_socket_contact_at:
             self.last_socket_contact_at = activity
             self.last_contact_at = activity
 
