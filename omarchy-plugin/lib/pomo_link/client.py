@@ -424,6 +424,7 @@ class PomoClient:
         if self.mode in ("UNPAIRED", "OFFLINE"):
             # The pipeline was aborted while the handshake was in flight;
             # a late success must not resurrect CONNECTING.
+            self._disconnect_ws()
             self.log("connect result discarded (mode %s)" % self.mode)
             return
         if isinstance(result, Exception) or result is None:

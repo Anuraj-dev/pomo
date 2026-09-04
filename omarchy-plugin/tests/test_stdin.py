@@ -38,6 +38,23 @@ class StubWS:
         return False
 
 
+class ConnectedStubWS(StubWS):
+    def __init__(self):
+        self.connected = False
+        self.sock = None
+        self.close_calls = 0
+
+    def connect(self, *args, **kwargs):
+        self.connected = True
+        self.sock = object()
+        return True
+
+    def close(self):
+        self.close_calls += 1
+        self.connected = False
+        self.sock = None
+
+
 class StubRest:
     def __init__(self, results=None):
         self.results = list(results or [])
@@ -257,6 +274,33 @@ class WorkerPipelineTest(StdinDrainTest):
 
         # Exercise the same worker handoff without touching the network.
         self.assertEqual(run_pending_jobs(engine.client), 1)
+
+
+class LateConnectResultTest(StdinDrainTest):
+    def test_discarded_connect_result_closes_socket(self):
+        for mode in ("OFFLINE", "UNPAIRED"):
+            with self.subTest(mode=mode):
+                engine = self._engine()
+                client = engine.client
+                client.worker = FakeWorker()
+                client.ws = ConnectedStubWS()
+                client.host = "phone"
+                client.port = 9876
+                client.token = "token"
+
+                self.assertTrue(client.begin_websocket("test"))
+                tag, job = client.worker.jobs.pop(0)
+                result = job()
+                self.assertTrue(client.ws.connected)
+                close_calls_before_result = client.ws.close_calls
+
+                client.set_mode(mode)
+                client.apply_result(tag, result)
+
+                self.assertEqual(client.mode, mode)
+                self.assertFalse(client.ws.connected)
+                self.assertIsNone(client.ws.sock)
+                self.assertEqual(client.ws.close_calls, close_calls_before_result + 1)
 
 
 class GestureFailureTest(unittest.TestCase):
