@@ -178,6 +178,10 @@ class PomoClient:
         self.wsdrop_inflight = False
         self.config_inflight = False
         self.discover_inflight = False
+        self.discover_generation = 0
+        self.discover_job_generation = None
+        self.pinned_failures = 0
+        self.pinned_fallback_inflight = False
         self.import_inflight = False
         self.adopt_inflight = False
         self.import_failures = 0
@@ -361,6 +365,7 @@ class PomoClient:
             and token == self.token
         ):
             return False
+        self._invalidate_discovery()
         self.store.set_pairing(host=host, port=port, token=token)
         self.host = self.store.host
         self.port = self.store.port
@@ -458,6 +463,7 @@ class PomoClient:
         if isinstance(result, Exception) or result is None:
             self.log("WS connect failed: %s" % result)
             self.connect_failures += 1
+            self._note_pinned_failure()
             # A failed open proves nothing about the socket; stamping contact
             # here made the engine wait a phantom 20s stale window before the
             # first retry. Schedule a short retry instead.
@@ -474,6 +480,7 @@ class PomoClient:
         except WebSocketError as exc:
             self.log("hello send failed: %s" % exc)
             self.connect_failures += 1
+            self._note_pinned_failure()
             self.last_socket_contact_at = 0.0
             self.retry_started_at = time.monotonic()
             self.retry_delay_s = RECONNECT_INTERVAL_S
@@ -488,6 +495,7 @@ class PomoClient:
         self.last_poll_at = now
         self.last_ping_at = 0.0
         self.connect_failures = 0
+        self._reset_pinned_fallback_state()
         self.retry_delay_s = 0
         self.set_mode("CONNECTING")
 
@@ -551,10 +559,14 @@ class PomoClient:
                 self.enter_unpaired("GET /api/status")
                 return
             if code == 200:
+                self._invalidate_pinned_fallback()
+                self._reset_pinned_fallback_state()
                 self.log("phone reachable while OFFLINE -> reconnect known host")
                 self.retry_delay_s = 0
                 self.prefer_known_host = True
                 self.set_mode("DISCOVERING")
+            else:
+                self._note_pinned_failure()
             return
         if self.mode == "SYNCED":
             # Never REST-promote to SYNCED; only refresh an existing sync.
@@ -596,58 +608,151 @@ class PomoClient:
         if self.discover_inflight:
             return
         self.prefer_known_host = False
+        self._queue_discovery_job()
+
+    def _note_pinned_failure(self):
+        if not self.store.host:
+            return
+        self.pinned_failures += 1
+        if self.pinned_failures >= CONNECT_RETRY_MAX and not self.pinned_fallback_inflight:
+            self._queue_discovery_job(pinned_fallback=True)
+
+    def _reset_pinned_fallback_state(self):
+        self.pinned_failures = 0
+        self.pinned_fallback_inflight = False
+
+    def _invalidate_discovery(self):
+        self.discover_generation += 1
+        self.discover_inflight = False
+        self.discover_job_generation = None
+        self.pinned_fallback_inflight = False
+
+    def _invalidate_pinned_fallback(self):
+        if self.pinned_fallback_inflight:
+            self.discover_generation += 1
+            self.discover_inflight = False
+            self.discover_job_generation = None
+            self.pinned_fallback_inflight = False
+
+    def _queue_discovery_job(self, pinned_fallback=False):
+        if self.discover_inflight:
+            return False
         self.discover_inflight = True
+        self.pinned_fallback_inflight = pinned_fallback
+        generation = self.discover_generation
+        self.discover_job_generation = generation
         token = self.token
         rest = self.rest
 
         def job():
-            candidates = browse_pomo()
-            if not candidates:
-                return {"picked": None, "unauthorized": 0, "responders": 0}
-            unauthorized = 0
-            picked = None
-            for i, cand in enumerate(candidates):
-                code, _text = rest.request(
-                    "GET", "/api/status", host=cand["host"], port=cand["port"], token=token
-                )
-                if code == 200:
-                    picked = cand
-                    break
-                if code == 401:
-                    unauthorized += 1
+            try:
+                try:
+                    candidates = browse_pomo()
+                except Exception:
+                    candidates = []
+                if not isinstance(candidates, (list, tuple)):
+                    candidates = []
+                valid = []
+                for cand in candidates:
+                    if not isinstance(cand, dict):
+                        continue
+                    host = cand.get("host")
+                    try:
+                        port = int(cand.get("port"))
+                    except (TypeError, ValueError):
+                        continue
+                    if not isinstance(host, str) or not host.strip() or not 1 <= port <= 65535:
+                        continue
+                    valid.append({"host": host.strip(), "port": port, "proto": cand.get("proto", "")})
+                unauthorized = 0
+                picked = None
+                for cand in valid:
+                    try:
+                        code, _text = rest.request(
+                            "GET", "/api/status", host=cand["host"], port=cand["port"], token=token
+                        )
+                    except Exception:
+                        continue
+                    if code == 200:
+                        picked = cand
+                        break
+                    if code == 401:
+                        unauthorized += 1
+                payload = {
+                    "picked": picked,
+                    "unauthorized": unauthorized,
+                    "responders": len(valid),
+                }
+            except Exception:
+                payload = {"picked": None, "unauthorized": 0, "responders": 0}
             return {
-                "picked": picked,
-                "unauthorized": unauthorized,
-                "responders": len(candidates),
+                "generation": generation,
+                "pinned_fallback": pinned_fallback,
+                "payload": payload,
             }
 
         self.worker.submit("discover", job)
+        return True
 
     def _apply_discover_result(self, result):
+        if not isinstance(result, dict) or result.get("generation") != self.discover_generation:
+            return
+        if result.get("generation") != self.discover_job_generation:
+            return
         self.discover_inflight = False
-        if isinstance(result, Exception) or result is None:
-            result = {"picked": None, "unauthorized": 0, "responders": 0}
+        self.discover_job_generation = None
+        was_pinned_fallback = bool(result.get("pinned_fallback"))
+        self.pinned_fallback_inflight = False
+        payload = result.get("payload")
+        if not isinstance(payload, dict):
+            payload = {"picked": None, "unauthorized": 0, "responders": 0}
         now = time.monotonic()
-        picked = result.get("picked")
+        picked = payload.get("picked")
         if picked is None:
-            if result.get("responders") and result.get("unauthorized") == result.get("responders"):
+            if (
+                not was_pinned_fallback
+                and payload.get("responders")
+                and payload.get("unauthorized") == payload.get("responders")
+            ):
                 self.log("all mDNS responders rejected token")
                 self.enter_unpaired("mDNS all 401")
                 return
-            if result.get("responders"):
-                self.log("mDNS had %s responders but none authed" % result.get("responders"))
+            if payload.get("responders"):
+                self.log("mDNS had %s responders but none authed" % payload.get("responders"))
             else:
                 self.log("mDNS miss, no configured host")
-            if self.in_boot_probe():
+            if was_pinned_fallback:
+                self.pinned_failures = 0
+                self.pinned_fallback_inflight = False
+                self.retry_started_at = now
+                self.retry_delay_s = RECONNECT_INTERVAL_S
+                self.set_mode("OFFLINE")
+            elif self.in_boot_probe():
                 self.retry_started_at = now
                 self.retry_delay_s = 1.0
             else:
                 self.enter_offline("mDNS miss on rediscover")
             return
-        self.host = picked["host"]
-        self.port = picked["port"]
+        if not isinstance(picked, dict):
+            self.retry_started_at = now
+            self.retry_delay_s = RECONNECT_INTERVAL_S
+            self.set_mode("OFFLINE")
+            return
+        host = picked.get("host")
+        port = _safe_int(picked.get("port"), 0)
+        if not isinstance(host, str) or not host.strip() or not 1 <= port <= 65535:
+            self.retry_started_at = now
+            self.retry_delay_s = RECONNECT_INTERVAL_S
+            self.set_mode("OFFLINE")
+            return
+        self.host = host.strip()
+        self.port = port
+        self.store.set_pairing(host=self.host, port=self.port, token=self.token)
+        self._reset_pinned_fallback_state()
         self.log("discovered %s:%s via mDNS" % (self.host, self.port))
         self.rest.configure(self.host, self.port, self.token)
+        if was_pinned_fallback:
+            self.set_mode("DISCOVERING")
         self.begin_websocket("discovery")
 
     def on_websocket_text(self, payload):

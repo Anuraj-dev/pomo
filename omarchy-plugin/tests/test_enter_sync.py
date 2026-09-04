@@ -209,6 +209,117 @@ class DiscoveryAsyncTest(EnterSyncBase):
         tags = [tag for tag, _func in self.client.worker.jobs]
         self.assertEqual(tags, ["connect"], "no discover job for pinned host")
 
+    def _pin_old_host(self):
+        self.client.store.set_pairing(host="old-host", port=9876, token="t")
+        self.client.host = "old-host"
+        self.client.port = 9876
+        self.client.token = "t"
+        self.client.set_mode("OFFLINE")
+
+    def test_three_failed_pinned_rest_probes_queue_one_fallback(self):
+        self._pin_old_host()
+        self.client.rest = StubRest(results=[(0, ""), (0, ""), (0, "")])
+        for _ in range(3):
+            self.client.last_poll_at = 0
+            self.client.tick_offline()
+            run_pending_jobs(self.client)
+        self.assertEqual([tag for tag, _func in self.client.worker.jobs], ["discover"])
+        self.client.tick_offline()
+        self.assertEqual([tag for tag, _func in self.client.worker.jobs], ["discover"])
+
+    def test_pinned_fallback_persists_only_authenticated_candidate(self):
+        self._pin_old_host()
+        self.client.pinned_failures = 2
+        self.client.rest = StubRest(results=[(200, "")])
+        original = client_module.browse_pomo
+        client_module.browse_pomo = lambda timeout=4.0: [
+            {"host": "new-host", "port": 9999, "proto": "IPv4"}
+        ]
+        try:
+            self.client._note_pinned_failure()
+            tag, job = self.client.worker.jobs.pop(0)
+            result = job()
+            self.assertEqual(self.client.store.host, "old-host")
+            self.assertEqual(self.client.store.port, 9876)
+            self.client.apply_result(tag, result)
+        finally:
+            client_module.browse_pomo = original
+        self.assertEqual(self.client.store.host, "new-host")
+        self.assertEqual(self.client.store.port, 9999)
+        self.assertEqual(self.client.mode, "DISCOVERING")
+        self.assertEqual([tag for tag, _func in self.client.worker.jobs], ["connect"])
+
+    def test_pinned_fallback_miss_keeps_pairing_and_retry(self):
+        self._pin_old_host()
+        original = client_module.browse_pomo
+        client_module.browse_pomo = lambda timeout=4.0: []
+        try:
+            self.client.pinned_failures = 2
+            self.client._note_pinned_failure()
+            run_pending_jobs(self.client)
+        finally:
+            client_module.browse_pomo = original
+        self.assertEqual(self.client.mode, "OFFLINE")
+        self.assertEqual(self.client.store.host, "old-host")
+        self.assertEqual(self.client.store.port, 9876)
+        self.assertEqual(self.client.retry_delay_s, 5.0)
+        self.assertFalse(self.client.discover_inflight)
+
+    def test_stale_discovery_result_cannot_replace_new_pairing(self):
+        self.client.store.set_pairing(host="", port=9876, token="old-token")
+        self.client.host = ""
+        self.client.port = 9876
+        self.client.token = "old-token"
+        self.client.set_mode("DISCOVERING")
+        self.client.retry_delay_s = 0
+        original = client_module.browse_pomo
+        client_module.browse_pomo = lambda timeout=4.0: [
+            {"host": "stale-host", "port": 9999, "proto": "IPv4"}
+        ]
+        try:
+            self.client.tick_discovery()
+            tag, old_job = self.client.worker.jobs.pop(0)
+            self.client.apply_pairing({"host": "new-host", "port": 8888, "token": "new-token"})
+            old_result = old_job()
+            self.client.apply_result(tag, old_result)
+        finally:
+            client_module.browse_pomo = original
+        self.assertEqual(self.client.host, "new-host")
+        self.assertEqual(self.client.port, 8888)
+        self.assertEqual(self.client.token, "new-token")
+        self.assertEqual(self.client.store.host, "new-host")
+        self.assertEqual(self.client.store.port, 8888)
+        self.assertFalse(self.client.discover_inflight)
+        self.client.tick_discovery()
+        self.assertEqual(self.client.worker.jobs[-1][0], "connect")
+
+    def test_stale_fallback_result_cannot_break_pinned_recovery(self):
+        self._pin_old_host()
+        self.client.pinned_failures = 2
+        original = client_module.browse_pomo
+        client_module.browse_pomo = lambda timeout=4.0: [
+            {"host": "stale-host", "port": 9999, "proto": "IPv4"}
+        ]
+        try:
+            self.client._note_pinned_failure()
+            tag, old_job = self.client.worker.jobs.pop(0)
+            self.client._apply_status_result((200, ""))
+            self.assertEqual(self.client.mode, "DISCOVERING")
+            self.assertEqual(self.client.host, "old-host")
+            self.assertEqual(self.client.port, 9876)
+            self.client.tick_discovery()
+            old_result = old_job()
+            self.client.apply_result(tag, old_result)
+        finally:
+            client_module.browse_pomo = original
+        self.assertEqual(self.client.mode, "DISCOVERING")
+        self.assertEqual(self.client.host, "old-host")
+        self.assertEqual(self.client.port, 9876)
+        self.assertEqual(self.client.store.host, "old-host")
+        self.assertEqual(self.client.store.port, 9876)
+        self.assertFalse(self.client.pinned_fallback_inflight)
+        self.assertEqual([tag for tag, _func in self.client.worker.jobs], ["connect"])
+
 
 class OfflineProbeTest(EnterSyncBase):
     def test_offline_poll_result_200_moves_to_discovering(self):
