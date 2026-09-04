@@ -56,9 +56,4 @@
         android:name="com.pomo.ui.ReleaseNotesFragment"
         android:label="Release notes" />
 
-    <fragment
-        android:id="@+id/navigation_sync"
-        android:name="com.pomo.ui.SyncFragment"
-        android:label="Sync" />
-
 </navigation>

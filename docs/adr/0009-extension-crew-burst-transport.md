@@ -1,5 +1,7 @@
 # The extension talks to Crew relays in bursts, not live connections
 
+Status: superseded by ADR-0012. Chrome no longer has Crew.
+
 The phone holds WebSockets to Nostr relays open for live Crew updates. A
 Manifest V3 service worker cannot: it is suspended ~30 seconds after its last
 event, and suspension kills any open socket silently. A naive port would keep a

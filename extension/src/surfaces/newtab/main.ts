@@ -12,7 +12,9 @@ import {
 import type { TimerSnapshot } from "../../engine/timer";
 import { formatMss } from "../../shared/format";
 import type { HistoryPayload } from "../../shared/messages";
-import { applyTheme, request, sendCommand, subscribeState } from "../../shared/surface";
+import type { LinkStatus } from "../../link/client";
+import { hostPermissionOrigins, pairingFromParsed, parsePairingPayload, phoneOrigin } from "../../link/pairing";
+import { applyTheme, bindLinkMode, request, sendCommand, subscribeLink, subscribeState } from "../../shared/surface";
 import { readSurfaceStats } from "../../shared/statsReader";
 import {
   applyInstrument,
@@ -23,9 +25,8 @@ import {
   renderProgress,
   renderTime,
 } from "../../shared/instrument";
-import { bootSyncPanel } from "../../sync/ui/syncPanel";
 
-type TabKey = "instrument" | "history" | "stats" | "settings" | "sync";
+type TabKey = "instrument" | "history" | "stats" | "settings";
 
 const tabsEl = document.getElementById("tabs")!;
 const pages: Record<TabKey, HTMLElement> = {
@@ -33,7 +34,6 @@ const pages: Record<TabKey, HTMLElement> = {
   history: document.getElementById("page-history")!,
   stats: document.getElementById("page-stats")!,
   settings: document.getElementById("page-settings")!,
-  sync: document.getElementById("page-sync")!,
 };
 
 const buildVersionEl = document.getElementById("buildVersion")!;
@@ -69,15 +69,20 @@ const settingTagEl = document.getElementById("settingTag") as HTMLInputElement;
 const settingThemeEl = document.getElementById("settingTheme") as HTMLSelectElement;
 const settingSoundEl = document.getElementById("settingSound") as HTMLInputElement;
 const settingNewtabEl = document.getElementById("settingNewtab") as HTMLInputElement;
+const pairingPayloadEl = document.getElementById("pairingPayload") as HTMLTextAreaElement;
+const pairingStatusEl = document.getElementById("pairingStatus")!;
+const savePairingEl = document.getElementById("savePairing")!;
+const unpairPhoneEl = document.getElementById("unpairPhone")!;
 
 let activeTab: TabKey = "instrument";
 let latest: TimerSnapshot | null = null;
 let previousStatus: TimerSnapshot["status"] | null = null;
 let userNavigated = false;
 let tabLoadSeq = 0;
-bootSyncPanel(document.getElementById("syncPanel")!, "full");
 
 buildVersionEl.textContent = `v${chrome.runtime.getManifest().version}`;
+bindLinkMode(document.getElementById("linkMode")!);
+subscribeLink(renderPairingStatus);
 
 function tabButtons(): HTMLElement[] {
   return Array.from(tabsEl.querySelectorAll<HTMLElement>('[role="tab"]'));
@@ -244,6 +249,76 @@ async function loadSettingsPage(seq: number): Promise<void> {
     settingsStatusEl.dataset["kind"] = "error";
   }
 }
+
+function renderPairingStatus(status: LinkStatus): void {
+  unpairPhoneEl.toggleAttribute("hidden", !status.paired);
+  if (!status.paired) {
+    pairingStatusEl.textContent = "Not paired";
+    return;
+  }
+  const endpoint = `${status.host}:${status.port}`;
+  if (status.mode === "SYNCED") pairingStatusEl.textContent = `Synced with ${endpoint}`;
+  else if (status.mode === "OFFLINE") {
+    if (status.message.includes("timed out")) {
+      pairingStatusEl.textContent = `Local network blocked. Allow Local network access in the address bar, then Save pairing. ${endpoint}`;
+    } else {
+      const why = status.message.length > 0 ? ` ${status.message}.` : "";
+      pairingStatusEl.textContent = `Phone unreachable.${why} Running locally. ${endpoint}`;
+    }
+  }
+  else if (status.mode === "UNPAIRED") pairingStatusEl.textContent = `Token rejected. ${endpoint}`;
+  else pairingStatusEl.textContent = `Linking ${endpoint}`;
+}
+
+async function handleSavePairing(): Promise<void> {
+  const parsed = parsePairingPayload(pairingPayloadEl.value);
+  const pairing = pairingFromParsed(parsed);
+  if (pairing === null) {
+    pairingStatusEl.textContent = "Needs {url, token} from the phone";
+    return;
+  }
+  try {
+    const granted = await chrome.permissions.request({ origins: hostPermissionOrigins(pairing) });
+    if (!granted) {
+      pairingStatusEl.textContent = "Chrome needs permission to reach the phone";
+      return;
+    }
+  } catch {
+    pairingStatusEl.textContent = "Chrome needs permission to reach the phone";
+    return;
+  }
+  pairingStatusEl.textContent = "Saving…";
+  try {
+    await fetch(`${phoneOrigin(pairing)}/api/status`, {
+      method: "GET",
+      headers: { "X-Pomo-Token": pairing.token },
+    });
+  } catch {
+    pairingStatusEl.textContent =
+      "Allow Local network access in the address bar (Not secure / tune icon), then Save pairing again.";
+    return;
+  }
+  const response = await request({ type: "pomo:link:pair", payload: pairingPayloadEl.value });
+  if (!response.ok || response.link === undefined) {
+    pairingStatusEl.textContent = response.error ?? "Could not pair";
+    return;
+  }
+  pairingPayloadEl.value = "";
+  renderPairingStatus(response.link);
+}
+
+async function handleUnpair(): Promise<void> {
+  const response = await request({ type: "pomo:link:unpair" });
+  if (response.link !== undefined) renderPairingStatus(response.link);
+}
+
+savePairingEl.addEventListener("click", (): void => {
+  void handleSavePairing();
+});
+
+unpairPhoneEl.addEventListener("click", (): void => {
+  void handleUnpair();
+});
 
 function populateSettings(settings: PomoSettings): void {
   settingWorkEl.value = String(settings.workMinutes);

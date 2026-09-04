@@ -54,11 +54,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.pomo.R
-import com.pomo.sync.ui.SyncSignal
-import com.pomo.sync.ui.SyncUiState
 import com.pomo.timer.TimerState
 import com.pomo.ui.components.StatTile
-import com.pomo.ui.theme.JetBrainsMono
 import com.pomo.ui.theme.PomoTokens
 import com.pomo.ui.theme.TimerHeroStyle
 import com.pomo.ui.theme.TimerMsStyle
@@ -85,8 +82,6 @@ public fun TimerScreen(
     currentTag: String? = null,
     onTagSelected: (String?) -> Unit = {},
     availableTags: List<String> = emptyList(),
-    syncSignals: List<SyncSignal> = SyncUiState.Dormant.signals,
-    onOpenSync: () -> Unit = {},
 ) {
     val colors = PomoTokens.colors
     val isRunning = state?.status == TimerState.STATUS_RUNNING
@@ -108,9 +103,6 @@ public fun TimerScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         TimerHeader()
-
-        Spacer(Modifier.height(16.dp))
-        CompactSignalRail(signals = syncSignals, onOpenSync = onOpenSync)
 
         Spacer(Modifier.height(24.dp))
 
@@ -256,38 +248,6 @@ private fun TimerHeader() {
             style = MaterialTheme.typography.labelSmall,
             color = PomoTokens.colors.onSurfaceMuted,
         )
-    }
-}
-
-@Composable
-private fun CompactSignalRail(
-    signals: List<SyncSignal>,
-    onOpenSync: () -> Unit,
-) {
-    Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onOpenSync)
-                .semantics { contentDescription = "Sync signal rail" },
-        horizontalArrangement = Arrangement.SpaceBetween,
-    ) {
-        signals.forEach { signal ->
-            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.weight(1f)) {
-                Text(
-                    signal.value,
-                    fontFamily = JetBrainsMono,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (signal.attention) PomoTokens.colors.accent else PomoTokens.colors.onSurface,
-                )
-                Text(
-                    signal.label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = PomoTokens.colors.onSurfaceFaint,
-                    maxLines = 1,
-                )
-            }
-        }
     }
 }
 

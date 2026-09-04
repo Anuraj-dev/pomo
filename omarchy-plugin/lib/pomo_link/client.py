@@ -470,6 +470,9 @@ class PomoClient:
             self.last_socket_contact_at = 0.0
             self.retry_started_at = time.monotonic()
             self.retry_delay_s = RECONNECT_INTERVAL_S
+            if self.in_boot_probe():
+                self.set_mode("DISCOVERING")
+                return
             self.set_mode("CONNECTING")
             if self.connect_failures >= CONNECT_RETRY_MAX:
                 self.log("connect failed %sx -> OFFLINE" % self.connect_failures)
@@ -484,6 +487,9 @@ class PomoClient:
             self.last_socket_contact_at = 0.0
             self.retry_started_at = time.monotonic()
             self.retry_delay_s = RECONNECT_INTERVAL_S
+            if self.in_boot_probe():
+                self.set_mode("DISCOVERING")
+                return
             self.set_mode("CONNECTING")
             if self.connect_failures >= CONNECT_RETRY_MAX:
                 self.enter_offline("connect retries exhausted")
@@ -533,6 +539,16 @@ class PomoClient:
         self.soft_resync_count += 1
         self.entering_sync = False
         self.ws_dropped_during_enter = False
+        if self.model.local_owner:
+            # OFFLINE already took the clock. Keep it so the first state frame
+            # runs import+adopt instead of the light snap-to-phone path.
+            self.log(
+                "soft resync #%s: %s (keep local clock, full enter-SYNC)"
+                % (self.soft_resync_count, self.soft_resync_reason)
+            )
+            ok = self.begin_websocket("local-owner reconnect")
+            self.soft_resyncing = False
+            return ok
         self.model.set_local_owner(False)
         self.log("soft resync #%s: %s (phone still owns clock)" % (self.soft_resync_count, self.soft_resync_reason))
         self.begin_websocket("soft resync")
@@ -1218,8 +1234,12 @@ class PomoClient:
                 self.log("heartbeat stale: SYNCED socket -> soft resync")
                 self.soft_resync("stale socket")
             elif self.mode == "CONNECTING":
-                self.log("heartbeat stale: CONNECTING socket -> soft resync/offline")
-                self.soft_resync("reconnect connect stale")
+                if self.model.local_owner:
+                    self.log("heartbeat stale: CONNECTING with local clock -> OFFLINE")
+                    self.enter_offline("reconnect connect stale")
+                else:
+                    self.log("heartbeat stale: CONNECTING socket -> soft resync/offline")
+                    self.soft_resync("reconnect connect stale")
 
     def tick_probe_watchdog(self):
         if self.mode in ("SYNCED", "OFFLINE", "UNPAIRED"):

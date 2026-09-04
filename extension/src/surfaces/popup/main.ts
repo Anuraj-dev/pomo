@@ -1,7 +1,7 @@
 import { bootInstrument } from "../../shared/instrument";
-import { requiredElement } from "../../shared/surface";
-import { bootSyncPanel } from "../../sync/ui/syncPanel";
+import { bindLinkMode, requiredElement } from "../../shared/surface";
 
+bindLinkMode(requiredElement("linkMode"));
 bootInstrument(document.body, {
   phaseEl: requiredElement("phase"),
   statusEl: requiredElement("status"),
@@ -12,4 +12,3 @@ bootInstrument(document.body, {
   resetEl: requiredElement("reset"),
   toggleText: (state) => (state.status === "running" ? "Pause" : "Start"),
 });
-bootSyncPanel(requiredElement("syncPanel"), "compact");

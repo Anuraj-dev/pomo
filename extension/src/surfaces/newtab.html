@@ -6,7 +6,6 @@
     <title>Pomo</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="newtab.css" />
-    <link rel="stylesheet" href="sync.css" />
   </head>
   <body data-empty="true">
     <main class="stage">
@@ -16,9 +15,7 @@
           <button type="button" role="tab" id="tab-history" class="tab" data-tab="history" aria-selected="false" aria-controls="page-history" tabindex="-1">History</button>
           <button type="button" role="tab" id="tab-stats" class="tab" data-tab="stats" aria-selected="false" aria-controls="page-stats" tabindex="-1">Stats</button>
           <button type="button" role="tab" id="tab-settings" class="tab" data-tab="settings" aria-selected="false" aria-controls="page-settings" tabindex="-1">Settings</button>
-          <button type="button" role="tab" id="tab-sync" class="tab" data-tab="sync" aria-selected="false" aria-controls="page-sync" tabindex="-1">Sync</button>
         </div>
-        <a class="tab tab-link" href="crew.html">Crew</a>
         <span class="build num" id="buildVersion" aria-label="Extension version"></span>
       </div>
 
@@ -26,6 +23,7 @@
         <header class="band">
           <span class="phase" id="phase">Focus</span>
           <span class="status" id="status">Ready</span>
+          <span class="link-mode" id="linkMode" hidden></span>
         </header>
 
         <button class="tap-zone" id="toggle" aria-label="Start or pause the timer">
@@ -52,9 +50,6 @@
             <span class="caption">day streak</span>
           </div>
         </section>
-      </section>
-      <section class="view" id="page-sync" role="tabpanel" aria-labelledby="tab-sync" tabindex="0" hidden>
-        <div class="column"><section id="syncPanel" aria-label="Sync, Data History, and Recovery"></section></div>
       </section>
 
       <section class="view" id="page-history" role="tabpanel" aria-labelledby="tab-history" tabindex="0" hidden>
@@ -131,6 +126,18 @@
             <span class="section-meta" id="settingsStatus" role="status"></span>
           </header>
           <form class="settings-form" id="settingsForm">
+            <section class="settings-group" id="pairingGroup">
+              <div class="settings-group-head">
+                <h2>Phone</h2>
+                <p>Paste the pairing payload from Pomo Settings on your phone. Chrome follows the phone on the LAN, then runs locally when the phone is gone.</p>
+              </div>
+              <p class="pairing-status" id="pairingStatus" role="status">Not paired</p>
+              <label class="setting-field pairing-payload"><span>Pairing payload</span><textarea id="pairingPayload" rows="4" spellcheck="false" placeholder='{"url":"http://192.168.1.20:9876","token":"..."}'></textarea></label>
+              <div class="settings-actions pairing-actions">
+                <button type="button" class="ghost" id="unpairPhone" hidden>Remove pairing</button>
+                <button type="button" class="primary" id="savePairing">Save pairing</button>
+              </div>
+            </section>
             <section class="settings-group">
               <div class="settings-group-head">
                 <h2>Timer</h2>

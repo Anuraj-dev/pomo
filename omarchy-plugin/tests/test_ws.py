@@ -67,6 +67,10 @@ class FailedConnectTest(unittest.TestCase):
         self.client.host = "h"
         self.client.port = 9876
         self.client.token = "t"
+        # These cases exercise reconnect behavior after the initial boot
+        # probe. Boot failures intentionally return to DISCOVERING instead.
+        self.client.ever_synced = True
+        self.client.probe_active = False
 
     def tearDown(self):
         shutil.rmtree(self.dir, ignore_errors=True)

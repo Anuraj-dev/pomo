@@ -5,7 +5,6 @@
     <meta name="color-scheme" content="dark light" />
     <title>Pomo</title>
     <link rel="stylesheet" href="tokens.css" />
-    <link rel="stylesheet" href="sync.css" />
     <link rel="stylesheet" href="sidepanel.css" />
   </head>
   <body data-empty="true">
@@ -13,6 +12,7 @@
       <header class="band">
         <span class="phase" id="phase">Focus</span>
         <span class="status" id="status">Ready</span>
+        <span class="link-mode" id="linkMode" hidden></span>
       </header>
 
       <button class="readout" id="toggle" aria-label="Start or pause the timer">
@@ -24,7 +24,6 @@
         <button class="control" id="skip">Skip</button>
         <button class="control" id="reset">Reset</button>
       </nav>
-      <section id="syncPanel" aria-label="Sync status"></section>
 
       <section class="stats">
         <div class="stat">
@@ -43,7 +42,6 @@
 
       <nav class="surface-links" aria-label="Pomo surfaces">
         <button class="surface-link" id="historyLink" type="button">History + stats</button>
-        <button class="surface-link" id="crewLink" type="button">Crew</button>
       </nav>
     </main>
     <script type="module" src="sidepanel.js"></script>

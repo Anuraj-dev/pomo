@@ -1,8 +1,10 @@
 # Pomo Chrome Extension
 
-Feature-complete MV3 port of Pomo's pomodoro timer, history, stats, and
-decentralized Crew leaderboard. The phone and extension are separate local
-surfaces backed by the same user-owned portable backup contract.
+MV3 port of Pomo's pomodoro timer, history, and stats. Pair it with the phone
+from Settings using the `{url, token}` payload. While the phone is on the LAN,
+Chrome follows the phone clock. When the phone is gone, the local engine runs
+and completed blocks flush back on reconnect (import + least-remaining adopt).
+Crew stays on the phone.
 
 ## Build
 
@@ -13,26 +15,22 @@ bun install
 bun run build   # bundles sw.js, surface scripts, html/css, icons into dist/
 ```
 
-Plain Bun build is used intentionally — no Vite/CRXJS, deviating from the
-original "Bun + Vite + CRXJS" plan.
-
 ## Load unpacked
 
 1. `bun run build`
 2. chrome://extensions → Developer mode → Load unpacked → select `dist/`
-3. New Tab shows the timer (flagship instrument) when enabled. The side panel
-   mirrors the instrument and links to History, Stats, and Crew. The Popup is a
-   compact timer control surface; Crew lives in its full page.
+3. New Tab shows the timer. The side panel mirrors the instrument and links to
+   History. The Popup is a compact timer control surface.
 
 ## Test
 
 ```bash
-bun test          # unit + integration (fake relays, fake-indexeddb)
-bunx tsc --noEmit # typecheck
+bun test
+bunx tsc --noEmit
 ```
 
-Per repo convention, all extension tests, typecheck, linting, formatting, and
-build validation run in CI rather than locally.
+Per repo convention, extension tests, typecheck, and build run in CI rather than
+locally.
 
 ## Architecture notes
 
@@ -42,22 +40,16 @@ build validation run in CI rather than locally.
 - Time derives from the stored `endAt` (ADR-0007): running remaining is
   `startTime + duration - now`, so Chrome being closed just completes the block
   as-if-finished on the next wake.
-- Crew refresh is explicit when the Crew page opens or Refresh is pressed. Own
-  snapshots publish after durable focus-aggregate, display-identity, create,
-  join, or restore changes; unchanged data is republished only after 24 hours.
-  Timer completion never waits on relay work.
-- Identity: the Nostr secp256k1 private key is wrapped with a random AES-256
-  wrapping key kept in `storage.local` (`pomo:keyring`); the passphrase recovery
-  file is extension-specific. A corrupted keyring never mints a replacement
-  identity; the worker stays available to restore that recovery file.
-- Legacy import: `pomo-backup` v1 is a sensitivity-warned, read-only import
-  format. It may carry history, Crew membership, identity, and cached projection
-  data, so it belongs only in trusted storage. It never grants or activates sync
-  authority; current Recovery artifacts are required for that.
-- Zero host permissions: Nostr relay traffic is plain WebSockets.
+- Pairing, REST, and `/ws` live in `src/link/`. The service worker owns the
+  client; surfaces only paste the payload and show Phone / Local / Linking.
+- On reconnect (and when a phase completes on the phone) Chrome pulls
+  `GET /api/history` and inserts missing sessions by `start`. Phone dates win;
+  existing Chrome rows are left alone.
+- `pomo-backup` v1 still moves history between phone and Chrome as a file.
+  Chrome writes an empty Crew object and ignores Crew on import (ADR-0011 as
+  narrowed by ADR-0012).
 - Known platform constraint: Chrome toolbar badges fit roughly 4 characters,
-  so the badge shows `M:SS` under 10 minutes and `Nm` above — the plan's
-  `M:SS`-always badge is not physically possible.
+  so the badge shows `M:SS` under 10 minutes and `Nm` above.
 
 ## CI
 

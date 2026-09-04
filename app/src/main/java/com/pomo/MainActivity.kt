@@ -25,9 +25,6 @@ import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.pomo.notifications.AlertsNotifier
 import com.pomo.service.PomodoroService
 import com.pomo.service.PomodoroServiceStarter
-import com.pomo.sync.transport.OrdinaryDrainScheduler
-import com.pomo.sync.ui.SyncSafetyGate
-import com.pomo.sync.ui.timerControlsAllowed
 import com.pomo.ui.TimerFragment
 import com.pomo.update.ForegroundUpdateCheck
 import com.pomo.util.UtilPreferenceManager
@@ -112,7 +109,6 @@ public class MainActivity : AppCompatActivity() {
         navView.setOnItemReselectedListener { }
 
         startService()
-        OrdinaryDrainScheduler.enqueuePeriodic(this)
         requestNotificationPermission()
         handleNavIntent(intent)
     }
@@ -200,10 +196,6 @@ public class MainActivity : AppCompatActivity() {
         name: String,
         command: suspend PomodoroService.() -> com.pomo.timer.TimerState,
     ) {
-        if (!timerControlsAllowed(SyncSafetyGate.state)) {
-            Log.w(TAG, "Ignoring timer command '$name' because the affected Active phase is in conflict or Safe mode")
-            return
-        }
         val boundService = service
         Log.i(TAG, "Timer command requested: $name. isBound=$isBound serviceReady=${boundService != null}")
         if (!isBound || boundService == null) {

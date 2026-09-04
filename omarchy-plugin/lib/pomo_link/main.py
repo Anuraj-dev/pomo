@@ -11,6 +11,10 @@ import time
 
 from .client import PomoClient, parse_pairing_payload
 from .constants import TIMER_SNAP_INTERVAL_S
+from .desktop_pairing import load_desktop_client_pairing
+from .ipc import UnixCommandServer
+from .notify import notify_phase_complete
+from .persist import atomic_write
 from .queue import SessionQueue
 from .store import ConfigStore, wall_adjust_remaining
 from .timer import TimerModel
@@ -44,7 +48,16 @@ def _emit_error(message):
 
 
 class Engine:
-    def __init__(self, directory=None):
+    def __init__(
+        self,
+        directory=None,
+        status_path=None,
+        socket_path=None,
+        stdout_status=True,
+        notify_events=False,
+        import_desktop_pairing=False,
+        use_stdin=True,
+    ):
         self.store = ConfigStore(directory)
         self.model = TimerModel()
         self.model.set_config(
@@ -70,14 +83,23 @@ class Engine:
         self.last_status = None
         self.last_status_at = 0.0
         self.running = True
+        self.status_path = status_path
+        self.socket_path = socket_path
+        self.stdout_status = stdout_status
+        self.notify_events = notify_events
+        self.use_stdin = use_stdin
+        self.server = None
         # Last-wins gesture slot: a press replaces the queued one instead of
         # queueing behind it, so 3x Start is one toggle, not start-pause-start.
         self.pending_gesture = None
         self._stdin_remainder = b""
+        self._stdin_draining = False
         try:
             os.set_blocking(sys.stdin.fileno(), False)
         except (OSError, ValueError):
             pass
+        if import_desktop_pairing:
+            self._import_desktop_pairing()
 
     def _drain_stdin(self):
         """Read every complete stdin line available now.
@@ -89,22 +111,26 @@ class Engine:
         if sys.stdin.closed:
             return
         fd = sys.stdin.fileno()
-        while True:
-            try:
-                chunk = os.read(fd, 4096)
-            except (BlockingIOError, InterruptedError):
-                return
-            except OSError:
-                self.running = False
-                return
-            if not chunk:
-                self.running = False
-                return
-            data = self._stdin_remainder + chunk
-            lines = data.split(b"\n")
-            self._stdin_remainder = lines.pop()
-            for raw in lines:
-                self.handle_line(raw.decode("utf-8", "replace"))
+        self._stdin_draining = True
+        try:
+            while True:
+                try:
+                    chunk = os.read(fd, 4096)
+                except (BlockingIOError, InterruptedError):
+                    return
+                except OSError:
+                    self.running = False
+                    return
+                if not chunk:
+                    self.running = False
+                    return
+                data = self._stdin_remainder + chunk
+                lines = data.split(b"\n")
+                self._stdin_remainder = lines.pop()
+                for raw in lines:
+                    self.handle_line(raw.decode("utf-8", "replace"))
+        finally:
+            self._stdin_draining = False
 
     def drain_pending_gesture(self):
         if self.pending_gesture is None or self.client.busy:
@@ -182,6 +208,14 @@ class Engine:
                 self.model.long_after,
                 snap["goal"],
             )
+
+    def _import_desktop_pairing(self):
+        if self.store.token:
+            return False
+        parsed = load_desktop_client_pairing()
+        if not parsed:
+            return False
+        return self.client.apply_pairing(parsed)
 
     def _on_phase_complete(self, phase):
         self.pending_events.append({"type": "event", "event": "phase_complete", "phase": phase})
@@ -277,7 +311,13 @@ class Engine:
             return
         self.last_status = payload
         self.last_status_at = now
-        _emit(payload)
+        if self.stdout_status:
+            _emit(payload)
+        if self.status_path:
+            try:
+                atomic_write(self.status_path, payload, mode=0o600)
+            except OSError:
+                pass
 
     def handle_line(self, line):
         text = line.strip()
@@ -310,10 +350,10 @@ class Engine:
 
         if cmd in ("quit", "exit"):
             self.running = False
-            return
+            return self.status_payload()
         if cmd == "ping":
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in GESTURE_COMMANDS:
             self.pending_gesture = cmd
             if self.client.message == "waiting to connect":
@@ -324,18 +364,27 @@ class Engine:
                 if not self.client.message:
                     self.client.message = "waiting to connect"
                 self.emit_status(force=True)
-            return
+            elif self.model.local_owner and not self._stdin_draining:
+                # Local/offline commands can complete synchronously, which
+                # keeps the unix command API's reply authoritative. Phone
+                # commands remain queued until the loop drains them so bursts
+                # still coalesce and busy remains visible before POST.
+                self.drain_pending_gesture()
+            self.emit_status(force=True)
+            return self.last_status
         if cmd == "pair":
             data = payload
             if payload.get("arg") and not payload.get("url") and not payload.get("token"):
                 data = parse_pairing_payload(payload.get("arg"))
-            self.client.apply_pairing(data)
+            if not self.client.apply_pairing(data):
+                self.emit_status(force=True)
+                return {"type": "error", "error": "invalid pairing payload"}
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in ("set_token", "token"):
             self.client.apply_pairing({"token": payload.get("token") or payload.get("arg") or ""})
             self.emit_status(force=True)
-            return
+            return self.last_status
         if cmd in ("set_host", "host"):
             self.client.apply_pairing(
                 {
@@ -344,7 +393,9 @@ class Engine:
                 }
             )
             self.emit_status(force=True)
-            return
+            return self.last_status
+        self.emit_status(force=True)
+        return self.last_status
 
     def tick_persist(self):
         if self.client.mode == "SYNCED":
@@ -357,7 +408,19 @@ class Engine:
             if self.last_timer_snap_at:
                 self.clear_live_timer()
 
+    def _publish_event(self, event):
+        if self.stdout_status:
+            _emit(event)
+        if self.notify_events and event.get("event") == "phase_complete":
+            notify_phase_complete(event.get("phase") or "work")
+
+    def _open_server(self):
+        if not self.socket_path or self.server is not None:
+            return
+        self.server = UnixCommandServer(self.socket_path)
+
     def loop(self):
+        self._open_server()
         self.emit_status(force=True)
         while self.running:
             try:
@@ -373,11 +436,18 @@ class Engine:
     def _loop_once(self):
         timeout = 0.2
         readers = []
-        stdin_fd = None if sys.stdin.closed else sys.stdin.fileno()
+        stdin_fd = None
+        if self.use_stdin and not sys.stdin.closed:
+            try:
+                stdin_fd = sys.stdin.fileno()
+            except (OSError, ValueError):
+                stdin_fd = None
         if stdin_fd is not None:
             readers.append(stdin_fd)
         if self.client.ws.connected and self.client.ws.sock is not None:
             readers.append(self.client.ws.sock)
+        if self.server is not None:
+            readers.extend(self.server.sockets())
         try:
             ready, _, _ = select.select(readers, [], [], timeout)
         except (InterruptedError, ValueError):
@@ -385,6 +455,8 @@ class Engine:
 
         if stdin_fd is not None and stdin_fd in ready:
             self._drain_stdin()
+        if self.server is not None:
+            self.server.pump(ready, self.handle_line)
         if not self.running:
             return
 
@@ -394,9 +466,11 @@ class Engine:
         if self.client.last_event:
             event = self.client.last_event
             self.client.last_event = None
-            _emit({"type": "event", "event": event["event"], "phase": event.get("phase") or "work"})
+            self._publish_event(
+                {"type": "event", "event": event["event"], "phase": event.get("phase") or "work"}
+            )
         while self.pending_events:
-            _emit(self.pending_events.pop(0))
+            self._publish_event(self.pending_events.pop(0))
 
         self.client.tick()
         self.client.drain_worker_results()
@@ -425,18 +499,39 @@ class Engine:
             self.persist_live_timer()
         return True
 
+    def close(self):
+        if self.model.local_owner and self.model.is_live():
+            self.persist_live_timer()
+        self.client.ws.close()
+        self.client.worker.stop()
+        if self.server is not None:
+            self.server.close()
+            self.server = None
+        if self.status_path:
+            try:
+                os.unlink(self.status_path)
+            except OSError:
+                pass
 
-def main(argv=None):
-    del argv
-    try:
-        engine = Engine()
-    except Exception as exc:
-        try:
-            sys.stderr.write("[pomo-link] init failed: %r\n" % (exc,))
-            sys.stderr.flush()
-        except Exception:
-            pass
-        return 1
+
+def run_engine(
+    directory=None,
+    status_path=None,
+    socket_path=None,
+    stdout_status=True,
+    notify_events=False,
+    import_desktop_pairing=False,
+    use_stdin=True,
+):
+    engine = Engine(
+        directory=directory,
+        status_path=status_path,
+        socket_path=socket_path,
+        stdout_status=stdout_status,
+        notify_events=notify_events,
+        import_desktop_pairing=import_desktop_pairing,
+        use_stdin=use_stdin,
+    )
 
     def _stop(_signum, _frame):
         engine.running = False
@@ -446,11 +541,14 @@ def main(argv=None):
     try:
         engine.loop()
     finally:
-        if engine.model.local_owner and engine.model.is_live():
-            engine.persist_live_timer()
-        engine.client.ws.close()
-        engine.client.worker.stop()
+        engine.close()
     return 0
+
+
+def main(argv=None):
+    from .cli import main as cli_main
+
+    return cli_main(argv)
 
 
 if __name__ == "__main__":

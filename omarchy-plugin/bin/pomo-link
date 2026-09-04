@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
-"""Long-lived hybrid Pomo engine. Stdin newline commands, stdout NDJSON."""
+"""Hybrid Pomo engine. Omarchy stdin/stdout, or --daemon for Waybar."""
 
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# realpath: ~/.local/bin/pomo-link is a symlink; abspath would look in ~/.local/lib.
+ROOT = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 LIB = os.path.join(ROOT, "lib")
 if LIB not in sys.path:
     sys.path.insert(0, LIB)
 
-from pomo_link.main import main
+from pomo_link.cli import main
 
 if __name__ == "__main__":
     sys.exit(main())

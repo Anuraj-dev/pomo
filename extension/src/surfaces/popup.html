@@ -6,13 +6,13 @@
     <title>Pomo</title>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="popup.css" />
-    <link rel="stylesheet" href="sync.css" />
   </head>
   <body data-empty="true">
     <main class="card">
       <header class="band">
         <span class="phase" id="phase">Focus</span>
         <span class="status" id="status">Ready</span>
+        <span class="link-mode" id="linkMode" hidden></span>
       </header>
 
       <div class="readout">
@@ -24,7 +24,6 @@
         <button class="control" id="skip">Skip</button>
         <button class="control" id="reset">Reset</button>
       </nav>
-      <section id="syncPanel" aria-label="Sync status"></section>
     </main>
     <script type="module" src="popup.js"></script>
   </body>

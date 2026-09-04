@@ -72,7 +72,7 @@ jobs:
             echo "POMO_KEY_PASSWORD=android"
           } >> "$GITHUB_ENV"
 
-      - name: Build dormant production and sync test APKs
+      - name: Build debug APKs
         run: ./gradlew -Dorg.gradle.java.home="$JAVA_HOME" assembleDevDebug assembleProdDebug
         env:
           CI_COMMIT_SHA: ${{ github.sha }}
@@ -85,21 +85,6 @@ jobs:
           APKSIGNER="${ANDROID_SDK_ROOT:-$ANDROID_HOME}/build-tools/35.0.0/apksigner"
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/dev/debug/app-dev-debug.apk
           "$APKSIGNER" verify --verbose --print-certs app/build/outputs/apk/prod/debug/app-prod-debug.apk
-
-      - name: Stage Android sync artifacts
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p android-sync-artifacts
-          cp app/build/outputs/apk/dev/debug/app-dev-debug.apk android-sync-artifacts/
-          cp app/build/outputs/apk/prod/debug/app-prod-debug.apk android-sync-artifacts/
-
-      - name: Upload Android sync artifacts
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: android-sync-artifacts
-          path: android-sync-artifacts/
-          if-no-files-found: error
 
   extension-check:
     name: Extension typecheck, tests, and build
@@ -135,55 +120,14 @@ jobs:
         working-directory: extension
         run: bun test
 
-      - name: Sync host performance gates
-        working-directory: extension
-        run: bun run sync:gates
-
-      - name: Verify production activation remains gated
-        working-directory: extension
-        run: bun run sync:verify-activation-gate
-
       - name: Build
         working-directory: extension
         run: bun run build
 
-      - name: Verify dormant production package
-        working-directory: extension
-        run: bun run sync:verify-package --production
-
-      - name: Build and verify dedicated sync test package
-        working-directory: extension
-        env:
-          POMO_SYNC_TEST_ARTIFACT: "true"
-        run: |
-          bun run build
-          bun run sync:verify-package --test
-          bun run sync:verify-activation-gate
-          cd dist
-          zip -qr ../pomo-sync-test-extension.zip .
-
-      - name: Upload sync host evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sync-host-evidence
-          path: extension/evidence/sync-host-benchmark.json
-          if-no-files-found: error
-
-      - name: Upload Chrome sync artifacts and package evidence
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: chrome-sync-artifacts
-          path: |
-            extension/pomo-sync-test-extension.zip
-            extension/evidence/sync-package-production.json
-            extension/evidence/sync-package-test.json
-          if-no-files-found: error
-
-  validation-bundle:
-    name: Packaged validation bundle
+  omarchy-plugin-check:
+    name: Omarchy plugin tests
     runs-on: ubuntu-latest
-    needs: [build-test, extension-check]
-    timeout-minutes: 10
+    timeout-minutes: 5
 
     steps:
       - name: Checkout
@@ -191,70 +135,5 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Download Android sync artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: android-sync-artifacts
-          path: validation-bundle
-
-      - name: Download Chrome sync artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: chrome-sync-artifacts
-          path: validation-bundle
-
-      - name: Download host evidence
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: sync-host-evidence
-          path: validation-bundle
-
-      - name: Assemble installable validation bundle
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "downloaded layout:"
-          find validation-bundle -type f | sort
-          flatten() {
-            local name="$1"
-            local found
-            found="$(find validation-bundle -name "$name" -type f | head -n 1)"
-            if [ -z "$found" ]; then
-              echo "missing $name in validation-bundle" >&2
-              exit 1
-            fi
-            if [ "$found" != "validation-bundle/$name" ]; then
-              cp "$found" "validation-bundle/$name"
-            fi
-          }
-          flatten app-dev-debug.apk
-          flatten app-prod-debug.apk
-          flatten pomo-sync-test-extension.zip
-          mkdir -p validation-bundle/docs validation-bundle/scripts \
-            validation-bundle/sync-protocol/activation \
-            validation-bundle/sync-protocol/fixtures
-          cp docs/sync-validation-runbook.md docs/sync-merge-order.md validation-bundle/docs/
-          cp sync-protocol/activation/physical-matrix.json validation-bundle/sync-protocol/activation/
-          cp sync-protocol/fixtures/system-generation.json validation-bundle/sync-protocol/fixtures/
-          cp scripts/install-sync-validation.sh validation-bundle/scripts/
-          python3 -c 'import json; d=json.load(open("sync-protocol/fixtures/system-generation.json")); assert d["productionActivation"] is False'
-          {
-            echo "commit=${GITHUB_SHA}"
-            echo "suite=1"
-            echo "generation=1"
-            echo "productionActivation=false"
-            echo "install=./scripts/install-sync-validation.sh app-dev-debug.apk"
-            echo "runbook=docs/sync-validation-runbook.md"
-          } > validation-bundle/install-order.txt
-          (cd validation-bundle && sha256sum \
-            app-dev-debug.apk \
-            app-prod-debug.apk \
-            pomo-sync-test-extension.zip \
-            > SHA256SUMS)
-
-      - name: Upload sync validation bundle
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        with:
-          name: sync-validation-bundle
-          path: validation-bundle/**
-          if-no-files-found: error
+      - name: Tests
+        run: python3 -m unittest discover -s omarchy-plugin/tests -v

@@ -1,17 +1,10 @@
 # Pomo
 
 Pomo is a local-first Pomodoro timer for Android, with a Chrome extension and a
-thin desktop client. Today the live timer and history still live on each
-installation: Android `OfflineTimer` plus Room, Chrome `TimerEngine` plus
-IndexedDB. Desktop and NodeMCU stay thin clients of the phone LAN API.
-
-A dormant peer-sync generation is packaged on Android and Chrome. Equal Full
-Replicas under one Member Identity are specified and tested as a preference
-journal plus domain allowlist, with `productionActivation=false`. Test artifacts
-run ordinary drain and a Replica LAN session into `OperationKernel`. Public
-migration cutover is not on. CI uploads signed test APKs and a Chrome test zip.
-Physical and provider rows live in `docs/sync-validation-runbook.md` and stay
-`BLOCKED` until a person runs them. See `docs/sync-system.md`.
+thin desktop client. The phone owns the live clock, Room history, and Crew.
+Chrome has its own timer engine and local history. Desktop, NodeMCU, and the
+Omarchy plugin talk to the phone LAN API. Desk and Omarchy already run locally
+when the phone is gone, then import history and adopt a live timer on reconnect.
 
 The UI is a focus instrument: large live time, dense stats, local history, and
 direct controls.
@@ -136,14 +129,14 @@ node desktop-client/dist/cli.js service status
 See [docs/desktop-client.md](docs/desktop-client.md) for service paths, Waybar
 output, QR commands, and failure behavior.
 
-## Omarchy plugin
+## Omarchy plugin and Waybar
 
-The `omarchy-plugin/` directory contains the `raja.pomo` Omarchy shell plugin.
-It provides a phone-synced bar timer, local offline timing, pairing controls,
-and a side-anchored panel. The bar display can be set per widget entry to
-`Timer + phase`, `Timer only`, or `Icon only`. See
-[omarchy-plugin/README.md](omarchy-plugin/README.md) for installation,
-configuration, and pairing details.
+The `omarchy-plugin/` directory contains the `raja.pomo` Omarchy shell plugin
+and the shared `pomo-link` engine. Omarchy gets a bar widget and panel. Waybar
+runs the same engine as a user daemon (`pomo-link --daemon`) and streams JSON
+from a status file. Both follow the phone on the LAN and run a local timer
+while the phone is gone. See [omarchy-plugin/README.md](omarchy-plugin/README.md)
+for installation, pairing, and the Waybar module snippet.
 
 ## Architecture
 
@@ -185,7 +178,7 @@ state over the local network; it does not merge state from a desktop process.
 - [docs/desktop-client.md](docs/desktop-client.md): CLI, service, cache, and
   Waybar behavior.
 - [omarchy-plugin/README.md](omarchy-plugin/README.md): Omarchy installation,
-  bar display settings, hover behavior, and pairing.
+  bar display settings, hover behavior, pairing, and Waybar.
 
 ## Validation
 

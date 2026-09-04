@@ -208,7 +208,7 @@ export class TimerEngine {
     this.lastAction = now;
   }
 
-  restore(saved: TimerSnapshot): void {
+  restore(saved: TimerSnapshot, options?: { reconcile?: boolean }): void {
     const now = this.ports.now();
     if (saved.version !== TIMER_STATE_VERSION) {
       throw new Error(`unsupported saved state version: ${saved.version}`);
@@ -226,6 +226,10 @@ export class TimerEngine {
     this.lastAction = Number.isFinite(saved.lastUpdatedTime) && saved.lastUpdatedTime >= 0 ? saved.lastUpdatedTime : now;
     this.revision = Number.isFinite(saved.revision) && saved.revision >= 0 ? saved.revision : 0;
     this.tag = typeof saved.tag === "string" ? saved.tag : "";
+    if (options?.reconcile === false) {
+      this.lastAction = now;
+      return;
+    }
     if (this.status === "running") {
       this.tick();
     } else if (this.date !== this.today()) {
@@ -235,8 +239,40 @@ export class TimerEngine {
     }
   }
 
-  snapshot(): TimerSnapshot {
-    this.revision += 1;
+  /** Mirror a phone snapshot without ticking or committing. Used while following. */
+  follow(input: {
+    status: Status;
+    phase: Phase;
+    startTime: number;
+    duration: number;
+    remaining: number;
+    completed: number;
+    date: string;
+    tag: string;
+  }): void {
+    this.status = input.status;
+    this.phase = input.phase;
+    this.duration = Math.max(0, input.duration);
+    this.remaining = Math.min(this.duration, Math.max(0, input.remaining));
+    if (input.startTime > 0) this.startTime = input.startTime;
+    else if (this.status === "running") {
+      this.startTime = this.ports.now() - (this.duration - this.remaining);
+    } else this.startTime = 0;
+    this.completed = Math.max(0, Math.floor(input.completed));
+    this.date = input.date;
+    this.tag = input.tag;
+    this.lastAction = this.ports.now();
+  }
+
+  isLive(): boolean {
+    return this.status === "running" || this.status === "paused";
+  }
+
+  stampStartTimeIfLive(): void {
+    if (this.isLive() && this.startTime <= 0) this.startTime = this.ports.now();
+  }
+
+  peek(): TimerSnapshot {
     const running = this.status === "running";
     return {
       status: this.status,
@@ -252,6 +288,11 @@ export class TimerEngine {
       tag: this.tag,
       version: TIMER_STATE_VERSION,
     };
+  }
+
+  snapshot(): TimerSnapshot {
+    this.revision += 1;
+    return this.peek();
   }
 }
 

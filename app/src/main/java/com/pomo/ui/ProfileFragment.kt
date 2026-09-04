@@ -153,9 +153,6 @@ public class ProfileFragment : Fragment() {
                         onOpenSettings = {
                             findNavController().navigate(R.id.navigation_settings)
                         },
-                        onOpenSync = {
-                            findNavController().navigate(R.id.navigation_sync)
-                        },
                     )
                 }
             }
