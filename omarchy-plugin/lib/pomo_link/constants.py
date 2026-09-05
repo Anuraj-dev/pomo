@@ -20,12 +20,17 @@ CONFIG_REFRESH_S = 300.0
 CONFIG_RETRY_S = 60.0
 SOFT_RESYNC_MAX = 8
 TIMER_SNAP_INTERVAL_S = 30.0
+# Client-side WS keepalive: paused/stopped phones send no frames, so without
+# our own pings the 20s stale check would kill a healthy idle socket.
+WS_PING_S = 10.0
+CONNECT_RETRY_MAX = 3
 
 HTTP_TIMEOUT_S = 2.0
 HTTP_FLUSH_TIMEOUT_S = 5.0
 
 IMPORT_MAX_FUTURE_S = 5 * 60
 IMPORT_MAX_AGE_S = 14 * 24 * 60 * 60
+IMPORT_RETRY_MAX = 3
 
 STATUSES = ("stopped", "running", "paused")
 PHASES = ("work", "short", "long")

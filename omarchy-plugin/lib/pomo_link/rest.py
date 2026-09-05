@@ -9,9 +9,16 @@ import urllib.request
 from .constants import HTTP_FLUSH_TIMEOUT_S, HTTP_TIMEOUT_S
 
 
-class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, new_url):
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Decline every redirect: the phone API never redirects, and following
+    one would forward X-Pomo-Token to another authority; 301/302 would also
+    silently downgrade a POST to GET."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
         return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 class RestClient:
@@ -19,7 +26,6 @@ class RestClient:
         self.host = ""
         self.port = 0
         self.token = ""
-        self.opener = urllib.request.build_opener(_NoRedirectHandler)
 
     def configure(self, host, port, token):
         self.host = host or ""
@@ -57,16 +63,16 @@ class RestClient:
             method=method,
         )
         try:
-            with self.opener.open(req, timeout=timeout) as resp:
+            with _OPENER.open(req, timeout=timeout) as resp:
                 text = resp.read().decode("utf-8", "replace")
                 return int(resp.status), text
         except urllib.error.HTTPError as exc:
             try:
                 text = exc.read().decode("utf-8", "replace")
-            except OSError:
+            except Exception:
                 text = ""
             return int(exc.code), text
-        except (OSError, TypeError, ValueError):
+        except Exception:
             return 0, ""
 
     def get_status(self, host=None, port=None, token=None, timeout=None):

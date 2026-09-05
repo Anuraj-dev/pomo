@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "today.js" as Today
 
 Panel {
   id: root
@@ -56,8 +57,6 @@ Panel {
     for (var existing in root.settings)
       if (existing !== "id") entry[existing] = root.settings[existing]
     for (var key in values) entry[key] = values[key]
-    delete entry.token
-    delete entry.pairingJson
     root.settings = entry
     if (root.hostWidget && "settings" in root.hostWidget) root.hostWidget.settings = entry
     if (root.bar && root.bar.shell && typeof root.bar.shell.updateEntryInline === "function")
@@ -105,6 +104,8 @@ Panel {
     if (paste !== "") {
       var fromPaste = hostPortFromPairingJson(paste)
       if (fromPaste.host) persist.host = fromPaste.host
+      // Same 1..65535 range ConfigStore.set_pairing() enforces; a paste can
+      // carry any number.
       if (fromPaste.port >= 1 && fromPaste.port <= 65535) persist.port = fromPaste.port
     } else {
       persist.host = host
@@ -149,8 +150,7 @@ Panel {
 
   function todayLine() {
     if (!pomo) return ""
-    if (pomo.goal > 0) return pomo.completed + " / " + pomo.goal + " today"
-    return pomo.completed + " today"
+    return Today.formatTodayLine(pomo.completed, pomo.goal, pomo.date, pomo.localToday)
   }
 
   KeyboardPanel {
@@ -174,9 +174,12 @@ Panel {
       blocked: hostField.activeFocus || portField.activeFocus || tokenField.activeFocus || pairingField.activeFocus
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onActivateRequested: if (root.pomo) root.pomo.toggle()
+      // Keyboard commands must respect the same busy gate as the buttons:
+      // the engine holds stdin gestures while a phone operation is in
+      // flight, so a key press could otherwise land right after it.
+      onActivateRequested: if (root.pomo && !root.pomo.busy) root.pomo.toggle()
       onTextKey: function(t) {
-        if (!root.pomo) return
+        if (!root.pomo || root.pomo.busy) return
         var key = String(t || "").toLowerCase()
         if (key === " ") root.pomo.toggle()
         else if (key === "s") root.pomo.skip()
@@ -246,6 +249,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.toggle()
             }
 
@@ -255,6 +260,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.skip()
             }
 
@@ -264,6 +271,8 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              enabled: root.pomo !== null && !root.pomo.busy
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.reset()
             }
 
@@ -273,6 +282,10 @@ Panel {
               foreground: root.contentForeground
               fontFamily: root.contentFontFamily
               bordered: true
+              // Local extend no-ops while not running; the button must not
+              // look live.
+              enabled: root.pomo !== null && !root.pomo.busy && root.pomo.status === "running"
+              opacity: enabled ? 1 : 0.4
               onClicked: if (root.pomo) root.pomo.extend()
             }
           }

@@ -25,16 +25,35 @@ def atomic_write(path, obj, mode=0o600):
     except OSError:
         pass
     payload = json.dumps(obj, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    # Deterministic sibling tmp name: load_json() and clear_timer_snapshot()
+    # recover/clean exactly this name after a crash between write and replace.
+    # The engine is single-threaded for file writes, so the fixed name cannot
+    # collide with itself.
     tmp = path + ".tmp"
+    fd = None
     try:
-        with open(tmp, "wb") as handle:
-            handle.write(payload)
-            handle.flush()
-            os.fsync(handle.fileno())
+        fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
+        # os.write is a raw write(2): a partial write would let os.replace
+        # commit truncated JSON over the last valid snapshot. Loop until the
+        # whole payload is on disk.
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short write to temporary state file")
+            view = view[written:]
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
         os.chmod(tmp, mode)
         os.replace(tmp, path)
         os.chmod(path, mode)
     except Exception:
+        if fd is not None and fd >= 0:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
         try:
             os.unlink(tmp)
         except OSError:
