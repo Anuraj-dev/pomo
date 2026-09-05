@@ -94,7 +94,7 @@ Panel {
       if (host !== "") fields.host = host
       if (portText !== "") {
         var port = parseInt(portText, 10)
-        if (port > 0) fields.port = port
+        if (port >= 1 && port <= 65535) fields.port = port
       }
       if (token !== "") fields.token = token
     }
@@ -104,12 +104,14 @@ Panel {
     if (paste !== "") {
       var fromPaste = hostPortFromPairingJson(paste)
       if (fromPaste.host) persist.host = fromPaste.host
-      if (fromPaste.port) persist.port = fromPaste.port
+      // Same 1..65535 range ConfigStore.set_pairing() enforces; a paste can
+      // carry any number.
+      if (fromPaste.port >= 1 && fromPaste.port <= 65535) persist.port = fromPaste.port
     } else {
       persist.host = host
       if (portText !== "") {
         var persistPort = parseInt(portText, 10)
-        if (persistPort > 0) persist.port = persistPort
+        if (persistPort >= 1 && persistPort <= 65535) persist.port = persistPort
       }
     }
     if (Object.keys(persist).length > 0) persistSettings(persist)
@@ -172,9 +174,12 @@ Panel {
       blocked: hostField.activeFocus || portField.activeFocus || tokenField.activeFocus || pairingField.activeFocus
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onActivateRequested: if (root.pomo) root.pomo.toggle()
+      // Keyboard commands must respect the same busy gate as the buttons:
+      // the engine holds stdin gestures while a phone operation is in
+      // flight, so a key press could otherwise land right after it.
+      onActivateRequested: if (root.pomo && !root.pomo.busy) root.pomo.toggle()
       onTextKey: function(t) {
-        if (!root.pomo) return
+        if (!root.pomo || root.pomo.busy) return
         var key = String(t || "").toLowerCase()
         if (key === " ") root.pomo.toggle()
         else if (key === "s") root.pomo.skip()

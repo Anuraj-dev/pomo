@@ -12,6 +12,10 @@ import time
 
 GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 MAX_FRAME = 1024 * 1024
+# _decode_frames caps one frame; MAX_MESSAGE caps a whole reassembled
+# fragmented message so continuation frames cannot grow _frag_payload
+# without bound.
+MAX_MESSAGE = 1024 * 1024
 
 
 class WebSocketError(Exception):
@@ -275,6 +279,12 @@ class Rfc6455Client:
                 if self._frag_opcode is None:
                     # Stray continuation: protocol violation, drop silently.
                     continue
+                if len(self._frag_payload) + len(payload) > MAX_MESSAGE:
+                    # Peer can extend a fragmented message forever; the phone
+                    # never sends fragments at all, so treat oversize as a
+                    # dead stream.
+                    self._teardown_socket()
+                    raise WebSocketError("fragmented message too large")
                 self._frag_payload.extend(payload)
                 if fin:
                     if self._frag_opcode == 0x1:

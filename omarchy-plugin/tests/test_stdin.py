@@ -85,8 +85,13 @@ class StdinDrainTest(unittest.TestCase):
         self._orig_stdin = sys.stdin
         self.read_fd, self.write_fd = os.pipe()
         sys.stdin = FakeStdin(self.read_fd)
+        self.engines = []
 
     def tearDown(self):
+        # Engine.__init__ starts a real RestWorker thread; every engine a
+        # test created must be stopped or the suite leaks one per test.
+        for engine in self.engines:
+            engine.client.worker.stop()
         sys.stdin = self._orig_stdin
         os.close(self.read_fd)
         if self.write_fd is not None:
@@ -94,7 +99,9 @@ class StdinDrainTest(unittest.TestCase):
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def _engine(self):
-        return Engine(directory=self.dir)
+        engine = Engine(directory=self.dir)
+        self.engines.append(engine)
+        return engine
 
     def test_two_lines_in_one_read_both_process(self):
         engine = self._engine()
@@ -142,6 +149,7 @@ class GestureQueueTest(unittest.TestCase):
         self.engine.client.ws = StubWS()
 
     def tearDown(self):
+        self.engine.client.worker.stop()
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def test_three_toggles_coalesce_to_one(self):
@@ -243,6 +251,7 @@ def run_pending_jobs(client, count=1):
 class WorkerPipelineTest(StdinDrainTest):
     def test_loop_advances_boot_and_queues_connect(self):
         engine = self._engine()
+        engine.client.worker.stop()
         engine.client.worker = FakeWorker()
         engine.client.ws = StubWS()
         engine.client.host = "phone"
@@ -282,6 +291,7 @@ class LateConnectResultTest(StdinDrainTest):
             with self.subTest(mode=mode):
                 engine = self._engine()
                 client = engine.client
+                client.worker.stop()
                 client.worker = FakeWorker()
                 client.ws = ConnectedStubWS()
                 client.host = "phone"
@@ -309,6 +319,7 @@ class GestureFailureTest(unittest.TestCase):
         self.engine = Engine(directory=self.dir)
         self.engine.client.ws = StubWS()
         self.engine.client.rest = StubRest()
+        self.engine.client.worker.stop()
         self.engine.client.worker = FakeWorker()
 
     def tearDown(self):
@@ -405,6 +416,7 @@ class PairingNoopTest(unittest.TestCase):
         self.engine.client.ws = StubWS()
 
     def tearDown(self):
+        self.engine.client.worker.stop()
         shutil.rmtree(self.dir, ignore_errors=True)
 
     def _pair(self):

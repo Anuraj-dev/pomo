@@ -33,7 +33,15 @@ def atomic_write(path, obj, mode=0o600):
     fd = None
     try:
         fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, mode)
-        os.write(fd, payload)
+        # os.write is a raw write(2): a partial write would let os.replace
+        # commit truncated JSON over the last valid snapshot. Loop until the
+        # whole payload is on disk.
+        view = memoryview(payload)
+        while view:
+            written = os.write(fd, view)
+            if written <= 0:
+                raise OSError("short write to temporary state file")
+            view = view[written:]
         os.fsync(fd)
         os.close(fd)
         fd = -1

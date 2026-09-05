@@ -147,15 +147,24 @@ class ConfigStore:
             return None
         if remaining < 0.0 or duration <= 0.0:
             return None
+        # A valid JSON snapshot can still carry garbage scalars ("12", {},
+        # Infinity); one bad field must not break startup recovery.
+        try:
+            start_time = float(data.get("start_time") or 0.0)
+            completed = int(data.get("completed") or 0)
+            goal = int(data.get("goal") if data.get("goal") is not None else self.goal)
+            saved_epoch = int(data.get("saved_epoch") or 0)
+        except (TypeError, ValueError, OverflowError):
+            return None
         snap = {
             "status": status,
             "phase": phase,
             "remaining": remaining,
             "duration": duration,
-            "start_time": float(data.get("start_time") or 0.0),
-            "completed": int(data.get("completed") or 0),
-            "goal": int(data.get("goal") if data.get("goal") is not None else self.goal),
-            "saved_epoch": int(data.get("saved_epoch") or 0),
+            "start_time": start_time,
+            "completed": completed,
+            "goal": goal,
+            "saved_epoch": saved_epoch,
             "completed_date": self._safe_date(data.get("completed_date")),
         }
         if snap["completed"] < 0:

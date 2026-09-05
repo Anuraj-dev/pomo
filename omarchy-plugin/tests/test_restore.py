@@ -15,8 +15,13 @@ from pomo_link.store import ConfigStore, wall_adjust_remaining
 class RestoreRecoveryTest(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.mkdtemp(prefix="pomo-restore-")
+        self.engines = []
 
     def tearDown(self):
+        # Engine.__init__ starts a real RestWorker thread; stop every engine
+        # a test created so the suite does not leak one worker per test.
+        for engine in self.engines:
+            engine.client.worker.stop()
         shutil.rmtree(self.directory, ignore_errors=True)
 
     def _save(self, **overrides):
@@ -38,6 +43,7 @@ class RestoreRecoveryTest(unittest.TestCase):
         self._save()
         with patch.object(main_module.time, "time", return_value=1005):
             engine = Engine(directory=self.directory)
+        self.engines.append(engine)
         self.assertTrue(engine.model.is_stopped())
         self.assertEqual(engine.queue.count(), 1)
         self.assertEqual(engine.queue.at(0)["type"], "work")
@@ -51,6 +57,7 @@ class RestoreRecoveryTest(unittest.TestCase):
             main_module.time, "strftime", return_value="2026-09-04"
         ):
             engine = Engine(directory=self.directory)
+        self.engines.append(engine)
 
         self.assertEqual(engine.queue.count(), 1)
         self.assertEqual(engine.model.completed, 4)
@@ -66,6 +73,7 @@ class RestoreRecoveryTest(unittest.TestCase):
             main_module.time, "strftime", return_value="2026-09-04"
         ):
             engine = Engine(directory=self.directory)
+        self.engines.append(engine)
 
         self.assertEqual(engine.queue.count(), 0)
         self.assertEqual(engine.model.completed, 0)
@@ -78,6 +86,7 @@ class RestoreRecoveryTest(unittest.TestCase):
             main_module.time, "strftime", return_value="2026-09-04"
         ):
             engine = Engine(directory=self.directory)
+        self.engines.append(engine)
 
         self.assertEqual(engine.model.completed, 1)
         self.assertEqual(engine.model.completed_date, "2026-09-04")

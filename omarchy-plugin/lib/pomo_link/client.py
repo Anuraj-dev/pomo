@@ -55,7 +55,8 @@ def _safe_float(value, default=0.0):
 def _safe_int(value, default=None):
     try:
         return int(value)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
+        # OverflowError: int(float("inf")) — json.loads accepts Infinity.
         return default
 
 

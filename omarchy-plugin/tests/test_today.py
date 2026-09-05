@@ -72,6 +72,7 @@ class TodayStateTest(unittest.TestCase):
             payload = self.engine.status_payload()
         self.assertEqual(payload["date"], payload["local_today"])
 
+    @unittest.skipUnless(shutil.which("node"), "node runtime not available")
     def test_formatter_covers_today_other_date_and_empty_date(self):
         cases = (
             ({"completed": 2, "goal": 8, "date": "2026-09-04", "localToday": "2026-09-04"}, "2 / 8 today"),
@@ -79,6 +80,7 @@ class TodayStateTest(unittest.TestCase):
             ({"completed": 2, "goal": 8, "date": "", "localToday": "2026-09-04"}, "2 / 8"),
             ({"completed": 2, "goal": 0, "date": "2026-09-04", "localToday": "2026-09-04"}, "2 today"),
         )
+        node = shutil.which("node")
         helper = os.path.join(os.path.dirname(__file__), "..", "widget", "today.js")
         script = (
             "const fs = require('fs');"
@@ -89,7 +91,7 @@ class TodayStateTest(unittest.TestCase):
         for values, expected in cases:
             with self.subTest(values=values):
                 result = subprocess.run(
-                    ["node", "-e", script, helper],
+                    [node, "-e", script, helper],
                     input=json.dumps(values),
                     text=True,
                     capture_output=True,

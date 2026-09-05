@@ -120,6 +120,7 @@ class LeastRemainingAdoptTest(unittest.TestCase):
             adopted = engine.client.adopt_payload()
             self.assertEqual(adopted["start_time"], 1700.0)
             self.assertEqual(engine.model.start_time, 1700.0)
+            engine.client.worker.stop()
 
 
 if __name__ == "__main__":
